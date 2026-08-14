@@ -1,5 +1,22 @@
 export type ThemeMode = 'system' | 'light' | 'dark'
-export type ToolId = 'home' | 'json' | 'java' | 'timestamp' | 'md5' | 'hosts'
+export type ToolId =
+  | 'home'
+  | 'json'
+  | 'json-diff'
+  | 'json-java'
+  | 'java'
+  | 'timestamp'
+  | 'base64-text'
+  | 'base64-image'
+  | 'base64-file'
+  | 'cron'
+  | 'sql'
+  | 'yaml'
+  | 'xml'
+  | 'text-diff'
+  | 'text-stats'
+  | 'md5'
+  | 'hosts'
 
 export interface ApiError {
   code: string

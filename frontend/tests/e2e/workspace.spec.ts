@@ -122,13 +122,14 @@ for (const viewport of [
 
     await page.getByRole('button', { name: '进入工具台' }).click()
     await expect(page.locator('.particle-field')).toHaveAttribute('data-stage', 'workbench')
-    await expect(page.locator('.home-tool-card')).toHaveCount(5)
+    await expect(page.locator('.home-tool-card')).toHaveCount(16)
+    await expect(page.locator('.home-category-group')).toHaveCount(5)
     await assertScrollContainers(page)
     await assertViewportIntegrity(page)
     await page.screenshot({ path: resolve(qaDir, `home-workbench-${viewport.name}-light.png`), fullPage: true })
 
     await page.locator('.home-tool-orbit').hover({ position: { x: 12, y: 12 } })
-    await page.locator('.home-tool-card').filter({ hasText: 'JSON' }).click()
+    await page.locator('.home-tool-card[data-tool="json"]').click()
     await expect(page.getByRole('heading', { name: 'JSON' })).toBeVisible()
     await expect(page.getByLabel('JSON 输入')).toBeVisible()
     await expect(page.getByText('语法有效')).toBeVisible()
@@ -189,10 +190,31 @@ test('formatted JSON output remains editable and drives tree view', async ({ pag
   await assertViewportIntegrity(page)
 })
 
+test('new conversion, formatting and analysis tools produce results', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+
+  await page.getByRole('button', { name: 'Base64 文本', exact: true }).click()
+  await page.getByLabel('Base64 文本输入').fill('你好')
+  await expect(page.getByLabel('Base64 文本结果')).toContainText('5L2g5aW9')
+
+  await page.getByRole('button', { name: 'SQL 美化', exact: true }).click()
+  await page.getByLabel('SQL 输入').fill('select id,name from users where enabled=1')
+  await expect(page.getByLabel('SQL 格式化结果')).toContainText('SELECT')
+
+  await page.getByRole('button', { name: 'JSON 对比', exact: true }).click()
+  await expect(page.getByLabel('JSON 差异结果')).toContainText('"version": 2')
+
+  await page.getByRole('button', { name: '文本统计', exact: true }).click()
+  await page.getByLabel('文本统计输入').fill('你好 DevToolkit')
+  await expect(page.getByLabel('文本统计结果')).toContainText('UTF-8 字节')
+  await assertViewportIntegrity(page)
+})
+
 test('all tools render and remain usable', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto('/')
-  for (const tool of ['Java 转义', '日期转换', 'Hosts', 'MD5 摘要']) {
+  for (const tool of ['JSON / JavaBean', 'Java 转义', '日期转换', 'Base64 图片', 'Base64 文件', 'Crontab 生成器', 'YAML 美化', 'XML 格式化', '文本比较', 'Hosts', 'MD5 摘要']) {
     await page.getByRole('button', { name: tool, exact: true }).click()
     await expect(page.getByRole('heading', { name: tool, exact: true })).toBeVisible()
     if (tool === '日期转换') {

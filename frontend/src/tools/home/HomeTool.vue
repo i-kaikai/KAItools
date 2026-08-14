@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ArrowLeft, ArrowRight, CircleDot, FolderCog, Layers3 } from '@lucide/vue'
+import { ArrowLeft, ArrowRight, ArrowUpRight, CircleDot, FolderCog, LayoutGrid, Layers3 } from '@lucide/vue'
 import { computed, ref } from 'vue'
 
 import { icpNumber, isWebRuntime } from '@/runtime'
 import { useAppStore } from '@/stores/app'
-import { workspaceTools, type ToolDefinition } from '@/tools/registry'
+import { toolCategories, workspaceTools, type ToolDefinition } from '@/tools/registry'
 import ParticleField from './ParticleField.vue'
 import ToolCarousel from './ToolCarousel.vue'
 
@@ -15,10 +15,25 @@ const particleField = ref<InstanceType<typeof ParticleField> | null>(null)
 const entered = ref(false)
 const openTabs = computed(() => app.tabs.filter((tab) => tab.toolId !== 'home'))
 const pinnedTabs = computed(() => openTabs.value.filter((tab) => tab.pinned))
+const categorizedTools = computed(() => toolCategories.map((category) => ({
+  ...category,
+  tools: workspaceTools.filter((tool) => tool.category === category.id),
+})))
 const toolColors: Record<string, string> = {
   json: '#35d0a7',
+  'json-diff': '#40c9a2',
+  'json-java': '#ef8f62',
   java: '#ff7d5d',
   timestamp: '#6ea0ff',
+  'base64-text': '#dcad49',
+  'base64-image': '#db7ca9',
+  'base64-file': '#b79ae8',
+  cron: '#6eb9ff',
+  sql: '#4cc7c9',
+  yaml: '#9dbb55',
+  xml: '#e99754',
+  'text-diff': '#d87f82',
+  'text-stats': '#8e9fe8',
   hosts: '#38bdd8',
   md5: '#f0b54d',
 }
@@ -138,6 +153,25 @@ function releaseCard(): void {
             </dl>
           </section>
         </div>
+
+        <section class="home-categories" aria-labelledby="home-categories-title">
+          <header class="home-section-heading">
+            <div><LayoutGrid :size="15" /><h2 id="home-categories-title">工具分类</h2></div>
+            <small>{{ toolCategories.length }} 个分类 · {{ workspaceTools.length }} 个工具</small>
+          </header>
+          <div class="home-category-grid">
+            <section v-for="category in categorizedTools" :key="category.id" class="home-category-group">
+              <header><div><strong>{{ category.name }}</strong><small>{{ category.description }}</small></div><span>{{ category.tools.length.toString().padStart(2, '0') }}</span></header>
+              <div>
+                <button v-for="tool in category.tools" :key="tool.id" type="button" :style="{ '--tool-accent': toolColors[tool.id] }" @click="openTool(tool)">
+                  <component :is="tool.icon" :size="15" aria-hidden="true" />
+                  <span><strong>{{ tool.name }}</strong><small>{{ tool.description }}</small></span>
+                  <ArrowUpRight :size="14" aria-hidden="true" />
+                </button>
+              </div>
+            </section>
+          </div>
+        </section>
         <footer v-if="icpNumber" class="home-compliance">
           <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">{{ icpNumber }}</a>
         </footer>

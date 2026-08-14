@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 
+const chromiumExecutablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
+
 export default defineConfig({
   testDir: './tests/e2e',
   timeout: 30_000,
@@ -12,16 +14,16 @@ export default defineConfig({
       name: 'web',
       use: {
         ...devices['Desktop Edge'],
-        channel: 'msedge',
         baseURL: 'http://127.0.0.1:4173',
         headless: true,
+        launchOptions: chromiumExecutablePath ? { executablePath: chromiumExecutablePath, args: ['--no-sandbox'] } : undefined,
         trace: 'retain-on-failure',
         screenshot: 'only-on-failure',
       },
     },
   ],
   webServer: {
-    command: 'pnpm build:web && pnpm preview:web',
+    command: 'corepack pnpm build:web && corepack pnpm preview:web',
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: false,
     timeout: 60_000,
