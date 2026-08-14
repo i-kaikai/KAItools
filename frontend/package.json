@@ -1,0 +1,47 @@
+{
+  "name": "devtoolkit-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vue-tsc -b && vite build",
+    "typecheck": "vue-tsc -b",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@codemirror/commands": "6.10.4",
+    "@codemirror/lang-json": "6.0.2",
+    "@codemirror/language": "6.12.4",
+    "@codemirror/state": "6.7.1",
+    "@codemirror/view": "6.43.8",
+    "@lezer/highlight": "1.2.3",
+    "@lucide/vue": "1.31.0",
+    "codemirror": "6.0.2",
+    "jsonc-parser": "3.3.1",
+    "luxon": "3.7.2",
+    "pinia": "4.0.3",
+    "spark-md5": "3.0.2",
+    "three": "0.185.1",
+    "vue": "3.5.41"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "@types/luxon": "3.7.4",
+    "@types/node": "24.13.3",
+    "@types/spark-md5": "3.0.5",
+    "@types/three": "0.185.4",
+    "@vitejs/plugin-vue": "6.0.8",
+    "jsdom": "30.0.1",
+    "typescript": "6.0.3",
+    "vite": "8.2.1",
+    "vitest": "4.1.10",
+    "vue-tsc": "3.3.9"
+  },
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "packageManager": "pnpm@11.7.0"
+}
