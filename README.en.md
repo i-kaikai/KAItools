@@ -1,36 +1,38 @@
-# KAItools
+# DevToolkit
 
-#### Description
-开发工具
+DevToolkit is a developer toolbox with a browser build and a Windows 10/11 x64
+desktop build. The desktop application uses Python, pywebview, WebView2, Vue 3,
+and TypeScript. Extract the portable ZIP and launch `DevToolkit.exe`; Python and
+Node.js are not required on the target desktop.
 
-#### Software Architecture
-Software architecture description
+## Features
 
-#### Installation
+- JSON validation, formatting, minification, editable output, and tree view
+- Java string escaping, unescaping, and Unicode conversion
+- Date and timestamp conversion across common formats and time zones
+- Desktop Hosts editing with conflict detection, UAC elevation, backup, and restore
+- MD5 digests for UTF-8 text
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+Desktop settings and pinned tabs are stored in the `data` directory beside the
+EXE. The web build stores them in the current browser's `localStorage`. Hosts
+file access is available only in the Windows desktop build.
 
-#### Instructions
+## Local development
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+Install Python 3.13 x64, Node.js 24 LTS, pnpm, and Microsoft Edge WebView2
+Runtime, then follow the commands in [README.md](README.md).
 
-#### Contribution
+## Web build
 
-1.  Fork the repository
-2.  Create Feat_xxx branch
-3.  Commit your code
-4.  Create Pull Request
+The web build is a static site and has no application backend:
 
+```powershell
+Set-Location frontend
+pnpm install --frozen-lockfile
+$env:VITE_ICP_NUMBER = 'your approved ICP filing number'
+pnpm build:web
+```
 
-#### Gitee Feature
-
-1.  You can use Readme\_XXX.md to support different languages, such as Readme\_en.md, Readme\_zh.md
-2.  Gitee blog [blog.gitee.com](https://blog.gitee.com)
-3.  Explore open source project [https://gitee.com/explore](https://gitee.com/explore)
-4.  The most valuable open source project [GVP](https://gitee.com/gvp)
-5.  The manual of Gitee [https://gitee.com/help](https://gitee.com/help)
-6.  The most popular members  [https://gitee.com/gitee-stars/](https://gitee.com/gitee-stars/)
+Static assets are written to `build/web`. The ICP filing link is omitted when
+`VITE_ICP_NUMBER` is unset. Tool input stays in the visitor's browser and is not
+uploaded to or stored by the server.

@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { Check, Copy, DatabaseBackup, Eye, FileText, RefreshCw, RotateCcw, ShieldCheck, X } from '@lucide/vue'
+import { Check, Copy, DatabaseBackup, Eye, FileText, Laptop, RefreshCw, RotateCcw, ShieldCheck, X } from '@lucide/vue'
 import { computed, onMounted, ref } from 'vue'
 
 import { desktopApi } from '@/api/desktopApi'
 import CodeEditor from '@/components/CodeEditor.vue'
 import IconButton from '@/components/IconButton.vue'
 import { useToolState } from '@/composables/useToolState'
+import { isWebRuntime } from '@/runtime'
 import { useToastStore } from '@/stores/toast'
 import type { HostsBackup, HostsPreview, HostsSnapshot } from '@/types'
 import { copyText } from '@/utils/clipboard'
@@ -116,7 +117,9 @@ async function copyDesired(): Promise<void> {
   toast.show('目标 Hosts 内容已复制', 'success')
 }
 
-onMounted(() => void loadSnapshot(!model.sourceSha256))
+onMounted(() => {
+  if (!isWebRuntime) void loadSnapshot(!model.sourceSha256)
+})
 </script>
 
 <template>
@@ -125,13 +128,14 @@ onMounted(() => void loadSnapshot(!model.sourceSha256))
       <div>
         <h1>Hosts</h1>
         <p :class="{ error: errorMessage }">
-          <template v-if="errorMessage">{{ errorMessage }}</template>
+          <template v-if="isWebRuntime">Windows 系统文件工具</template>
+          <template v-else-if="errorMessage">{{ errorMessage }}</template>
           <template v-else-if="dirty">文件有未应用修改</template>
           <template v-else-if="snapshot"><Check :size="14" />{{ snapshot.path }}</template>
           <template v-else>正在读取系统 Hosts</template>
         </p>
       </div>
-      <div class="toolbar">
+      <div v-if="!isWebRuntime" class="toolbar">
         <IconButton :icon="RefreshCw" label="重新加载 Hosts" :disabled="busy" @click="reload" />
         <button class="command-button secondary" type="button" :disabled="busy || !snapshot" @click="requestPreview(true)">
           <Eye :size="16" />预览
@@ -145,45 +149,55 @@ onMounted(() => void loadSnapshot(!model.sourceSha256))
       </div>
     </header>
 
-    <div class="editor-panel hosts-file-panel">
-      <div class="panel-label hosts-file-label">
-        <span><FileText :size="14" />本地 Hosts 文件</span>
-        <small v-if="snapshot">{{ snapshot.encoding.toUpperCase() }} · {{ snapshot.newline }} · {{ model.content.length }} 字符</small>
+    <div v-if="isWebRuntime" class="desktop-only-state" role="status">
+      <Laptop :size="28" :stroke-width="1.6" aria-hidden="true" />
+      <div>
+        <h2>仅 Windows 桌面版可用</h2>
+        <p>浏览器无法读取或修改当前设备的 Hosts 文件。</p>
       </div>
-      <CodeEditor v-model="model.content" language="plain" label="本地 Hosts 文件内容" />
     </div>
 
-    <div v-if="previewOpen && preview" class="modal-backdrop" @mousedown.self="previewOpen = false">
-      <section class="modal preview-modal" role="dialog" aria-modal="true" aria-labelledby="preview-title">
-        <header>
-          <div><h2 id="preview-title">完整 Hosts 文件预览</h2><p>{{ preview.changed ? '存在待保存变更' : '当前内容已同步' }}</p></div>
-          <div class="toolbar">
-            <IconButton :icon="Copy" label="复制目标内容" @click="copyDesired" />
-            <IconButton :icon="X" label="关闭" @click="previewOpen = false" />
-          </div>
-        </header>
-        <div class="preview-columns">
-          <div><span>当前文件</span><pre>{{ preview.currentContent }}</pre></div>
-          <div><span>保存后</span><pre>{{ preview.desiredContent }}</pre></div>
+    <template v-else>
+      <div class="editor-panel hosts-file-panel">
+        <div class="panel-label hosts-file-label">
+          <span><FileText :size="14" />本地 Hosts 文件</span>
+          <small v-if="snapshot">{{ snapshot.encoding.toUpperCase() }} · {{ snapshot.newline }} · {{ model.content.length }} 字符</small>
         </div>
-      </section>
-    </div>
+        <CodeEditor v-model="model.content" language="plain" label="本地 Hosts 文件内容" />
+      </div>
 
-    <div v-if="backupOpen" class="modal-backdrop" @mousedown.self="backupOpen = false">
-      <section class="modal backup-modal" role="dialog" aria-modal="true" aria-labelledby="backup-title">
-        <header>
-          <div><h2 id="backup-title">Hosts 备份</h2><p>恢复时会替换完整系统 Hosts 文件</p></div>
-          <IconButton :icon="X" label="关闭" @click="backupOpen = false" />
-        </header>
-        <div class="backup-list">
-          <div v-for="backup in backups" :key="backup.id" class="backup-row">
-            <DatabaseBackup :size="17" />
-            <div><strong>{{ new Date(backup.createdAt).toLocaleString() }}</strong><small>{{ backup.size }} B · {{ backup.sha256.slice(0, 12) }}</small></div>
-            <IconButton :icon="RotateCcw" label="恢复此备份" :disabled="busy" @click="restore(backup)" />
+      <div v-if="previewOpen && preview" class="modal-backdrop" @mousedown.self="previewOpen = false">
+        <section class="modal preview-modal" role="dialog" aria-modal="true" aria-labelledby="preview-title">
+          <header>
+            <div><h2 id="preview-title">完整 Hosts 文件预览</h2><p>{{ preview.changed ? '存在待保存变更' : '当前内容已同步' }}</p></div>
+            <div class="toolbar">
+              <IconButton :icon="Copy" label="复制目标内容" @click="copyDesired" />
+              <IconButton :icon="X" label="关闭" @click="previewOpen = false" />
+            </div>
+          </header>
+          <div class="preview-columns">
+            <div><span>当前文件</span><pre>{{ preview.currentContent }}</pre></div>
+            <div><span>保存后</span><pre>{{ preview.desiredContent }}</pre></div>
           </div>
-          <div v-if="!backups.length" class="empty-state"><DatabaseBackup :size="22" /><span>暂无 Hosts 备份</span></div>
-        </div>
-      </section>
-    </div>
+        </section>
+      </div>
+
+      <div v-if="backupOpen" class="modal-backdrop" @mousedown.self="backupOpen = false">
+        <section class="modal backup-modal" role="dialog" aria-modal="true" aria-labelledby="backup-title">
+          <header>
+            <div><h2 id="backup-title">Hosts 备份</h2><p>恢复时会替换完整系统 Hosts 文件</p></div>
+            <IconButton :icon="X" label="关闭" @click="backupOpen = false" />
+          </header>
+          <div class="backup-list">
+            <div v-for="backup in backups" :key="backup.id" class="backup-row">
+              <DatabaseBackup :size="17" />
+              <div><strong>{{ new Date(backup.createdAt).toLocaleString() }}</strong><small>{{ backup.size }} B · {{ backup.sha256.slice(0, 12) }}</small></div>
+              <IconButton :icon="RotateCcw" label="恢复此备份" :disabled="busy" @click="restore(backup)" />
+            </div>
+            <div v-if="!backups.length" class="empty-state"><DatabaseBackup :size="22" /><span>暂无 Hosts 备份</span></div>
+          </div>
+        </section>
+      </div>
+    </template>
   </section>
 </template>

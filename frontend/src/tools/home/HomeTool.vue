@@ -2,6 +2,7 @@
 import { ArrowLeft, ArrowRight, CircleDot, FolderCog, Layers3 } from '@lucide/vue'
 import { computed, ref } from 'vue'
 
+import { icpNumber, isWebRuntime } from '@/runtime'
 import { useAppStore } from '@/stores/app'
 import { workspaceTools, type ToolDefinition } from '@/tools/registry'
 import ParticleField from './ParticleField.vue'
@@ -78,6 +79,9 @@ function releaseCard(): void {
             <ArrowRight :size="17" aria-hidden="true" />
           </button>
           <small>{{ workspaceTools.length }} 个模块 · 数据仅保存在本机</small>
+          <footer v-if="icpNumber" class="home-compliance">
+            <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">{{ icpNumber }}</a>
+          </footer>
         </div>
       </section>
 
@@ -123,11 +127,20 @@ function releaseCard(): void {
             </header>
             <dl class="home-system-list">
               <div><dt>DevToolkit</dt><dd>v{{ app.runtime?.version ?? '0.1.0' }}</dd></div>
-              <div><dt>WebView2</dt><dd>{{ app.runtime?.webview2 ?? '检测中' }}</dd></div>
-              <div><dt>数据目录</dt><dd :title="app.runtime?.dataDirectory">{{ app.runtime?.dataDirectory ?? '加载中' }}</dd></div>
+              <template v-if="isWebRuntime">
+                <div><dt>运行环境</dt><dd>浏览器</dd></div>
+                <div><dt>数据存储</dt><dd>浏览器本地存储</dd></div>
+              </template>
+              <template v-else>
+                <div><dt>WebView2</dt><dd>{{ app.runtime?.webview2 ?? '检测中' }}</dd></div>
+                <div><dt>数据目录</dt><dd :title="app.runtime?.dataDirectory">{{ app.runtime?.dataDirectory ?? '加载中' }}</dd></div>
+              </template>
             </dl>
           </section>
         </div>
+        <footer v-if="icpNumber" class="home-compliance">
+          <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">{{ icpNumber }}</a>
+        </footer>
       </div>
     </Transition>
   </section>

@@ -14,6 +14,7 @@ import {
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 
 import IconButton from '@/components/IconButton.vue'
+import { isWebRuntime } from '@/runtime'
 import ToastViewport from '@/components/ToastViewport.vue'
 import { useAppStore } from '@/stores/app'
 import type { ThemeMode, ToolTab } from '@/types'
@@ -140,7 +141,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         <IconButton :icon="themeIcon" :label="themeLabel" @click="cycleTheme" />
         <div v-if="!app.settings.sidebarCollapsed" class="runtime-copy">
           <span>v{{ app.runtime?.version ?? '0.1.0' }}</span>
-          <small>WebView2 {{ app.runtime?.webview2 ?? '...' }}</small>
+          <small v-if="isWebRuntime">浏览器 · 本地存储</small>
+          <small v-else>WebView2 {{ app.runtime?.webview2 ?? '...' }}</small>
         </div>
       </div>
     </aside>

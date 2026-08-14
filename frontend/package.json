@@ -6,10 +6,13 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vue-tsc -b && vite build",
+    "build:web": "vue-tsc -b && vite build --mode web",
+    "preview:web": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
     "typecheck": "vue-tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:e2e:web": "playwright test --config playwright.web.config.ts"
   },
   "dependencies": {
     "@codemirror/commands": "6.10.4",

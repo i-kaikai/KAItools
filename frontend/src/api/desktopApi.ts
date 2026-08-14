@@ -7,50 +7,77 @@ import type {
   HostsSnapshot,
   ToolTab,
 } from '@/types'
+import { isWebRuntime } from '@/runtime'
 
-const MOCK_KEY = 'devtoolkit.mock.state.v1'
+const BROWSER_KEY = 'devtoolkit.browser.state.v1'
+const LEGACY_MOCK_KEY = 'devtoolkit.mock.state.v1'
+const DESKTOP_ONLY_METHODS = new Set([
+  'read_hosts',
+  'apply_hosts',
+  'list_hosts_backups',
+  'restore_hosts_backup',
+  'open_webview2_download',
+])
 
-const defaultState: BootstrapState = {
-  settings: { schemaVersion: 1, theme: 'system', sidebarCollapsed: false },
-  workspace: { schemaVersion: 1, tabs: [] },
-  hostsProfiles: {
-    schemaVersion: 1,
-    groups: [
-      {
-        id: 'default',
-        name: '开发环境',
-        enabled: true,
-        entries: [
-          {
-            id: 'sample-entry',
-            ip: '127.0.0.1',
-            hostname: 'api.local',
-            comment: '本地接口',
-            enabled: true,
-          },
-        ],
-      },
-    ],
-  },
-  runtime: { version: '0.1.0-dev', webview2: 'browser-mock', dataDirectory: 'data' },
-}
-
-function mockState(): BootstrapState {
-  try {
-    const value = localStorage.getItem(MOCK_KEY)
-    return value ? (JSON.parse(value) as BootstrapState) : structuredClone(defaultState)
-  } catch {
-    return structuredClone(defaultState)
+function defaultBrowserState(): BootstrapState {
+  return {
+    settings: { schemaVersion: 1, theme: 'system', sidebarCollapsed: false },
+    workspace: { schemaVersion: 1, tabs: [] },
+    hostsProfiles: {
+      schemaVersion: 1,
+      groups: [
+        {
+          id: 'default',
+          name: '开发环境',
+          enabled: true,
+          entries: [
+            {
+              id: 'sample-entry',
+              ip: '127.0.0.1',
+              hostname: 'api.local',
+              comment: '本地接口',
+              enabled: true,
+            },
+          ],
+        },
+      ],
+    },
+    runtime: {
+      version: '0.1.0',
+      webview2: null,
+      dataDirectory: isWebRuntime ? '浏览器本地存储' : '浏览器开发存储',
+    },
   }
 }
 
-function saveMockState(state: BootstrapState): void {
-  localStorage.setItem(MOCK_KEY, JSON.stringify(state))
+function browserState(): BootstrapState {
+  try {
+    const value = localStorage.getItem(BROWSER_KEY) ?? localStorage.getItem(LEGACY_MOCK_KEY)
+    if (!value) return defaultBrowserState()
+    const stored = JSON.parse(value) as Partial<BootstrapState>
+    const defaults = defaultBrowserState()
+    return {
+      settings: { ...defaults.settings, ...stored.settings },
+      workspace: {
+        schemaVersion: 1,
+        tabs: Array.isArray(stored.workspace?.tabs) ? stored.workspace.tabs : [],
+      },
+      hostsProfiles: Array.isArray(stored.hostsProfiles?.groups) ? stored.hostsProfiles : defaults.hostsProfiles,
+      runtime: defaults.runtime,
+    }
+  } catch {
+    return defaultBrowserState()
+  }
+}
+
+function saveBrowserState(state: BootstrapState): void {
+  localStorage.setItem(BROWSER_KEY, JSON.stringify(state))
 }
 
 async function bridge(): Promise<Record<string, (...args: unknown[]) => Promise<unknown>> | null> {
+  if (isWebRuntime) return null
   if (window.pywebview?.api) return window.pywebview.api
-  if (import.meta.env.DEV) return null
+  if (import.meta.env.DEV || import.meta.env.MODE === 'test') return null
   await new Promise<void>((resolve) => {
     const timeout = window.setTimeout(resolve, 3000)
     window.addEventListener(
@@ -68,10 +95,10 @@ async function bridge(): Promise<Record<string, (...args: unknown[]) => Promise<
 async function invoke<T>(method: string, ...args: unknown[]): Promise<ApiResult<T>> {
   const api = await bridge()
   if (!api) {
-    if (!import.meta.env.DEV) {
+    if (!isWebRuntime && !import.meta.env.DEV && import.meta.env.MODE !== 'test') {
       return { ok: false, error: { code: 'BRIDGE_UNAVAILABLE', message: '桌面桥接尚未就绪' } }
     }
-    return mockInvoke<T>(method, args)
+    return browserInvoke<T>(method, args)
   }
   const callable = api[method]
   if (!callable) {
@@ -87,21 +114,39 @@ async function invoke<T>(method: string, ...args: unknown[]): Promise<ApiResult<
   }
 }
 
-async function mockInvoke<T>(method: string, args: unknown[]): Promise<ApiResult<T>> {
-  const state = mockState()
+async function browserInvoke<T>(method: string, args: unknown[]): Promise<ApiResult<T>> {
+  if (isWebRuntime && DESKTOP_ONLY_METHODS.has(method)) {
+    return { ok: false, error: { code: 'DESKTOP_ONLY', message: '此功能仅 Windows 桌面版可用' } }
+  }
+
+  const state = browserState()
   if (method === 'load_state') return { ok: true, data: state as T }
   if (method === 'save_settings') {
-    const payload = (args[0] ?? {}) as { settings?: Partial<BootstrapState['settings']>; hostsProfiles?: HostsProfiles }
-    if (payload.settings) Object.assign(state.settings, payload.settings)
-    if (payload.hostsProfiles) state.hostsProfiles = payload.hostsProfiles
-    saveMockState(state)
-    return { ok: true, data: undefined as T }
+    try {
+      const payload = (args[0] ?? {}) as { settings?: Partial<BootstrapState['settings']>; hostsProfiles?: HostsProfiles }
+      if (payload.settings) Object.assign(state.settings, payload.settings)
+      if (payload.hostsProfiles) state.hostsProfiles = payload.hostsProfiles
+      saveBrowserState(state)
+      return { ok: true, data: undefined as T }
+    } catch (error) {
+      return {
+        ok: false,
+        error: { code: 'BROWSER_STORAGE_FAILED', message: error instanceof Error ? error.message : String(error) },
+      }
+    }
   }
   if (method === 'save_workspace') {
-    const payload = args[0] as { tabs: ToolTab[] }
-    state.workspace.tabs = payload.tabs
-    saveMockState(state)
-    return { ok: true, data: undefined as T }
+    try {
+      const payload = args[0] as { tabs: ToolTab[] }
+      state.workspace.tabs = payload.tabs
+      saveBrowserState(state)
+      return { ok: true, data: undefined as T }
+    } catch (error) {
+      return {
+        ok: false,
+        error: { code: 'BROWSER_STORAGE_FAILED', message: error instanceof Error ? error.message : String(error) },
+      }
+    }
   }
   if (method === 'read_hosts') {
     return {

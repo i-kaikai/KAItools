@@ -156,7 +156,7 @@ test('formatted JSON output remains editable and drives tree view', async ({ pag
   await assertViewportIntegrity(page)
 })
 
-test('all tools render and remain usable', async ({ page }) => {
+test('all tools render and remain usable', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto('/')
   for (const tool of ['Java 转义', '日期转换', 'Hosts', 'MD5 摘要']) {
@@ -168,10 +168,59 @@ test('all tools render and remain usable', async ({ page }) => {
     }
     await assertViewportIntegrity(page)
     if (tool === 'Hosts') {
-      await expect(page.getByLabel('本地 Hosts 文件内容')).toBeVisible()
+      if (testInfo.project.name === 'web') {
+        await expect(page.getByRole('heading', { name: '仅 Windows 桌面版可用' })).toBeVisible()
+        await expect(page.getByLabel('本地 Hosts 文件内容')).toHaveCount(0)
+      } else {
+        await expect(page.getByLabel('本地 Hosts 文件内容')).toBeVisible()
+      }
       await page.screenshot({ path: resolve(qaDir, 'hosts-desktop-light.png'), fullPage: true })
     }
   }
+})
+
+test('web build persists local state and renders compliance details', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'web')
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await expect(page.getByText('浏览器 · 本地存储')).toBeVisible()
+  await expect(page.getByRole('link', { name: '京ICP备00000000号-1' })).toHaveAttribute(
+    'href',
+    'https://beian.miit.gov.cn/',
+  )
+
+  await page.getByRole('button', { name: '跟随系统' }).click()
+  await page.getByRole('button', { name: 'JSON', exact: true }).click()
+  await page.getByRole('button', { name: '固定标签' }).last().click()
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem('devtoolkit.browser.state.v1') ?? ''))
+    .toContain('"pinned":true')
+  await page.reload()
+
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+  await expect(page.getByRole('tab')).toHaveCount(2)
+  await expect(page.getByRole('button', { name: '取消固定' })).toHaveCount(1)
+})
+
+test('web build remains usable on a mobile viewport', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'web')
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/')
+  await expect(page.getByRole('heading', { name: 'DevToolkit' })).toBeVisible()
+  await expect(page.getByRole('link', { name: '京ICP备00000000号-1' })).toBeVisible()
+  await assertViewportIntegrity(page)
+  await page.screenshot({ path: resolve(qaDir, 'home-orbit-mobile-light.png'), fullPage: true })
+
+  await page.getByRole('button', { name: 'Hosts', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '仅 Windows 桌面版可用' })).toBeVisible()
+  await assertViewportIntegrity(page)
+  await page.screenshot({ path: resolve(qaDir, 'hosts-mobile-light.png'), fullPage: true })
+
+  await page.getByRole('button', { name: 'JSON', exact: true }).click()
+  await expect(page.getByLabel('JSON 输入')).toBeVisible()
+  await page.getByLabel('JSON 输入').fill('{"mobile":true}')
+  await expect(page.getByText('语法有效')).toBeVisible()
+  await assertViewportIntegrity(page)
 })
 
 test('tabs support pinning, creating and closing without layout shift', async ({ page }) => {

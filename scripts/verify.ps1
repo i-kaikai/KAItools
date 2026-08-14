@@ -26,6 +26,15 @@ try {
         & pnpm test:e2e
         if ($LASTEXITCODE -ne 0) { throw 'Playwright tests failed' }
     }
+    & pnpm build:web
+    if ($LASTEXITCODE -ne 0) { throw 'web frontend build failed' }
+    if (-not $SkipE2E) {
+        & pnpm test:e2e:web
+        if ($LASTEXITCODE -ne 0) { throw 'Web Playwright tests failed' }
+    }
+    # PyInstaller consumes build/web, so leave desktop-mode assets there.
+    & pnpm build
+    if ($LASTEXITCODE -ne 0) { throw 'desktop frontend rebuild failed' }
 }
 finally {
     Pop-Location
@@ -37,4 +46,3 @@ if ($LASTEXITCODE -ne 0) { throw 'Python compileall failed' }
 if ($LASTEXITCODE -ne 0) { throw 'Python tests failed' }
 
 Write-Host 'VERIFICATION_OK'
-
