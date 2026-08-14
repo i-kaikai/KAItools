@@ -112,6 +112,14 @@ for (const viewport of [
     await expect(page.locator('.app-shell')).toHaveClass(/home-active/)
     await expect(page.getByRole('button', { name: '进入工具台' })).toBeVisible()
     await expect(page.locator('.home-orbit-copy')).toHaveCSS('opacity', '1')
+    const bottomControls = await page.evaluate(() => {
+      const visibleHeight = window.visualViewport?.height ?? window.innerHeight
+      const entry = document.querySelector('.home-enter-action')?.getBoundingClientRect()
+      const theme = document.querySelector('.sidebar-footer')?.getBoundingClientRect()
+      return { visibleHeight, entryBottom: entry?.bottom ?? Infinity, themeBottom: theme?.bottom ?? Infinity }
+    })
+    expect(bottomControls.entryBottom).toBeLessThanOrEqual(bottomControls.visibleHeight)
+    expect(bottomControls.themeBottom).toBeLessThanOrEqual(bottomControls.visibleHeight)
     await assertScrollContainers(page)
     const homeTopbarColor = await page.locator('.tab-strip').evaluate((element) => getComputedStyle(element).backgroundColor)
     expect(homeTopbarColor).toBe('rgb(11, 14, 18)')
@@ -173,6 +181,15 @@ test('particle planet and tool carousel render, move and respond to the wheel', 
   await page.waitForTimeout(120)
   const transformAfterWheel = await frontCard.evaluate((card) => getComputedStyle(card).transform)
   expect(transformAfterWheel).not.toBe(transformBeforeWheel)
+
+  await carousel.dispatchEvent('pointerdown', { pointerId: 7, pointerType: 'touch', clientX: 680, clientY: 280, button: 0 })
+  await expect(carousel).toHaveAttribute('data-drag-active', 'true')
+  const transformBeforeTouch = await frontCard.evaluate((card) => getComputedStyle(card).transform)
+  await carousel.dispatchEvent('pointermove', { pointerId: 7, pointerType: 'touch', clientX: 500, clientY: 282, buttons: 1 })
+  const transformAfterTouch = await frontCard.evaluate((card) => getComputedStyle(card).transform)
+  expect(transformAfterTouch).not.toBe(transformBeforeTouch)
+  await carousel.dispatchEvent('pointerup', { pointerId: 7, pointerType: 'touch', clientX: 500, clientY: 282, button: 0 })
+  await expect(carousel).not.toHaveAttribute('data-drag-active', 'true')
   await page.mouse.move(2, 2)
   await expect(page.locator('.particle-field')).not.toHaveAttribute('data-active-tool', frontTool ?? 'json')
 

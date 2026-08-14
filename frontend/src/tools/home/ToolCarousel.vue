@@ -19,6 +19,11 @@ let angle = 0
 let wheelVelocity = 0
 let reducedMotion = false
 let pointerInside = false
+let activePointerId: number | null = null
+let pointerX = 0
+let pointerTime = 0
+let dragDistance = 0
+let dragged = false
 
 function setCardRef(element: unknown, index: number): void {
   if (element instanceof HTMLElement) cards[index] = element
@@ -60,7 +65,7 @@ function render(time: number): void {
 }
 
 function onWheel(event: WheelEvent): void {
-  if (reducedMotion || !stage.value) return
+  if (!stage.value) return
   event.preventDefault()
   const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE
     ? 16
@@ -68,8 +73,66 @@ function onWheel(event: WheelEvent): void {
       ? stage.value.clientHeight
       : 1
   const impulse = clamp((event.deltaY * unit) / 45, -4, 4)
+  if (reducedMotion) {
+    angle = (angle + impulse * 0.08) % (Math.PI * 2)
+    layoutCards()
+    return
+  }
   wheelVelocity = clamp(wheelVelocity + impulse, -5, 5)
   stage.value.dataset.wheelActive = 'true'
+}
+
+function onPointerDown(event: PointerEvent): void {
+  if (!stage.value || (event.pointerType === 'mouse' && event.button !== 0)) return
+  activePointerId = event.pointerId
+  pointerX = event.clientX
+  pointerTime = event.timeStamp
+  dragDistance = 0
+  dragged = false
+  wheelVelocity = 0
+  pointerInside = true
+  stage.value.dataset.dragActive = 'true'
+  try {
+    stage.value.setPointerCapture(event.pointerId)
+  } catch {
+    // Synthetic events and older WebViews may not expose pointer capture.
+  }
+}
+
+function onPointerMove(event: PointerEvent): void {
+  if (!stage.value || event.pointerId !== activePointerId) return
+  const deltaX = event.clientX - pointerX
+  const elapsed = Math.max(8, event.timeStamp - pointerTime)
+  pointerX = event.clientX
+  pointerTime = event.timeStamp
+  dragDistance += Math.abs(deltaX)
+  dragged ||= dragDistance > 8
+  angle = (angle + deltaX * 0.008) % (Math.PI * 2)
+  if (!reducedMotion) wheelVelocity = clamp((deltaX / elapsed) * 3.2, -5, 5)
+  layoutCards()
+  event.preventDefault()
+}
+
+function finishPointer(event: PointerEvent): void {
+  if (!stage.value || event.pointerId !== activePointerId) return
+  try {
+    stage.value.releasePointerCapture(event.pointerId)
+  } catch {
+    // The browser may already have released capture after pointer cancellation.
+  }
+  activePointerId = null
+  pointerInside = event.pointerType === 'mouse'
+  stage.value.removeAttribute('data-drag-active')
+  emit('release')
+}
+
+function onCardClick(event: MouseEvent, tool: ToolDefinition): void {
+  if (dragged) {
+    event.preventDefault()
+    dragged = false
+    return
+  }
+  emit('open', tool)
 }
 
 function onPointerEnter(): void {
@@ -121,6 +184,10 @@ onBeforeUnmount(() => {
       aria-label="工具模块动态卡片"
       @pointerenter="onPointerEnter"
       @pointerleave="onPointerLeave"
+      @pointerdown="onPointerDown"
+      @pointermove="onPointerMove"
+      @pointerup="finishPointer"
+      @pointercancel="finishPointer"
       @wheel="onWheel"
     >
       <button
@@ -137,7 +204,7 @@ onBeforeUnmount(() => {
         @pointercancel="emit('release')"
         @focus="emit('focus', tool)"
         @blur="emit('release')"
-        @click="emit('open', tool)"
+        @click="onCardClick($event, tool)"
       >
         <span class="home-card-topline">
           <em>MODULE {{ String(index + 1).padStart(2, '0') }}</em>
