@@ -44,17 +44,12 @@ async function copyResult(): Promise<void> {
     <div class="editor-split">
       <div class="editor-panel" :class="{ invalid: comparison.error.startsWith('左侧') }">
         <div class="panel-label">原始 JSON</div>
-        <CodeEditor v-model="model.left" language="json" label="左侧 JSON" />
+        <CodeEditor v-model="model.left" language="json" label="左侧 JSON" :highlights="comparison.result?.leftHighlights" />
       </div>
       <div class="editor-panel" :class="{ invalid: comparison.error.startsWith('右侧') }">
         <div class="panel-label">目标 JSON</div>
-        <CodeEditor v-model="model.right" language="json" label="右侧 JSON" />
+        <CodeEditor v-model="model.right" language="json" label="右侧 JSON" :highlights="comparison.result?.rightHighlights" />
       </div>
-    </div>
-    <div class="diff-output" aria-label="JSON 差异结果">
-      <div class="panel-label">语义差异</div>
-      <pre v-if="comparison.result"><span v-for="(part, index) in comparison.result.changes" :key="index" :class="{ added: part.added, removed: part.removed }">{{ part.value }}</span></pre>
-      <div v-else class="empty-state">{{ comparison.error }}</div>
     </div>
   </section>
 </template>

@@ -221,7 +221,14 @@ test('new conversion, formatting and analysis tools produce results', async ({ p
   await expect(page.getByLabel('SQL 格式化结果')).toContainText('SELECT')
 
   await page.getByRole('button', { name: 'JSON 对比', exact: true }).click()
-  await expect(page.getByLabel('JSON 差异结果')).toContainText('"version": 2')
+  await expect(page.getByLabel('JSON 差异结果')).toHaveCount(0)
+  await expect(page.getByLabel('左侧 JSON').locator('.cm-diff-mark-removed')).toBeVisible()
+  await expect(page.getByLabel('右侧 JSON').locator('.cm-diff-mark-added')).toBeVisible()
+
+  await page.getByRole('button', { name: '文本比较', exact: true }).click()
+  await expect(page.getByLabel('文本差异结果')).toHaveCount(0)
+  await expect(page.getByLabel('左侧文本').locator('.cm-diff-mark-removed')).toBeVisible()
+  await expect(page.getByLabel('右侧文本').locator('.cm-diff-mark-added')).toBeVisible()
 
   await page.getByRole('button', { name: '文本统计', exact: true }).click()
   await page.getByLabel('文本统计输入').fill('你好 DevToolkit')

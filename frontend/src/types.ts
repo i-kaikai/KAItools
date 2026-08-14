@@ -1,4 +1,12 @@
 export type ThemeMode = 'system' | 'light' | 'dark'
+export type EditorHighlightKind = 'added' | 'removed'
+
+export interface EditorHighlight {
+  from: number
+  to: number
+  kind: EditorHighlightKind
+}
+
 export type ToolId =
   | 'home'
   | 'json'

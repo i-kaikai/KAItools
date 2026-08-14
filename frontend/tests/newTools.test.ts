@@ -6,7 +6,7 @@ import { getNextCronRuns } from '@/utils/cron'
 import { formatSql, formatXml, formatYaml } from '@/utils/formatters'
 import { compareJson } from '@/utils/jsonDiff'
 import { javaBeanToJson, jsonToJavaBean } from '@/utils/jsonJava'
-import { compareText, getTextStatistics } from '@/utils/text'
+import { compareText, getTextComparisonHighlights, getTextStatistics } from '@/utils/text'
 
 describe('new local developer tools', () => {
   it('round-trips UTF-8 text through Base64', () => {
@@ -17,7 +17,10 @@ describe('new local developer tools', () => {
 
   it('compares JSON by object meaning while preserving array order', () => {
     expect(compareJson('{"a":1,"b":2}', '{"b":2,"a":1}').equal).toBe(true)
-    expect(compareJson('{"items":[1,2]}', '{"items":[2,1]}').equal).toBe(false)
+    const comparison = compareJson('{"items":[1,2]}', '{"items":[2,1]}')
+    expect(comparison.equal).toBe(false)
+    expect(comparison.leftHighlights).toHaveLength(2)
+    expect(comparison.rightHighlights).toHaveLength(2)
   })
 
   it('generates JavaBean source and extracts field defaults', () => {
@@ -46,6 +49,15 @@ describe('new local developer tools', () => {
     const changes = compareText('第一行\n旧内容', '第一行\n新内容', 'lines')
     expect(changes.some((part) => part.added)).toBe(true)
     expect(changes.some((part) => part.removed)).toBe(true)
+    const highlights = getTextComparisonHighlights('第一行\n旧内容', '第一行\n新内容', 'lines')
+    expect(highlights.left).toEqual([{ from: 4, to: 7, kind: 'removed' }])
+    expect(highlights.right).toEqual([{ from: 4, to: 7, kind: 'added' }])
     expect(getTextStatistics('你好 world\n第二行')).toMatchObject({ characters: 12, words: 1, lines: 2, chineseCharacters: 5 })
+  })
+
+  it('maps character highlights back to original text when whitespace is ignored', () => {
+    const highlights = getTextComparisonHighlights('alpha   old', 'alpha new', 'characters', true)
+    expect(highlights.left).toEqual([{ from: 8, to: 11, kind: 'removed' }])
+    expect(highlights.right).toEqual([{ from: 6, to: 9, kind: 'added' }])
   })
 })
