@@ -111,6 +111,7 @@ for (const viewport of [
     await expect(page.locator('.particle-field')).toHaveAttribute('data-stage', 'hero')
     await expect(page.locator('.app-shell')).toHaveClass(/home-active/)
     await expect(page.getByRole('button', { name: '进入工具台' })).toBeVisible()
+    await expect(page.locator('.home-orbit-copy')).toHaveCSS('opacity', '1')
     await assertScrollContainers(page)
     const homeTopbarColor = await page.locator('.tab-strip').evaluate((element) => getComputedStyle(element).backgroundColor)
     expect(homeTopbarColor).toBe('rgb(11, 14, 18)')

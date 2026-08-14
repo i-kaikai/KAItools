@@ -210,7 +210,7 @@ kbd { padding: 2px 4px; border: 1px solid #3a3e44; border-bottom-width: 2px; bor
 .particle-field { position: fixed; z-index: 0; inset: 48px 0 0 228px; pointer-events: none; overflow: hidden; }
 .app-shell.sidebar-collapsed .particle-field { left: 64px; }
 .particle-canvas { display: block; width: 100%; height: 100%; }
-.home-orbit { position: relative; z-index: 1; display: flex; width: 100%; height: 100%; min-height: 100%; align-items: flex-end; justify-content: center; padding: 24px 28px 26px; overflow: hidden; }
+.home-orbit { position: absolute; z-index: 1; inset: 0; display: flex; align-items: flex-end; justify-content: center; padding: 24px 28px 26px; overflow: hidden; }
 .home-orbit-copy { display: flex; width: min(440px, 100%); align-items: center; flex-direction: column; text-align: center; }
 .home-orbit-copy h1 { margin: 0; color: #f7f9fb; font-size: 30px; line-height: 1.1; font-weight: 710; letter-spacing: 0; text-shadow: 0 4px 26px rgb(0 0 0 / 72%); }
 .home-orbit-copy > p { margin: 7px 0 13px; color: #a4afbb; font-size: 11px; letter-spacing: 0; }
@@ -305,11 +305,11 @@ kbd { padding: 2px 4px; border: 1px solid #3a3e44; border-bottom-width: 2px; bor
 .home-category-group button small { overflow: hidden; margin-top: 2px; color: #6f7a85; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
 
 .home-motion-entry .particle-field { animation: home-fade 240ms var(--ease-out) both; }
-.home-motion-entry .home-orbit-copy { animation: home-reveal 240ms 40ms var(--ease-out) both; }
+.home-motion-entry .home-orbit-copy { animation: home-reveal 240ms 40ms var(--ease-out); }
 .home-stage-enter-active, .home-stage-leave-active { transition: transform 240ms var(--ease-out), opacity 240ms var(--ease-out); }
 .home-stage-enter-from { opacity: 0; transform: translateY(8px) scale(.99); }
 .home-stage-leave-to { opacity: 0; transform: translateY(-4px) scale(.995); }
-@keyframes home-reveal { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes home-reveal { from { transform: translateY(8px); } to { transform: translateY(0); } }
 @keyframes home-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes home-signal { 0%, 100% { opacity: .42; } 50% { opacity: 1; } }
 @keyframes home-card-breathe { from { opacity: .09; transform: translate3d(-4%, -2%, 0) scale(.92); } to { opacity: .18; transform: translate3d(4%, 2%, 0) scale(.96); } }
