@@ -16,3 +16,9 @@ release/
 data/
 *.spec.bak
 
+# IDE and generic build outputs
+.settings/
+bin-debug/
+bin-release/
+[Oo]bj/
+[Bb]in/
