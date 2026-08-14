@@ -41,6 +41,37 @@ async function assertViewportIntegrity(page: Page): Promise<void> {
   expect(integrity.buttonsFit, JSON.stringify(integrity.overflowingButtons)).toBe(true)
 }
 
+async function assertScrollContainers(page: Page): Promise<void> {
+  const scrollState = await page.evaluate(() => {
+    const stateFor = (selector: string) => {
+      const element = document.querySelector<HTMLElement>(selector)
+      if (!element) return null
+      const style = getComputedStyle(element)
+      return {
+        clientWidth: element.clientWidth,
+        scrollWidth: element.scrollWidth,
+        overflowX: style.overflowX,
+        overflowY: style.overflowY,
+        scrollbarColor: style.scrollbarColor,
+      }
+    }
+    return {
+      sidebar: stateFor('.tool-nav'),
+      workbench: stateFor('.home-workbench'),
+    }
+  })
+
+  expect(scrollState.sidebar).not.toBeNull()
+  expect(scrollState.sidebar?.overflowX).toBe('hidden')
+  expect(scrollState.sidebar?.scrollWidth).toBeLessThanOrEqual(scrollState.sidebar?.clientWidth ?? 0)
+  expect(scrollState.sidebar?.scrollbarColor).not.toBe('auto')
+  if (scrollState.workbench) {
+    expect(scrollState.workbench.overflowX).toBe('hidden')
+    expect(scrollState.workbench.overflowY).toBe('auto')
+    expect(scrollState.workbench.scrollbarColor).not.toBe('auto')
+  }
+}
+
 async function sampleParticleCanvas(page: Page): Promise<{ brightPixels: number; colorRange: number; hash: number }> {
   return page.locator('.particle-canvas').evaluate((canvas: HTMLCanvasElement) => {
     const gl = canvas.getContext('webgl2') ?? canvas.getContext('webgl')
@@ -80,6 +111,7 @@ for (const viewport of [
     await expect(page.locator('.particle-field')).toHaveAttribute('data-stage', 'hero')
     await expect(page.locator('.app-shell')).toHaveClass(/home-active/)
     await expect(page.getByRole('button', { name: '进入工具台' })).toBeVisible()
+    await assertScrollContainers(page)
     const homeTopbarColor = await page.locator('.tab-strip').evaluate((element) => getComputedStyle(element).backgroundColor)
     expect(homeTopbarColor).toBe('rgb(11, 14, 18)')
     const particleFrame = await sampleParticleCanvas(page)
@@ -91,6 +123,7 @@ for (const viewport of [
     await page.getByRole('button', { name: '进入工具台' }).click()
     await expect(page.locator('.particle-field')).toHaveAttribute('data-stage', 'workbench')
     await expect(page.locator('.home-tool-card')).toHaveCount(5)
+    await assertScrollContainers(page)
     await assertViewportIntegrity(page)
     await page.screenshot({ path: resolve(qaDir, `home-workbench-${viewport.name}-light.png`), fullPage: true })
 
