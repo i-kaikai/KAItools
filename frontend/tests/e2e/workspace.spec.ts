@@ -50,6 +50,8 @@ async function assertScrollContainers(page: Page): Promise<void> {
       return {
         clientWidth: element.clientWidth,
         scrollWidth: element.scrollWidth,
+        clientHeight: element.clientHeight,
+        scrollHeight: element.scrollHeight,
         overflowX: style.overflowX,
         overflowY: style.overflowY,
         scrollbarColor: style.scrollbarColor,
@@ -57,6 +59,7 @@ async function assertScrollContainers(page: Page): Promise<void> {
     }
     return {
       sidebar: stateFor('.tool-nav'),
+      tabs: stateFor('.tab-strip'),
       workbench: stateFor('.home-workbench'),
     }
   })
@@ -65,6 +68,10 @@ async function assertScrollContainers(page: Page): Promise<void> {
   expect(scrollState.sidebar?.overflowX).toBe('hidden')
   expect(scrollState.sidebar?.scrollWidth).toBeLessThanOrEqual(scrollState.sidebar?.clientWidth ?? 0)
   expect(scrollState.sidebar?.scrollbarColor).not.toBe('auto')
+  expect(scrollState.tabs).not.toBeNull()
+  expect(scrollState.tabs?.overflowX).toBe('auto')
+  expect(scrollState.tabs?.overflowY).toBe('hidden')
+  expect(scrollState.tabs?.scrollHeight).toBeLessThanOrEqual(scrollState.tabs?.clientHeight ?? 0)
   if (scrollState.workbench) {
     expect(scrollState.workbench.overflowX).toBe('hidden')
     expect(scrollState.workbench.overflowY).toBe('auto')

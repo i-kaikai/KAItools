@@ -92,11 +92,6 @@ function onPointerDown(event: PointerEvent): void {
   wheelVelocity = 0
   pointerInside = true
   stage.value.dataset.dragActive = 'true'
-  try {
-    stage.value.setPointerCapture(event.pointerId)
-  } catch {
-    // Synthetic events and older WebViews may not expose pointer capture.
-  }
 }
 
 function onPointerMove(event: PointerEvent): void {
@@ -106,7 +101,14 @@ function onPointerMove(event: PointerEvent): void {
   pointerX = event.clientX
   pointerTime = event.timeStamp
   dragDistance += Math.abs(deltaX)
-  dragged ||= dragDistance > 8
+  if (!dragged && dragDistance > 8) {
+    dragged = true
+    try {
+      stage.value.setPointerCapture(event.pointerId)
+    } catch {
+      // Synthetic events and older WebViews may not expose pointer capture.
+    }
+  }
   angle = (angle + deltaX * 0.008) % (Math.PI * 2)
   if (!reducedMotion) wheelVelocity = clamp((deltaX / elapsed) * 3.2, -5, 5)
   layoutCards()
