@@ -3,6 +3,8 @@ import { ArrowLeft, ArrowRight, ArrowUpRight, CircleDot, ExternalLink, FolderCog
 import { computed, ref } from 'vue'
 
 import { isWebRuntime } from '@/runtime'
+import giteeLogo from '@/assets/gitee-g-red.svg'
+import githubLogo from '@/assets/github-invertocat-white.svg'
 import { useAppStore } from '@/stores/app'
 import { toolCategories, workspaceTools, type ToolDefinition } from '@/tools/registry'
 import ParticleField from './ParticleField.vue'
@@ -149,10 +151,21 @@ function releaseCard(): void {
             <dl class="home-system-list">
               <div><dt>KAITools</dt><dd>v{{ app.runtime?.version ?? '0.1.0' }}</dd></div>
               <div>
-                <dt>项目仓库</dt>
+                <dt>Gitee 仓库</dt>
                 <dd>
-                  <button class="home-repository-link" type="button" aria-label="打开 Gitee 项目仓库" @click="app.openProjectRepository">
+                  <button class="home-repository-link" type="button" aria-label="打开 Gitee 仓库" @click="app.openProjectRepository">
+                    <img class="repository-brand-icon" :src="giteeLogo" alt="" />
                     <span>i-_-kaikai/kaitools</span>
+                    <ExternalLink :size="13" aria-hidden="true" />
+                  </button>
+                </dd>
+              </div>
+              <div>
+                <dt>GitHub 仓库</dt>
+                <dd>
+                  <button class="home-repository-link" type="button" aria-label="打开 GitHub 仓库" @click="app.openGithubRepository">
+                    <img class="repository-brand-icon" :src="githubLogo" alt="" />
+                    <span>imxukai/KAItools</span>
                     <ExternalLink :size="13" aria-hidden="true" />
                   </button>
                 </dd>

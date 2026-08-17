@@ -1,6 +1,6 @@
 # KAITools
 
-[English](README.en.md) | [Gitee 仓库](https://gitee.com/i-_-kaikai/kaitools)
+[English](README.en.md) | [Gitee 仓库](https://gitee.com/i-_-kaikai/kaitools) | [GitHub 仓库](https://github.com/imxukai/KAItools)
 
 KAITools 是面向开发者的本地工具箱，同时提供纯静态 Web 版和 Windows 10/11 x64
 免安装桌面版。桌面版使用 Python、pywebview 与 WebView2 承载 Vue 3 + TypeScript

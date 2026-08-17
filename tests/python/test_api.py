@@ -119,3 +119,20 @@ def test_api_reports_project_repository_open_failure(tmp_path: Path, monkeypatch
 
     assert result["ok"] is False
     assert result["error"]["code"] == "OPEN_EXTERNAL_FAILED"
+
+
+def test_api_opens_only_fixed_github_repository(tmp_path: Path, monkeypatch) -> None:
+    paths = app_paths(tmp_path)
+    storage = AppStorage(paths)
+    storage.ensure_directories()
+    opened: list[str] = []
+    monkeypatch.setattr(
+        api_module,
+        "open_github_repository",
+        lambda: opened.append("https://github.com/imxukai/KAItools") or True,
+    )
+
+    result = DesktopApi(paths, storage).open_github_repository()
+
+    assert result == {"ok": True, "data": None}
+    assert opened == ["https://github.com/imxukai/KAItools"]

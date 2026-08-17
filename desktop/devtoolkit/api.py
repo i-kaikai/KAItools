@@ -19,7 +19,7 @@ from .hosts import (
     sha256_bytes,
 )
 from .paths import AppPaths
-from .runtime import open_project_repository, open_webview2_download, webview2_version
+from .runtime import open_github_repository, open_project_repository, open_webview2_download, webview2_version
 from .storage import AppStorage, StorageError
 
 LOGGER = logging.getLogger(__name__)
@@ -178,3 +178,11 @@ class DesktopApi:
             return _success()
         except (OSError, webbrowser.Error) as exc:
             return _failure("OPEN_EXTERNAL_FAILED", "无法使用系统默认浏览器打开 Gitee 仓库", str(exc))
+
+    def open_github_repository(self) -> dict[str, Any]:
+        try:
+            if not open_github_repository():
+                return _failure("OPEN_EXTERNAL_FAILED", "无法使用系统默认浏览器打开 GitHub 仓库")
+            return _success()
+        except (OSError, webbrowser.Error) as exc:
+            return _failure("OPEN_EXTERNAL_FAILED", "无法使用系统默认浏览器打开 GitHub 仓库", str(exc))

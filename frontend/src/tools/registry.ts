@@ -100,7 +100,7 @@ export const workspaceTools: ToolDefinition[] = [
     category: 'developer',
     icon: Code2,
     component: defineAsyncComponent(() => import('./java/JavaTool.vue')),
-    initialState: () => ({ input: '', mode: 'escape', unicode: false }),
+    initialState: () => ({ input: '', mode: 'escape', unicode: false, autoFormatJson: true }),
   },
   {
     id: 'timestamp',

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { escapeJava, unescapeJava } from '@/utils/javaEscape'
+import { escapeJava, unescapeJava, unescapeJavaWithJsonFormat } from '@/utils/javaEscape'
 
 describe('Java string transforms', () => {
   it('escapes Java control characters', () => {
@@ -21,5 +21,11 @@ describe('Java string transforms', () => {
     expect(result.error?.offset).toBe(4)
     expect(result.value).toBe('good')
   })
-})
 
+  it('formats unescaped JSON by default and can preserve the original layout', () => {
+    const source = '{\\"name\\":\\"KAITools\\",\\"count\\":9007199254740993}'
+    expect(unescapeJavaWithJsonFormat(source).value).toBe('{\n  "name": "KAITools",\n  "count": 9007199254740993\n}')
+    expect(unescapeJavaWithJsonFormat(source, false).value).toBe('{"name":"KAITools","count":9007199254740993}')
+    expect(unescapeJavaWithJsonFormat('普通文本').value).toBe('普通文本')
+  })
+})

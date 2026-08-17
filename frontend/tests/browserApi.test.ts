@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { desktopApi, openRepositoryInBrowser, PROJECT_REPOSITORY_URL } from '@/api/desktopApi'
+import {
+  desktopApi,
+  GITHUB_REPOSITORY_URL,
+  openGithubRepositoryInBrowser,
+  openRepositoryInBrowser,
+  PROJECT_REPOSITORY_URL,
+} from '@/api/desktopApi'
 import type { ToolTab } from '@/types'
 
 describe('browser API storage', () => {
@@ -71,5 +77,26 @@ describe('project repository link', () => {
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.error.code).toBe('OPEN_EXTERNAL_FAILED')
+  })
+
+  it('opens only the fixed GitHub repository URL', () => {
+    const replace = vi.fn()
+    const popup = {
+      opener: window,
+      document: {
+        createElement: vi.fn(() => ({ name: '', content: '' })),
+        head: { append: vi.fn() },
+      },
+      location: { replace },
+      close: vi.fn(),
+    }
+    const openWindow = vi.fn(() => popup) as unknown as typeof window.open
+
+    const result = openGithubRepositoryInBrowser(openWindow)
+
+    expect(result).toEqual({ ok: true, data: undefined })
+    expect(openWindow).toHaveBeenCalledWith('about:blank', '_blank')
+    expect(popup.opener).toBeNull()
+    expect(replace).toHaveBeenCalledWith(GITHUB_REPOSITORY_URL)
   })
 })

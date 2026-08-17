@@ -1,0 +1,152 @@
+<script setup lang="ts">
+import { ArrowRight, Search, X } from '@lucide/vue'
+import { computed, nextTick, ref, watch } from 'vue'
+
+import { toolCategories, workspaceTools, type ToolDefinition } from '@/tools/registry'
+
+const props = defineProps<{ open: boolean }>()
+const emit = defineEmits<{
+  close: []
+  select: [tool: ToolDefinition]
+}>()
+
+const input = ref<HTMLInputElement | null>(null)
+const query = ref('')
+const selectedIndex = ref(0)
+const localizedNames: Record<string, string> = {
+  json: 'JSON 格式化与查看',
+  'json-diff': 'JSON 差异对比',
+  'json-java': 'JSON 与 JavaBean 互转',
+  java: 'Java 字符串转义',
+  timestamp: '日期与时间戳转换',
+  'base64-text': 'Base64 文本转换',
+  'base64-image': 'Base64 图片转换',
+  'base64-file': 'Base64 文件转换',
+  cron: '定时任务表达式',
+  sql: 'SQL 语句格式化',
+  yaml: 'YAML 配置格式化',
+  xml: 'XML 文档格式化',
+  'text-diff': '文本差异比较',
+  'text-stats': '文本内容统计',
+  hosts: 'Hosts 文件编辑',
+  md5: 'MD5 文本摘要',
+}
+const categoryNames = Object.fromEntries(toolCategories.map((category) => [category.id, category.name]))
+const results = computed(() => {
+  const normalized = query.value.trim().toLowerCase()
+  if (!normalized) return workspaceTools
+  return workspaceTools.filter((tool) => [
+    localizedNames[tool.id] ?? tool.name,
+    tool.name,
+    tool.description,
+    categoryNames[tool.category] ?? '',
+    ...tool.keywords,
+  ].some((value) => value.toLowerCase().includes(normalized)))
+})
+
+function focusSelected(): void {
+  void nextTick(() => document.getElementById(`tool-search-result-${selectedIndex.value}`)?.scrollIntoView({ block: 'nearest' }))
+}
+
+function moveSelection(direction: 1 | -1): void {
+  if (!results.value.length) return
+  selectedIndex.value = (selectedIndex.value + direction + results.value.length) % results.value.length
+  focusSelected()
+}
+
+function selectTool(tool: ToolDefinition): void {
+  emit('select', tool)
+}
+
+function onInputKeydown(event: KeyboardEvent): void {
+  if (event.isComposing) return
+  if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    moveSelection(1)
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    moveSelection(-1)
+  } else if (event.key === 'Enter') {
+    event.preventDefault()
+    const tool = results.value[selectedIndex.value]
+    if (tool) selectTool(tool)
+  } else if (event.key === 'Escape') {
+    event.preventDefault()
+    emit('close')
+  }
+}
+
+watch(
+  () => props.open,
+  (open) => {
+    if (!open) return
+    query.value = ''
+    selectedIndex.value = 0
+    void nextTick(() => input.value?.focus())
+  },
+  { immediate: true },
+)
+watch(query, () => (selectedIndex.value = 0))
+</script>
+
+<template>
+  <div v-if="open" class="tool-search-backdrop" @pointerdown.self="emit('close')">
+    <section class="tool-search-dialog" role="dialog" aria-modal="true" aria-labelledby="tool-search-title">
+      <header>
+        <Search :size="19" aria-hidden="true" />
+        <div>
+          <h2 id="tool-search-title">搜索工具</h2>
+          <input
+            ref="input"
+            v-model="query"
+            type="search"
+            placeholder="输入工具名称、用途或关键词"
+            aria-label="输入工具名称、用途或关键词"
+            aria-controls="tool-search-results"
+            :aria-activedescendant="results.length ? `tool-search-result-${selectedIndex}` : undefined"
+            @keydown.stop="onInputKeydown"
+          />
+        </div>
+        <button type="button" aria-label="关闭工具搜索" @click="emit('close')"><X :size="17" aria-hidden="true" /></button>
+      </header>
+
+      <div class="tool-search-summary">
+        <span>{{ query.trim() ? '搜索结果' : '全部工具' }}</span>
+        <small>找到 {{ results.length }} 个工具</small>
+      </div>
+
+      <div id="tool-search-results" class="tool-search-results" role="listbox" aria-label="工具搜索结果">
+        <button
+          v-for="(tool, index) in results"
+          :id="`tool-search-result-${index}`"
+          :key="tool.id"
+          type="button"
+          role="option"
+          :aria-selected="index === selectedIndex"
+          :class="{ selected: index === selectedIndex }"
+          @pointerenter="selectedIndex = index"
+          @click="selectTool(tool)"
+        >
+          <span class="tool-search-result-icon"><component :is="tool.icon" :size="18" :stroke-width="1.8" aria-hidden="true" /></span>
+          <span class="tool-search-result-copy">
+            <strong>{{ localizedNames[tool.id] ?? tool.name }}</strong>
+            <small>{{ tool.name }} · {{ tool.description }}</small>
+          </span>
+          <span class="tool-search-category">{{ categoryNames[tool.category] }}</span>
+          <ArrowRight :size="15" aria-hidden="true" />
+        </button>
+        <div v-if="!results.length" class="tool-search-empty">
+          <Search :size="23" aria-hidden="true" />
+          <strong>没有找到匹配工具</strong>
+          <span>可以尝试“格式化”“日期”“编码”等中文关键词</span>
+        </div>
+      </div>
+
+      <footer>
+        <span><kbd>↑</kbd><kbd>↓</kbd> 选择</span>
+        <span><kbd>Enter</kbd> 打开</span>
+        <span><kbd>Esc</kbd> 关闭</span>
+      </footer>
+    </section>
+  </div>
+</template>

@@ -1,6 +1,6 @@
 # KAITools
 
-[中文](README.md) | [Gitee repository](https://gitee.com/i-_-kaikai/kaitools)
+[中文](README.md) | [Gitee repository](https://gitee.com/i-_-kaikai/kaitools) | [GitHub repository](https://github.com/imxukai/KAItools)
 
 KAITools is a local developer toolbox available as a static browser build and a
 portable Windows 10/11 x64 desktop application. The desktop application combines

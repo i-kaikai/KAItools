@@ -112,6 +112,10 @@ export const useAppStore = defineStore('app', {
       const result = await desktopApi.openProjectRepository()
       if (!result.ok) useToastStore().show(result.error.message, 'error')
     },
+    async openGithubRepository() {
+      const result = await desktopApi.openGithubRepository()
+      if (!result.ok) useToastStore().show(result.error.message, 'error')
+    },
     setHostsProfiles(profiles: HostsProfiles) {
       this.hostsProfiles = profiles
       this.scheduleSettingsSave()

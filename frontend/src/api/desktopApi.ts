@@ -12,6 +12,7 @@ import { isWebRuntime } from '@/runtime'
 const BROWSER_KEY = 'devtoolkit.browser.state.v1'
 const LEGACY_MOCK_KEY = 'devtoolkit.mock.state.v1'
 export const PROJECT_REPOSITORY_URL = 'https://gitee.com/i-_-kaikai/kaitools'
+export const GITHUB_REPOSITORY_URL = 'https://github.com/imxukai/KAItools'
 const DESKTOP_ONLY_METHODS = new Set([
   'read_hosts',
   'apply_hosts',
@@ -117,6 +118,7 @@ async function invoke<T>(method: string, ...args: unknown[]): Promise<ApiResult<
 
 async function browserInvoke<T>(method: string, args: unknown[]): Promise<ApiResult<T>> {
   if (method === 'open_project_repository') return openRepositoryInBrowser() as ApiResult<T>
+  if (method === 'open_github_repository') return openGithubRepositoryInBrowser() as ApiResult<T>
   if (isWebRuntime && DESKTOP_ONLY_METHODS.has(method)) {
     return { ok: false, error: { code: 'DESKTOP_ONLY', message: '此功能仅 Windows 桌面版可用' } }
   }
@@ -183,12 +185,14 @@ async function browserInvoke<T>(method: string, args: unknown[]): Promise<ApiRes
   return { ok: true, data: undefined as T }
 }
 
-export function openRepositoryInBrowser(
-  openWindow: typeof window.open = window.open.bind(window),
+function openFixedRepositoryInBrowser(
+  url: string,
+  repositoryName: 'Gitee' | 'GitHub',
+  openWindow: typeof window.open,
 ): ApiResult<void> {
   const popup = openWindow('about:blank', '_blank')
   if (!popup) {
-    return { ok: false, error: { code: 'OPEN_EXTERNAL_FAILED', message: '浏览器阻止了 Gitee 仓库窗口，请允许弹出窗口后重试' } }
+    return { ok: false, error: { code: 'OPEN_EXTERNAL_FAILED', message: `浏览器阻止了 ${repositoryName} 仓库窗口，请允许弹出窗口后重试` } }
   }
   try {
     popup.opener = null
@@ -196,15 +200,27 @@ export function openRepositoryInBrowser(
     referrerPolicy.name = 'referrer'
     referrerPolicy.content = 'no-referrer'
     popup.document.head.append(referrerPolicy)
-    popup.location.replace(PROJECT_REPOSITORY_URL)
+    popup.location.replace(url)
     return { ok: true, data: undefined }
   } catch (error) {
     popup.close()
     return {
       ok: false,
-      error: { code: 'OPEN_EXTERNAL_FAILED', message: '无法打开 Gitee 仓库', details: error instanceof Error ? error.message : String(error) },
+      error: { code: 'OPEN_EXTERNAL_FAILED', message: `无法打开 ${repositoryName} 仓库`, details: error instanceof Error ? error.message : String(error) },
     }
   }
+}
+
+export function openRepositoryInBrowser(
+  openWindow: typeof window.open = window.open.bind(window),
+): ApiResult<void> {
+  return openFixedRepositoryInBrowser(PROJECT_REPOSITORY_URL, 'Gitee', openWindow)
+}
+
+export function openGithubRepositoryInBrowser(
+  openWindow: typeof window.open = window.open.bind(window),
+): ApiResult<void> {
+  return openFixedRepositoryInBrowser(GITHUB_REPOSITORY_URL, 'GitHub', openWindow)
 }
 
 export const desktopApi = {
@@ -219,4 +235,5 @@ export const desktopApi = {
   restoreHostsBackup: (id: string) => invoke<{ changed: boolean; backups: HostsBackup[] }>('restore_hosts_backup', id),
   openWebView2Download: () => invoke<void>('open_webview2_download'),
   openProjectRepository: () => invoke<void>('open_project_repository'),
+  openGithubRepository: () => invoke<void>('open_github_repository'),
 }

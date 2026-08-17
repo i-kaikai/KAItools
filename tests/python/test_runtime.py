@@ -53,6 +53,15 @@ def test_project_repository_uses_fixed_gitee_url(monkeypatch) -> None:
     assert runtime.PROJECT_REPOSITORY_URL == "https://gitee.com/i-_-kaikai/kaitools"
 
 
+def test_github_repository_uses_fixed_url(monkeypatch) -> None:
+    opened: list[str] = []
+    monkeypatch.setattr(runtime.webbrowser, "open", lambda url: opened.append(url) or True)
+
+    assert runtime.open_github_repository() is True
+    assert opened == [runtime.GITHUB_REPOSITORY_URL]
+    assert runtime.GITHUB_REPOSITORY_URL == "https://github.com/imxukai/KAItools"
+
+
 def test_missing_webview2_closes_single_instance_lock(tmp_path, monkeypatch) -> None:
     events: list[str] = []
     startup_error: list[tuple[str, bool]] = []

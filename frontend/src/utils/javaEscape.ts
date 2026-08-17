@@ -1,3 +1,5 @@
+import { formatJson } from '@/utils/json'
+
 export interface JavaTransformResult {
   value: string
   error?: { message: string; offset: number }
@@ -79,3 +81,12 @@ export function unescapeJava(input: string): JavaTransformResult {
   return { value: output }
 }
 
+export function unescapeJavaWithJsonFormat(input: string, autoFormatJson = true): JavaTransformResult {
+  const result = unescapeJava(input)
+  if (result.error || !autoFormatJson || !result.value.trim()) return result
+  try {
+    return { value: formatJson(result.value, 2) }
+  } catch {
+    return result
+  }
+}

@@ -489,13 +489,18 @@ test('Crontab supports raw expressions, field templates, time zones and run prev
   await page.screenshot({ path: resolve(qaDir, 'cron-workbench-desktop-light.png'), fullPage: true })
 })
 
-test('Gitee repository entry works from the sidebar and home workspace', async ({ page }) => {
+test('Gitee and GitHub repository entries use official icons and work from the workspace', async ({ page }) => {
   await page.setViewportSize({ width: 960, height: 640 })
   await page.context().route('https://gitee.com/**', (route) => route.fulfill({ contentType: 'text/html', body: '<title>KAITools Gitee</title>' }))
+  await page.context().route('https://github.com/**', (route) => route.fulfill({ contentType: 'text/html', body: '<title>KAITools GitHub</title>' }))
   await page.goto('/')
 
-  const sidebarLink = page.locator('.sidebar-footer').getByRole('button', { name: '打开 Gitee 项目仓库' })
+  const sidebarLink = page.locator('.sidebar-footer').getByRole('button', { name: '打开 Gitee 仓库' })
+  const githubSidebarLink = page.locator('.sidebar-footer').getByRole('button', { name: '打开 GitHub 仓库' })
   await expect(sidebarLink).toBeVisible()
+  await expect(githubSidebarLink).toBeVisible()
+  await expect(page.locator('.repository-brand-button img')).toHaveCount(2)
+  await expect.poll(() => page.locator('.repository-brand-button img').evaluateAll((images) => images.every((image) => (image as HTMLImageElement).naturalWidth > 0))).toBe(true)
   await expect(page.locator('.app-shell')).toHaveClass(/sidebar-collapsed/)
   await expect(page.locator('.particle-field')).toHaveAttribute('data-ready', 'true')
   await expect(page.locator('.home-orbit-copy')).toHaveCSS('opacity', '1')
@@ -505,6 +510,11 @@ test('Gitee repository entry works from the sidebar and home workspace', async (
   const sidebarPopup = await sidebarPopupPromise
   await sidebarPopup.waitForURL('https://gitee.com/i-_-kaikai/kaitools')
   await sidebarPopup.close()
+  const githubSidebarPopupPromise = page.waitForEvent('popup')
+  await githubSidebarLink.click()
+  const githubSidebarPopup = await githubSidebarPopupPromise
+  await githubSidebarPopup.waitForURL('https://github.com/imxukai/KAItools')
+  await githubSidebarPopup.close()
 
   await page.getByRole('button', { name: '展开侧栏' }).click()
   await expect(sidebarLink).toBeVisible()
@@ -514,24 +524,95 @@ test('Gitee repository entry works from the sidebar and home workspace', async (
 
   await page.getByRole('button', { name: '首页', exact: true }).click()
   await page.getByRole('button', { name: '进入工具台' }).click()
-  const homeRepositoryLink = page.locator('.home-system').getByRole('button', { name: '打开 Gitee 项目仓库' })
+  const homeRepositoryLink = page.locator('.home-system').getByRole('button', { name: '打开 Gitee 仓库' })
+  const githubHomeRepositoryLink = page.locator('.home-system').getByRole('button', { name: '打开 GitHub 仓库' })
   await expect(homeRepositoryLink).toContainText('i-_-kaikai/kaitools')
+  await expect(githubHomeRepositoryLink).toContainText('imxukai/KAItools')
+  await expect(page.locator('.home-system .repository-brand-icon')).toHaveCount(2)
   await page.screenshot({ path: resolve(qaDir, 'repository-entry-home-light.png'), fullPage: true })
   const homePopupPromise = page.waitForEvent('popup')
   await homeRepositoryLink.click()
   const homePopup = await homePopupPromise
   await homePopup.waitForURL('https://gitee.com/i-_-kaikai/kaitools')
   await homePopup.close()
+  const githubHomePopupPromise = page.waitForEvent('popup')
+  await githubHomeRepositoryLink.click()
+  const githubHomePopup = await githubHomePopupPromise
+  await githubHomePopup.waitForURL('https://github.com/imxukai/KAItools')
+  await githubHomePopup.close()
 
   await page.evaluate(() => {
     window.open = () => null
   })
-  await homeRepositoryLink.click()
-  await expect(page.getByText('浏览器阻止了 Gitee 仓库窗口，请允许弹出窗口后重试')).toBeVisible()
+  await githubHomeRepositoryLink.click()
+  await expect(page.getByText('浏览器阻止了 GitHub 仓库窗口，请允许弹出窗口后重试')).toBeVisible()
 
   await page.setViewportSize({ width: 390, height: 844 })
   await expect(sidebarLink).toBeHidden()
   await expect(homeRepositoryLink).toBeVisible()
+  await expect(githubHomeRepositoryLink).toBeVisible()
   await assertViewportIntegrity(page)
   await page.screenshot({ path: resolve(qaDir, 'repository-entry-home-mobile-light.png'), fullPage: true })
+})
+
+test('tool search is localized, keyboard friendly and available while collapsed', async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 640 })
+  await page.goto('/')
+  await expect(page.locator('.app-shell')).toHaveClass(/sidebar-collapsed/)
+
+  await page.locator('.sidebar-search-button').click()
+  const dialog = page.getByRole('dialog', { name: '搜索工具' })
+  const input = page.getByLabel('输入工具名称、用途或关键词')
+  await expect(dialog).toBeVisible()
+  await expect(dialog).toHaveCSS('transition-duration', '0s')
+  await expect(page.locator('.app-shell')).toHaveClass(/sidebar-collapsed/)
+  await input.fill('定时')
+  await expect(page.getByRole('option')).toHaveCount(1)
+  await expect(page.getByRole('option')).toContainText('定时任务表达式')
+  await expect(page.getByRole('option')).toContainText('开发辅助')
+  await page.screenshot({ path: resolve(qaDir, 'tool-search-desktop-light.png'), fullPage: true })
+  await input.press('Enter')
+  await expect(page.getByRole('heading', { name: 'Crontab 生成器' })).toBeVisible()
+  await expect(dialog).toBeHidden()
+
+  await page.keyboard.press('Control+k')
+  await input.fill('没有这个工具')
+  await expect(page.getByText('没有找到匹配工具')).toBeVisible()
+  await expect(page.getByText('可以尝试“格式化”“日期”“编码”等中文关键词')).toBeVisible()
+  await input.press('Escape')
+  await expect(dialog).toBeHidden()
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.locator('.sidebar-search-button').click()
+  await expect(dialog).toBeVisible()
+  await assertViewportIntegrity(page)
+  await page.screenshot({ path: resolve(qaDir, 'tool-search-mobile-light.png'), fullPage: true })
+})
+
+test('Java unescape formats JSON by default and keeps generated output editable', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Java 转义', exact: true }).click()
+  await page.getByRole('radio', { name: '反转义', exact: true }).click()
+
+  const autoFormat = page.getByLabel('自动格式化 JSON')
+  const input = page.getByLabel('Java 转义输入')
+  const output = page.getByLabel('Java 转义结果')
+  await expect(autoFormat).toBeChecked()
+  await input.fill('{\\"name\\":\\"Kai\\",\\"count\\":9007199254740993}')
+  await expect(output.locator('.cm-line')).toHaveCount(4)
+  await expect(output.locator('.cm-line').nth(1)).toContainText('"name": "Kai"')
+  await expect(output.locator('.cm-line').nth(2)).toContainText('9007199254740993')
+
+  await output.fill('{"edited":true}')
+  await expect(output).toContainText('{"edited":true}')
+  await page.waitForTimeout(100)
+  await expect(output).toContainText('{"edited":true}')
+
+  await autoFormat.uncheck()
+  await expect(output.locator('.cm-line')).toHaveCount(1)
+  await expect(output).toContainText('{"name":"Kai","count":9007199254740993}')
+  await output.fill('手动修改后的结果')
+  await expect(output).toContainText('手动修改后的结果')
+  await page.screenshot({ path: resolve(qaDir, 'java-unescape-json-editable-light.png'), fullPage: true })
 })

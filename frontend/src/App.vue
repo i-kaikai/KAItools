@@ -2,7 +2,6 @@
 import {
   Monitor,
   Moon,
-  GitFork,
   PanelLeftClose,
   PanelLeftOpen,
   Pin,
@@ -12,25 +11,22 @@ import {
   Sun,
   X,
 } from '@lucide/vue'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 import IconButton from '@/components/IconButton.vue'
+import ToolSearchDialog from '@/components/ToolSearchDialog.vue'
 import { isWebRuntime } from '@/runtime'
 import ToastViewport from '@/components/ToastViewport.vue'
+import giteeLogo from '@/assets/gitee-g-red.svg'
+import githubLogo from '@/assets/github-invertocat-white.svg'
 import kaitoolsMarkWhite from '@/assets/kaitools-mark-white.svg'
 import { useAppStore } from '@/stores/app'
 import type { ThemeMode, ToolTab } from '@/types'
 import { homeTool, toolsById, workspaceTools } from '@/tools/registry'
 
 const app = useAppStore()
-const search = ref('')
-const searchInput = ref<HTMLInputElement | null>(null)
+const searchOpen = ref(false)
 const tabMenu = ref({ visible: false, x: 0, y: 0, tabId: '' })
-const visibleTools = computed(() => {
-  const query = search.value.trim().toLowerCase()
-  if (!query) return workspaceTools
-  return workspaceTools.filter((tool) => [tool.name, tool.description, ...tool.keywords].some((value) => value.toLowerCase().includes(query)))
-})
 const activeTool = computed(() => (app.activeTab ? toolsById[app.activeTab.toolId] : undefined))
 const themeIcon = computed(() => ({ system: Monitor, light: Sun, dark: Moon })[app.settings.theme])
 const themeLabel = computed(() => ({ system: '跟随系统', light: '浅色主题', dark: '深色主题' })[app.settings.theme])
@@ -38,6 +34,19 @@ const themeLabel = computed(() => ({ system: '跟随系统', light: '浅色主�
 function openTool(toolId: keyof typeof toolsById, forceNew = false): void {
   const tool = toolsById[toolId]
   app.openTool(tool.id, tool.name, tool.initialState(), tool.singleton, forceNew)
+}
+
+function openSearch(): void {
+  searchOpen.value = true
+}
+
+function closeSearch(): void {
+  searchOpen.value = false
+}
+
+function selectSearchTool(toolId: keyof typeof toolsById): void {
+  openTool(toolId)
+  closeSearch()
 }
 
 function closeTab(tab: ToolTab): void {
@@ -85,14 +94,19 @@ function cycleTheme(): void {
 }
 
 function onKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape' && searchOpen.value) {
+    event.preventDefault()
+    closeSearch()
+    return
+  }
   if (event.key === 'Escape' && tabMenu.value.visible) {
     closeTabMenu()
     return
   }
   if (event.ctrlKey && event.key.toLowerCase() === 'k') {
     event.preventDefault()
-    if (app.settings.sidebarCollapsed) app.toggleSidebar()
-    void nextTick(() => searchInput.value?.focus())
+    searchOpen.value ? closeSearch() : openSearch()
+    return
   }
   if (event.ctrlKey && event.key.toLowerCase() === 'w' && app.activeTab) {
     event.preventDefault()
@@ -150,16 +164,17 @@ onBeforeUnmount(() => {
         <span v-if="!app.settings.sidebarCollapsed">首页</span>
       </button>
 
-      <div v-if="!app.settings.sidebarCollapsed" class="tool-search">
+      <button v-if="!app.settings.sidebarCollapsed" class="tool-search-trigger" type="button" @click="openSearch">
         <Search :size="15" aria-hidden="true" />
-        <input ref="searchInput" v-model="search" placeholder="搜索工具" aria-label="搜索工具" />
+        <span>搜索工具</span>
         <kbd>Ctrl K</kbd>
-      </div>
+      </button>
+      <IconButton v-else class="sidebar-search-button" :icon="Search" label="搜索工具" @click="openSearch" />
 
       <nav class="tool-nav" aria-label="开发工具">
-        <div v-if="!app.settings.sidebarCollapsed" class="nav-section-label"><span>工具</span><small>{{ visibleTools.length }}</small></div>
+        <div v-if="!app.settings.sidebarCollapsed" class="nav-section-label"><span>工具</span><small>{{ workspaceTools.length }}</small></div>
         <div
-          v-for="tool in visibleTools"
+          v-for="tool in workspaceTools"
           :key="tool.id"
           class="tool-nav-row"
           :class="[{ active: app.activeTab?.toolId === tool.id }, `tool-${tool.id}`]"
@@ -186,7 +201,8 @@ onBeforeUnmount(() => {
 
       <div class="sidebar-footer">
         <div class="sidebar-footer-actions">
-          <IconButton :icon="GitFork" label="打开 Gitee 项目仓库" @click="app.openProjectRepository" />
+          <button class="icon-button tooltip-anchor repository-brand-button" type="button" aria-label="打开 Gitee 仓库" data-tooltip="打开 Gitee 仓库" @click="app.openProjectRepository"><img :src="giteeLogo" alt="" /></button>
+          <button class="icon-button tooltip-anchor repository-brand-button" type="button" aria-label="打开 GitHub 仓库" data-tooltip="打开 GitHub 仓库" @click="app.openGithubRepository"><img :src="githubLogo" alt="" /></button>
           <IconButton :icon="themeIcon" :label="themeLabel" @click="cycleTheme" />
         </div>
         <div v-if="!app.settings.sidebarCollapsed" class="runtime-copy">
@@ -262,6 +278,7 @@ onBeforeUnmount(() => {
         @update:state="app.updateTabState(app.activeTab.id, $event)"
       />
     </main>
+    <ToolSearchDialog :open="searchOpen" @close="closeSearch" @select="selectSearchTool($event.id)" />
     <ToastViewport />
   </div>
 </template>
