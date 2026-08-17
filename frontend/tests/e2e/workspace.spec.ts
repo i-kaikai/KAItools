@@ -171,12 +171,13 @@ for (const viewport of [
     await page.screenshot({ path: resolve(qaDir, `json-${viewport.name}-light.png`), fullPage: true })
 
     await page.getByRole('button', { name: '首页', exact: true }).click()
+    await expect(page.locator('.particle-field')).toHaveAttribute('data-stage', 'workbench')
     await page.getByRole('button', { name: '跟随系统' }).click()
     await page.getByRole('button', { name: '浅色主题' }).click()
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
     await page.mouse.move(viewport.width / 2, viewport.height / 2)
     await assertViewportIntegrity(page)
-    await page.screenshot({ path: resolve(qaDir, `home-orbit-${viewport.name}-dark.png`), fullPage: true })
+    await page.screenshot({ path: resolve(qaDir, `home-workbench-${viewport.name}-dark.png`), fullPage: true })
   })
 }
 
@@ -241,6 +242,15 @@ test('particle planet and tool carousel render, move and respond to the wheel', 
 
   await page.getByRole('button', { name: '返回环星' }).click()
   await expect(page.locator('.particle-field')).toHaveAttribute('data-stage', 'hero')
+
+  await page.getByRole('button', { name: 'JSON', exact: true }).click()
+  await page.getByRole('tab', { name: '首页' }).click()
+  await expect(page.locator('.particle-field')).toHaveAttribute('data-stage', 'workbench')
+  await expect(page.getByRole('button', { name: '进入工具台' })).toBeHidden()
+
+  await page.getByRole('button', { name: '返回环星' }).click()
+  await page.getByRole('button', { name: '首页', exact: true }).click()
+  await expect(page.locator('.particle-field')).toHaveAttribute('data-stage', 'workbench')
 })
 
 test('formatted JSON output remains editable and drives tree and graph views', async ({ page }) => {
@@ -523,7 +533,7 @@ test('Gitee and GitHub repository entries use official icons and work from the w
   await page.screenshot({ path: resolve(qaDir, 'repository-entry-sidebar-expanded-light.png'), fullPage: true })
 
   await page.getByRole('button', { name: '首页', exact: true }).click()
-  await page.getByRole('button', { name: '进入工具台' }).click()
+  await expect(page.locator('.particle-field')).toHaveAttribute('data-stage', 'workbench')
   const homeRepositoryLink = page.locator('.home-system').getByRole('button', { name: '打开 Gitee 仓库' })
   const githubHomeRepositoryLink = page.locator('.home-system').getByRole('button', { name: '打开 GitHub 仓库' })
   await expect(homeRepositoryLink).toContainText('i-_-kaikai/kaitools')

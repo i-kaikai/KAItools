@@ -10,11 +10,15 @@ import { toolCategories, workspaceTools, type ToolDefinition } from '@/tools/reg
 import ParticleField from './ParticleField.vue'
 import ToolCarousel from './ToolCarousel.vue'
 
-defineProps<{ state: Record<string, unknown> }>()
+const props = defineProps<{ state: Record<string, unknown> }>()
+const emit = defineEmits<{ 'update:state': [state: Record<string, unknown>] }>()
 
 const app = useAppStore()
 const particleField = ref<InstanceType<typeof ParticleField> | null>(null)
-const entered = ref(false)
+const entered = computed({
+  get: () => props.state.entered === true,
+  set: (value: boolean) => emit('update:state', { ...props.state, entered: value }),
+})
 const openTabs = computed(() => app.tabs.filter((tab) => tab.toolId !== 'home'))
 const pinnedTabs = computed(() => openTabs.value.filter((tab) => tab.pinned))
 const categorizedTools = computed(() => toolCategories.map((category) => ({
@@ -66,7 +70,7 @@ function openTool(tool: ToolDefinition): void {
 }
 
 function activateTab(tabId: string): void {
-  app.activeTabId = tabId
+  app.activateTab(tabId)
 }
 
 function enterWorkspace(): void {

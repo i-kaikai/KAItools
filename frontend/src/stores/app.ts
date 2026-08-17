@@ -50,6 +50,7 @@ export const useAppStore = defineStore('app', {
     openTool(toolId: ToolId, title: string, initialState: Record<string, unknown>, singleton = false, forceNew = false) {
       const existing = this.tabs.find((tab) => tab.toolId === toolId)
       if (existing && (singleton || !forceNew)) {
+        if (existing.toolId === 'home') existing.state = { ...existing.state, entered: true }
         this.activeTabId = existing.id
         return
       }
@@ -62,6 +63,12 @@ export const useAppStore = defineStore('app', {
         state: structuredClone(initialState),
       }
       this.tabs.push(tab)
+      this.activeTabId = tab.id
+    },
+    activateTab(tabId: string) {
+      const tab = this.tabs.find((item) => item.id === tabId)
+      if (!tab) return
+      if (tab.toolId === 'home') tab.state = { ...tab.state, entered: true }
       this.activeTabId = tab.id
     },
     closeTab(tabId: string) {

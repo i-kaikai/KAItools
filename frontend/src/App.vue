@@ -53,6 +53,10 @@ function closeTab(tab: ToolTab): void {
   app.closeTab(tab.id)
 }
 
+function activateTab(tab: ToolTab): void {
+  app.activateTab(tab.id)
+}
+
 function openTabMenu(event: MouseEvent, tab: ToolTab): void {
   const menuWidth = 172
   const menuHeight = 170
@@ -224,9 +228,9 @@ onBeforeUnmount(() => {
           role="tab"
           :tabindex="tab.id === app.activeTabId ? 0 : -1"
           :aria-selected="tab.id === app.activeTabId"
-          @click="app.activeTabId = tab.id"
+          @click="activateTab(tab)"
           @contextmenu.prevent.stop="openTabMenu($event, tab)"
-          @keydown.enter="app.activeTabId = tab.id"
+          @keydown.enter="activateTab(tab)"
         >
           <component :is="toolsById[tab.toolId].icon" :size="14" aria-hidden="true" />
           <span>{{ tab.title }}</span>

@@ -60,7 +60,7 @@ export const homeTool: ToolDefinition = {
   icon: House,
   component: defineAsyncComponent(() => import('./home/HomeTool.vue')),
   singleton: true,
-  initialState: () => ({}),
+  initialState: () => ({ entered: false }),
 }
 
 export const workspaceTools: ToolDefinition[] = [
