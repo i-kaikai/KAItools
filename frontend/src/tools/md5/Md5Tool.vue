@@ -4,6 +4,7 @@ import { computed } from 'vue'
 
 import CodeEditor from '@/components/CodeEditor.vue'
 import IconButton from '@/components/IconButton.vue'
+import ToolChainButton from '@/components/ToolChainButton.vue'
 import { useToolState } from '@/composables/useToolState'
 import { useToastStore } from '@/stores/toast'
 import { copyText } from '@/utils/clipboard'
@@ -34,6 +35,7 @@ async function copyDigest(): Promise<void> {
           <input v-model="model.uppercase" type="checkbox" />
           <span>大写</span>
         </label>
+        <ToolChainButton :value="digest" source-name="MD5" />
         <IconButton :icon="Trash2" label="清空" :disabled="!model.input" @click="model.input = ''" />
       </div>
     </header>
@@ -48,4 +50,3 @@ async function copyDigest(): Promise<void> {
     </div>
   </section>
 </template>
-

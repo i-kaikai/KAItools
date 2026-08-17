@@ -1,5 +1,5 @@
 export type ThemeMode = 'system' | 'light' | 'dark'
-export type EditorHighlightKind = 'added' | 'removed'
+export type EditorHighlightKind = 'added' | 'removed' | 'match'
 
 export interface EditorHighlight {
   from: number
@@ -23,6 +23,7 @@ export type ToolId =
   | 'xml'
   | 'text-diff'
   | 'text-stats'
+  | 'regex'
   | 'md5'
   | 'hosts'
 

@@ -6,6 +6,7 @@ import CodeEditor from '@/components/CodeEditor.vue'
 import IconButton from '@/components/IconButton.vue'
 import ResizableSplit from '@/components/ResizableSplit.vue'
 import SegmentedControl from '@/components/SegmentedControl.vue'
+import ToolChainButton from '@/components/ToolChainButton.vue'
 import { useToolState } from '@/composables/useToolState'
 import { useToastStore } from '@/stores/toast'
 import { copyText } from '@/utils/clipboard'
@@ -74,6 +75,7 @@ function swap(): void {
           <span>自动格式化 JSON</span>
         </label>
         <IconButton :icon="ArrowLeftRight" label="交换并反向转换" :disabled="!!transformed.error || !model.output" @click="swap" />
+        <ToolChainButton :value="model.output" source-name="Java 转义" />
         <IconButton :icon="Copy" label="复制结果" :disabled="!!transformed.error || !model.output" @click="copyOutput" />
         <IconButton :icon="Trash2" label="清空" :disabled="!model.input && !model.output" @click="model.input = ''; model.output = ''" />
       </div>

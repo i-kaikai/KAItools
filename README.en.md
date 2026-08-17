@@ -11,7 +11,7 @@ Python, pywebview, WebView2, Vue 3, and TypeScript. Extract the ZIP and launch
 
 ### Data formats
 
-- **JSON**: strict validation, formatting, minification, editable syntax-colored output, tree view, and a relationship graph. Graph cards group fields by level, and node content can be edited and applied back to the result.
+- **JSON**: strict validation, formatting, minification, editable syntax-colored output, tree view, relationship graph, and JSONPath queries. Graph cards group fields by level, and node content can be edited and applied back to the result.
 - **JSON Diff**: semantic comparison with optional object-key order normalization and highlighted changes.
 - **JSON / JavaBean**: two-way conversion with class name and Lombok options.
 - **SQL Formatter**: multiple SQL dialects, keyword casing, and indentation controls.
@@ -30,6 +30,7 @@ Python, pywebview, WebView2, Vue 3, and TypeScript. Extract the ZIP and launch
 - **Java Escape**: string escaping, unescaping, and optional Unicode conversion.
 - **Date Converter**: automatic recognition of timestamps, ISO 8601, common date formats, Chinese dates, RFC values, and time zones, with local, UTC, ISO, and selected IANA-zone output.
 - **Crontab Generator**: two-way expression and field editing, field templates, presets, readable summaries, IANA time zones, and the next 5/10/20 runs.
+- **Regex Workbench**: live match highlighting, capture details, common flags, and replacement previews.
 
 ### Text and system
 
@@ -38,8 +39,9 @@ Python, pywebview, WebView2, Vue 3, and TypeScript. Extract the ZIP and launch
 - **Hosts**: direct system Hosts editing in the desktop build with diff preview, source digest checks, UAC save, and full-file backup and restore. The web build clearly marks this feature as desktop-only.
 
 Both panes remain editable in every side-by-side tool. The divider supports
-pointer dragging, keyboard adjustment, and double-click reset. Workspace tabs
-support pinning, multiple instances, and context-menu close operations.
+pointer dragging, keyboard adjustment, and double-click reset. Results from
+common tools can be sent directly into another tool for continued processing.
+Workspace tabs support pinning, multiple instances, and context-menu close operations.
 
 ## Runtime and data
 

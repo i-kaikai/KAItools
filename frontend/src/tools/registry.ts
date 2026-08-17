@@ -16,6 +16,7 @@ import {
   House,
   Image,
   Network,
+  Regex,
 } from '@lucide/vue'
 import { defineAsyncComponent, type Component } from 'vue'
 
@@ -47,6 +48,7 @@ export interface ToolDefinition {
   component: Component
   singleton?: boolean
   initialState: () => Record<string, unknown>
+  chainInput?: (value: string) => Record<string, unknown>
 }
 
 export const homeTool: ToolDefinition = {
@@ -65,12 +67,13 @@ export const workspaceTools: ToolDefinition[] = [
   {
     id: 'json',
     name: 'JSON',
-    description: '格式化、树视图与关系图',
-    keywords: ['json', '格式化', '校验', 'tree', 'graph', '关系图'],
+    description: '格式化、关系图与 JSONPath',
+    keywords: ['json', 'jsonpath', '查询', '格式化', '校验', 'tree', 'graph', '关系图'],
     category: 'data',
     icon: Braces,
     component: defineAsyncComponent(() => import('./json/JsonTool.vue')),
-    initialState: () => ({ input: '{\n  "name": "KAITools",\n  "ready": true,\n  "count": 5\n}', indent: 2, outputMode: 'code' }),
+    initialState: () => ({ input: '{\n  "name": "KAITools",\n  "ready": true,\n  "count": 5\n}', indent: 2, outputMode: 'code', queryPath: '$' }),
+    chainInput: (value) => ({ input: value, outputMode: 'code' }),
   },
   {
     id: 'json-diff',
@@ -91,6 +94,7 @@ export const workspaceTools: ToolDefinition[] = [
     icon: FileJson,
     component: defineAsyncComponent(() => import('./jsonJava/JsonJavaTool.vue')),
     initialState: () => ({ input: '{\n  "id": 1,\n  "name": "demo",\n  "enabled": true\n}', mode: 'json-to-java', className: 'RootBean', lombok: false }),
+    chainInput: (value) => ({ input: value, mode: 'json-to-java' }),
   },
   {
     id: 'java',
@@ -101,6 +105,7 @@ export const workspaceTools: ToolDefinition[] = [
     icon: Code2,
     component: defineAsyncComponent(() => import('./java/JavaTool.vue')),
     initialState: () => ({ input: '', mode: 'escape', unicode: false, autoFormatJson: true }),
+    chainInput: (value) => ({ input: value }),
   },
   {
     id: 'timestamp',
@@ -121,6 +126,7 @@ export const workspaceTools: ToolDefinition[] = [
     icon: Binary,
     component: defineAsyncComponent(() => import('./base64Text/Base64TextTool.vue')),
     initialState: () => ({ input: '', mode: 'encode', urlSafe: false }),
+    chainInput: (value) => ({ input: value }),
   },
   {
     id: 'base64-image',
@@ -161,6 +167,7 @@ export const workspaceTools: ToolDefinition[] = [
     icon: Database,
     component: defineAsyncComponent(() => import('./sql/SqlTool.vue')),
     initialState: () => ({ input: 'select id,name from users where enabled=1 order by id desc;', dialect: 'sql', keywordCase: 'upper', tabWidth: 2 }),
+    chainInput: (value) => ({ input: value }),
   },
   {
     id: 'yaml',
@@ -171,6 +178,7 @@ export const workspaceTools: ToolDefinition[] = [
     icon: FileType2,
     component: defineAsyncComponent(() => import('./yaml/YamlTool.vue')),
     initialState: () => ({ input: 'app:\n  name: KAITools\n  enabled: true\n', indent: 2 }),
+    chainInput: (value) => ({ input: value }),
   },
   {
     id: 'xml',
@@ -181,6 +189,7 @@ export const workspaceTools: ToolDefinition[] = [
     icon: CodeXml,
     component: defineAsyncComponent(() => import('./xml/XmlTool.vue')),
     initialState: () => ({ input: '<root><item id="1">KAITools</item></root>', indent: 2, compact: false }),
+    chainInput: (value) => ({ input: value }),
   },
   {
     id: 'text-diff',
@@ -201,6 +210,18 @@ export const workspaceTools: ToolDefinition[] = [
     icon: ChartNoAxesColumn,
     component: defineAsyncComponent(() => import('./textStats/TextStatsTool.vue')),
     initialState: () => ({ input: '' }),
+    chainInput: (value) => ({ input: value }),
+  },
+  {
+    id: 'regex',
+    name: '正则工作台',
+    description: '匹配、捕获与替换预览',
+    keywords: ['regex', 'regexp', '正则', '匹配', '捕获', '替换'],
+    category: 'developer',
+    icon: Regex,
+    component: defineAsyncComponent(() => import('./regex/RegexTool.vue')),
+    initialState: () => ({ input: 'order-2026-0817\norder-2025-1201\ninvalid', pattern: 'order-(\\d{4})-(\\d{4})', flags: 'g', replacement: '$1/$2', mode: 'matches' }),
+    chainInput: (value) => ({ input: value }),
   },
   {
     id: 'hosts',
@@ -222,6 +243,7 @@ export const workspaceTools: ToolDefinition[] = [
     icon: Hash,
     component: defineAsyncComponent(() => import('./md5/Md5Tool.vue')),
     initialState: () => ({ input: '', uppercase: false }),
+    chainInput: (value) => ({ input: value }),
   },
 ]
 

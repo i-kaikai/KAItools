@@ -151,7 +151,7 @@ for (const viewport of [
       expect(widthUsage).toBeGreaterThan(0.85)
     }
     await expect(page.locator('.particle-field')).toHaveAttribute('data-stage', 'workbench')
-    await expect(page.locator('.home-tool-card')).toHaveCount(16)
+    await expect(page.locator('.home-tool-card')).toHaveCount(17)
     await expect(page.locator('.home-category-group')).toHaveCount(5)
     const currentDate = page.locator('.home-current-date')
     await expect(currentDate).toBeVisible()

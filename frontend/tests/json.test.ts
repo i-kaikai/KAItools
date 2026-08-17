@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { formatJson, minifyJson, parseJsonDocument, replaceJsonNode } from '@/utils/json'
 import { layoutJsonGraph } from '@/utils/jsonGraph'
+import { queryJsonPath } from '@/utils/jsonPath'
 
 describe('JSON tools', () => {
   it('formats without changing large integer lexemes', () => {
@@ -48,5 +49,22 @@ describe('JSON tools', () => {
     expect(updated).toContain('900719925474099312345')
     expect(updated).toContain('"name": "new"')
     expect(parseJsonDocument(updated).issues).toHaveLength(0)
+  })
+
+  it('queries JSONPath expressions and preserves structured results', () => {
+    const source = '{"users":[{"name":"Kai","active":true},{"name":"Lee","active":false}]}'
+    const names = queryJsonPath(source, '$.users[*].name')
+    expect(names.error).toBe('')
+    expect(names.count).toBe(2)
+    expect(JSON.parse(names.output)).toEqual(['Kai', 'Lee'])
+
+    const active = queryJsonPath(source, '$.users[?(@.active)]')
+    expect(active.count).toBe(1)
+    expect(JSON.parse(active.output)).toEqual({ name: 'Kai', active: true })
+  })
+
+  it('reports malformed JSONPath expressions without throwing', () => {
+    expect(queryJsonPath('{"value":1}', '$[?(').error).toBeTruthy()
+    expect(queryJsonPath('{', '$.value').error).toBeTruthy()
   })
 })

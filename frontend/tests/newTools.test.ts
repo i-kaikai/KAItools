@@ -6,6 +6,8 @@ import { describeCronExpression, getNextCronRuns, parseCronExpression } from '@/
 import { formatSql, formatXml, formatYaml } from '@/utils/formatters'
 import { compareJson } from '@/utils/jsonDiff'
 import { javaBeanToJson, jsonToJavaBean } from '@/utils/jsonJava'
+import { evaluateRegex, serializeRegexMatches } from '@/utils/regex'
+import { workspaceTools } from '@/tools/registry'
 import { compareText, getTextComparisonHighlights, getTextStatistics } from '@/utils/text'
 
 describe('new local developer tools', () => {
@@ -62,5 +64,33 @@ describe('new local developer tools', () => {
     const highlights = getTextComparisonHighlights('alpha   old', 'alpha new', 'characters', true)
     expect(highlights.left).toEqual([{ from: 8, to: 11, kind: 'removed' }])
     expect(highlights.right).toEqual([{ from: 6, to: 9, kind: 'added' }])
+  })
+
+  it('evaluates regular expressions with captures, highlights and replacement previews', () => {
+    const result = evaluateRegex('order-2026-0817 order-2025-1201', 'order-(\\d{4})-(\\d{4})', 'g', '$1/$2')
+    expect(result.error).toBe('')
+    expect(result.matches).toHaveLength(2)
+    expect(result.matches[0]).toMatchObject({ match: 'order-2026-0817', index: 0, captures: ['2026', '0817'] })
+    expect(result.highlights).toEqual([
+      { from: 0, to: 15, kind: 'match' },
+      { from: 16, to: 31, kind: 'match' },
+    ])
+    expect(result.replacement).toBe('2026/0817 2025/1201')
+    expect(JSON.parse(serializeRegexMatches(result.matches))).toHaveLength(2)
+  })
+
+  it('reports invalid regular expressions and terminates zero-width global matches', () => {
+    expect(evaluateRegex('abc', '[', 'g').error).toBeTruthy()
+    const zeroWidth = evaluateRegex('aa', '(?=a)', 'g')
+    expect(zeroWidth.matches).toHaveLength(2)
+    expect(zeroWidth.highlights).toHaveLength(0)
+  })
+
+  it('registers chain-compatible tools with deterministic input mappings', () => {
+    const regex = workspaceTools.find((tool) => tool.id === 'regex')
+    const json = workspaceTools.find((tool) => tool.id === 'json')
+    expect(regex?.chainInput?.('alpha')).toEqual({ input: 'alpha' })
+    expect(json?.chainInput?.('{"ok":true}')).toEqual({ input: '{"ok":true}', outputMode: 'code' })
+    expect(workspaceTools.filter((tool) => tool.chainInput).length).toBeGreaterThanOrEqual(10)
   })
 })

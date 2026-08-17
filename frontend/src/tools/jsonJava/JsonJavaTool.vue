@@ -6,6 +6,7 @@ import CodeEditor from '@/components/CodeEditor.vue'
 import IconButton from '@/components/IconButton.vue'
 import ResizableSplit from '@/components/ResizableSplit.vue'
 import SegmentedControl from '@/components/SegmentedControl.vue'
+import ToolChainButton from '@/components/ToolChainButton.vue'
 import { useToolState } from '@/composables/useToolState'
 import { useToastStore } from '@/stores/toast'
 import { copyText } from '@/utils/clipboard'
@@ -47,6 +48,7 @@ async function copyOutput(): Promise<void> {
         <input v-if="model.mode === 'json-to-java'" v-model="model.className" class="compact-input" aria-label="Java 类名" placeholder="RootBean" />
         <label v-if="model.mode === 'json-to-java'" class="toggle-label"><input v-model="model.lombok" type="checkbox" /><span>Lombok</span></label>
         <IconButton :icon="ArrowLeftRight" label="交换并反向转换" :disabled="!model.output" @click="swap" />
+        <ToolChainButton :value="model.output" source-name="JSON / JavaBean" />
         <IconButton :icon="Copy" label="复制结果" :disabled="!model.output" @click="copyOutput" />
         <IconButton :icon="Trash2" label="清空" :disabled="!model.input && !model.output" @click="model.input = ''; model.output = ''" />
       </div>

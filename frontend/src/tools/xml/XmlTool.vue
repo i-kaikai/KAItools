@@ -6,6 +6,7 @@ import CodeEditor from '@/components/CodeEditor.vue'
 import IconButton from '@/components/IconButton.vue'
 import ResizableSplit from '@/components/ResizableSplit.vue'
 import SegmentedControl from '@/components/SegmentedControl.vue'
+import ToolChainButton from '@/components/ToolChainButton.vue'
 import { useToolState } from '@/composables/useToolState'
 import { useToastStore } from '@/stores/toast'
 import { copyText } from '@/utils/clipboard'
@@ -38,6 +39,7 @@ async function copy(): Promise<void> {
       <div class="toolbar">
         <SegmentedControl :model-value="model.compact ? 'compact' : 'pretty'" label="输出样式" :options="[{ value: 'pretty', label: '格式化' }, { value: 'compact', label: '压缩' }]" @update:model-value="model.compact = $event === 'compact'" />
         <select v-model.number="model.indent" class="compact-select" aria-label="XML 缩进" :disabled="model.compact"><option :value="2">2 空格</option><option :value="4">4 空格</option></select>
+        <ToolChainButton :value="model.output" source-name="XML" />
         <IconButton :icon="Copy" label="复制 XML" :disabled="!model.output" @click="copy" />
         <IconButton :icon="Trash2" label="清空" :disabled="!model.input && !model.output" @click="model.input = ''; model.output = ''" />
       </div>
