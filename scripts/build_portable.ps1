@@ -8,9 +8,9 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 $Python = Join-Path $RepoRoot '.venv\Scripts\python.exe'
 $BuildWork = Join-Path $RepoRoot 'build\pyinstaller'
 $DistRoot = Join-Path $RepoRoot 'dist'
-$PortableRoot = Join-Path $DistRoot 'DevToolkit'
+$PortableRoot = Join-Path $DistRoot 'KAITools'
 $ReleaseRoot = Join-Path $RepoRoot 'release'
-$ZipPath = Join-Path $ReleaseRoot 'DevToolkit-v0.1.0-windows-x64.zip'
+$ZipPath = Join-Path $ReleaseRoot 'KAITools-v0.1.0-windows-x64.zip'
 $HashPath = "$ZipPath.sha256"
 
 & (Join-Path $PSScriptRoot 'verify.ps1') -SkipE2E:$SkipE2E
@@ -28,7 +28,7 @@ if (Test-Path -LiteralPath $HashPath) { Remove-Item -LiteralPath $HashPath -Forc
 
 Push-Location $RepoRoot
 try {
-    & $Python -m PyInstaller --noconfirm --clean --distpath $DistRoot --workpath $BuildWork (Join-Path $RepoRoot 'DevToolkit.spec')
+    & $Python -m PyInstaller --noconfirm --clean --distpath $DistRoot --workpath $BuildWork (Join-Path $RepoRoot 'KAITools.spec')
     if ($LASTEXITCODE -ne 0) { throw 'PyInstaller build failed' }
 }
 finally {
@@ -38,6 +38,9 @@ finally {
 $PackagedWeb = Join-Path $PortableRoot '_internal\web'
 if (-not (Test-Path -LiteralPath (Join-Path $PackagedWeb 'index.html'))) {
     throw "Packaged web assets are missing: $PackagedWeb"
+}
+if (-not (Test-Path -LiteralPath (Join-Path $PackagedWeb 'brand\kaitools-app-icon.ico'))) {
+    throw "Packaged application icon is missing: $PackagedWeb"
 }
 
 $SourceWeb = Join-Path $RepoRoot 'build\web'

@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { decodeBase64Text, encodeBase64Text } from '@/utils/base64'
-import { getNextCronRuns } from '@/utils/cron'
+import { describeCronExpression, getNextCronRuns, parseCronExpression } from '@/utils/cron'
 import { formatSql, formatXml, formatYaml } from '@/utils/formatters'
 import { compareJson } from '@/utils/jsonDiff'
 import { javaBeanToJson, jsonToJavaBean } from '@/utils/jsonJava'
@@ -10,7 +10,7 @@ import { compareText, getTextComparisonHighlights, getTextStatistics } from '@/u
 
 describe('new local developer tools', () => {
   it('round-trips UTF-8 text through Base64', () => {
-    const source = '你好，DevToolkit'
+    const source = '你好，KAITools'
     expect(decodeBase64Text(encodeBase64Text(source))).toBe(source)
     expect(encodeBase64Text('a?', true)).not.toContain('=')
   })
@@ -40,9 +40,12 @@ describe('new local developer tools', () => {
   })
 
   it('computes future cron runs', () => {
-    const runs = getNextCronRuns('0 9 * * 1-5', 2, new Date('2026-08-14T10:00:00+08:00'))
+    const runs = getNextCronRuns('0 9 * * 1-5', 2, new Date('2026-08-14T10:00:00+08:00'), 'Asia/Shanghai')
     expect(runs).toHaveLength(2)
     expect(runs[0]?.getTime()).toBeGreaterThan(new Date('2026-08-14T10:00:00+08:00').getTime())
+    expect(parseCronExpression('*/15 9-18 * * 1-5')).toEqual({ minute: '*/15', hour: '9-18', day: '*', month: '*', weekday: '1-5' })
+    expect(describeCronExpression('0 9 * * 1-5')).toBe('每个工作日 09:00 执行')
+    expect(() => parseCronExpression('0 0 9 * * 1-5')).toThrow('必须包含 5 个字段')
   })
 
   it('compares text and reports Unicode-aware statistics', () => {

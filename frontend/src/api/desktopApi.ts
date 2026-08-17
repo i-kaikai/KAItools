@@ -11,6 +11,7 @@ import { isWebRuntime } from '@/runtime'
 
 const BROWSER_KEY = 'devtoolkit.browser.state.v1'
 const LEGACY_MOCK_KEY = 'devtoolkit.mock.state.v1'
+export const PROJECT_REPOSITORY_URL = 'https://gitee.com/i-_-kaikai/kaitools'
 const DESKTOP_ONLY_METHODS = new Set([
   'read_hosts',
   'apply_hosts',
@@ -21,7 +22,7 @@ const DESKTOP_ONLY_METHODS = new Set([
 
 function defaultBrowserState(): BootstrapState {
   return {
-    settings: { schemaVersion: 1, theme: 'system', sidebarCollapsed: false },
+    settings: { schemaVersion: 1, theme: 'system', sidebarCollapsed: true },
     workspace: { schemaVersion: 1, tabs: [] },
     hostsProfiles: {
       schemaVersion: 1,
@@ -115,6 +116,7 @@ async function invoke<T>(method: string, ...args: unknown[]): Promise<ApiResult<
 }
 
 async function browserInvoke<T>(method: string, args: unknown[]): Promise<ApiResult<T>> {
+  if (method === 'open_project_repository') return openRepositoryInBrowser() as ApiResult<T>
   if (isWebRuntime && DESKTOP_ONLY_METHODS.has(method)) {
     return { ok: false, error: { code: 'DESKTOP_ONLY', message: '此功能仅 Windows 桌面版可用' } }
   }
@@ -181,6 +183,30 @@ async function browserInvoke<T>(method: string, args: unknown[]): Promise<ApiRes
   return { ok: true, data: undefined as T }
 }
 
+export function openRepositoryInBrowser(
+  openWindow: typeof window.open = window.open.bind(window),
+): ApiResult<void> {
+  const popup = openWindow('about:blank', '_blank')
+  if (!popup) {
+    return { ok: false, error: { code: 'OPEN_EXTERNAL_FAILED', message: '浏览器阻止了 Gitee 仓库窗口，请允许弹出窗口后重试' } }
+  }
+  try {
+    popup.opener = null
+    const referrerPolicy = popup.document.createElement('meta')
+    referrerPolicy.name = 'referrer'
+    referrerPolicy.content = 'no-referrer'
+    popup.document.head.append(referrerPolicy)
+    popup.location.replace(PROJECT_REPOSITORY_URL)
+    return { ok: true, data: undefined }
+  } catch (error) {
+    popup.close()
+    return {
+      ok: false,
+      error: { code: 'OPEN_EXTERNAL_FAILED', message: '无法打开 Gitee 仓库', details: error instanceof Error ? error.message : String(error) },
+    }
+  }
+}
+
 export const desktopApi = {
   loadState: () => invoke<BootstrapState>('load_state'),
   saveSettings: (payload: { settings?: Partial<BootstrapState['settings']>; hostsProfiles?: HostsProfiles }) =>
@@ -192,4 +218,5 @@ export const desktopApi = {
   listHostsBackups: () => invoke<HostsBackup[]>('list_hosts_backups'),
   restoreHostsBackup: (id: string) => invoke<{ changed: boolean; backups: HostsBackup[] }>('restore_hosts_backup', id),
   openWebView2Download: () => invoke<void>('open_webview2_download'),
+  openProjectRepository: () => invoke<void>('open_project_repository'),
 }

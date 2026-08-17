@@ -11,6 +11,7 @@ from .paths import AppPaths
 
 WEBVIEW2_DOWNLOAD_URL = "https://developer.microsoft.com/microsoft-edge/webview2/"
 WEBVIEW2_CLIENT_ID = "{F3017226-FE2A-4295-8BDF-00C3A19A7C66}"
+PROJECT_REPOSITORY_URL = "https://gitee.com/i-_-kaikai/kaitools"
 
 
 def is_supported_windows() -> bool:
@@ -83,6 +84,10 @@ def open_webview2_download() -> None:
     webbrowser.open(WEBVIEW2_DOWNLOAD_URL)
 
 
+def open_project_repository() -> bool:
+    return bool(webbrowser.open(PROJECT_REPOSITORY_URL))
+
+
 def show_startup_error(message: str, offer_webview_download: bool = False) -> None:
     if sys.platform != "win32":
         print(message, file=sys.stderr)
@@ -95,14 +100,14 @@ def show_startup_error(message: str, offer_webview_download: bool = False) -> No
         result = ctypes.windll.user32.MessageBoxW(
             None,
             f"{message}\n\n是否打开 WebView2 官方下载页面？",
-            "DevToolkit 无法启动",
+            "KAITools 无法启动",
             flags,
         )
         if result == 6:
             open_webview2_download()
     else:
         ctypes.windll.user32.MessageBoxW(
-            None, message, "DevToolkit 无法启动", flags
+            None, message, "KAITools 无法启动", flags
         )
 
 

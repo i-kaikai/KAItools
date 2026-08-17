@@ -27,9 +27,6 @@ export default defineConfig({
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: false,
     timeout: 60_000,
-    env: {
-      ...process.env,
-      VITE_ICP_NUMBER: '京ICP备00000000号-1',
-    },
+    env: process.env,
   },
 })

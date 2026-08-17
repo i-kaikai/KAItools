@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ArrowLeftRight, Copy, Trash2 } from '@lucide/vue'
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 
 import CodeEditor from '@/components/CodeEditor.vue'
 import IconButton from '@/components/IconButton.vue'
+import ResizableSplit from '@/components/ResizableSplit.vue'
 import SegmentedControl from '@/components/SegmentedControl.vue'
 import { useToolState } from '@/composables/useToolState'
 import { useToastStore } from '@/stores/toast'
@@ -15,7 +16,7 @@ const emit = defineEmits<{ 'update:state': [state: Record<string, unknown>] }>()
 const toast = useToastStore()
 const model = useToolState(
   props.state,
-  { input: '', mode: 'escape' as 'escape' | 'unescape', unicode: false },
+  { input: '', output: '', mode: 'escape' as 'escape' | 'unescape', unicode: false, split: 50 },
   (state) => emit('update:state', state),
 )
 const transformed = computed(() =>
@@ -23,15 +24,20 @@ const transformed = computed(() =>
     ? { value: escapeJava(model.input, model.unicode) }
     : unescapeJava(model.input),
 )
+if (!model.output) model.output = transformed.value.error ? '' : transformed.value.value
+watch(
+  () => [model.input, model.mode, model.unicode] as const,
+  () => (model.output = transformed.value.error ? '' : transformed.value.value),
+)
 
 async function copyOutput(): Promise<void> {
-  await copyText(transformed.value.value)
+  await copyText(model.output)
   toast.show('转换结果已复制', 'success')
 }
 
 function swap(): void {
-  if (transformed.value.error) return
-  model.input = transformed.value.value
+  if (transformed.value.error || !model.output) return
+  model.input = model.output
   model.mode = model.mode === 'escape' ? 'unescape' : 'escape'
 }
 </script>
@@ -59,21 +65,20 @@ function swap(): void {
           <input v-model="model.unicode" type="checkbox" />
           <span>Unicode</span>
         </label>
-        <IconButton :icon="ArrowLeftRight" label="交换并反向转换" :disabled="!!transformed.error || !transformed.value" @click="swap" />
-        <IconButton :icon="Copy" label="复制结果" :disabled="!!transformed.error || !transformed.value" @click="copyOutput" />
-        <IconButton :icon="Trash2" label="清空" :disabled="!model.input" @click="model.input = ''" />
+        <IconButton :icon="ArrowLeftRight" label="交换并反向转换" :disabled="!!transformed.error || !model.output" @click="swap" />
+        <IconButton :icon="Copy" label="复制结果" :disabled="!!transformed.error || !model.output" @click="copyOutput" />
+        <IconButton :icon="Trash2" label="清空" :disabled="!model.input && !model.output" @click="model.input = ''; model.output = ''" />
       </div>
     </header>
-    <div class="editor-split">
-      <div class="editor-panel">
+    <ResizableSplit v-model="model.split">
+      <template #left><div class="editor-panel">
         <div class="panel-label">输入</div>
         <CodeEditor v-model="model.input" label="Java 转义输入" />
-      </div>
-      <div class="editor-panel" :class="{ invalid: transformed.error }">
+      </div></template>
+      <template #right><div class="editor-panel" :class="{ invalid: transformed.error }">
         <div class="panel-label">结果</div>
-        <CodeEditor :model-value="transformed.error ? '' : transformed.value" readonly label="Java 转义结果" />
-      </div>
-    </div>
+        <CodeEditor v-model="model.output" label="Java 转义结果" />
+      </div></template>
+    </ResizableSplit>
   </section>
 </template>
-

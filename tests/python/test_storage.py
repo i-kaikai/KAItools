@@ -13,6 +13,17 @@ def paths(tmp_path: Path) -> AppPaths:
     return AppPaths(tmp_path, tmp_path / "resources", tmp_path / "data")
 
 
+def test_default_settings_start_with_collapsed_sidebar(tmp_path: Path) -> None:
+    storage = AppStorage(paths(tmp_path))
+    storage.ensure_directories()
+
+    assert storage.load_all()["settings"] == {
+        "schemaVersion": 1,
+        "theme": "system",
+        "sidebarCollapsed": True,
+    }
+
+
 def test_storage_round_trip_and_schema(tmp_path: Path) -> None:
     storage = AppStorage(paths(tmp_path))
     storage.ensure_directories()
@@ -26,7 +37,14 @@ def test_storage_round_trip_and_schema(tmp_path: Path) -> None:
                     "title": "JSON",
                     "pinned": True,
                     "state": {"input": '{"ok":true}'},
-                }
+                },
+                {
+                    "id": "cron-1",
+                    "toolId": "cron",
+                    "title": "Crontab 生成器",
+                    "pinned": True,
+                    "state": {"expression": "0 9 * * 1-5", "timeZone": "Asia/Shanghai"},
+                },
             ]
         }
     )
@@ -34,6 +52,7 @@ def test_storage_round_trip_and_schema(tmp_path: Path) -> None:
     state = storage.load_all()
     assert state["settings"]["theme"] == "dark"
     assert state["workspace"]["tabs"][0]["state"]["input"] == '{"ok":true}'
+    assert state["workspace"]["tabs"][1]["toolId"] == "cron"
     assert json.loads((tmp_path / "data" / "settings.json").read_text("utf-8"))["schemaVersion"] == 1
 
 

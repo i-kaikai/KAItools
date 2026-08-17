@@ -1,7 +1,7 @@
 [project]
-name = "devtoolkit"
+name = "kaitools"
 version = "0.1.0"
-description = "A local Windows developer toolbox"
+description = "KAITools local Windows developer toolbox"
 requires-python = ">=3.13,<3.14"
 dependencies = ["pywebview==6.2.1"]
 
@@ -9,4 +9,3 @@ dependencies = ["pywebview==6.2.1"]
 testpaths = ["tests/python"]
 pythonpath = ["desktop"]
 addopts = "-q"
-

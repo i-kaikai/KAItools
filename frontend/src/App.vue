@@ -2,6 +2,7 @@
 import {
   Monitor,
   Moon,
+  GitFork,
   PanelLeftClose,
   PanelLeftOpen,
   Pin,
@@ -16,6 +17,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import IconButton from '@/components/IconButton.vue'
 import { isWebRuntime } from '@/runtime'
 import ToastViewport from '@/components/ToastViewport.vue'
+import kaitoolsMarkWhite from '@/assets/kaitools-mark-white.svg'
 import { useAppStore } from '@/stores/app'
 import type { ThemeMode, ToolTab } from '@/types'
 import { homeTool, toolsById, workspaceTools } from '@/tools/registry'
@@ -23,6 +25,7 @@ import { homeTool, toolsById, workspaceTools } from '@/tools/registry'
 const app = useAppStore()
 const search = ref('')
 const searchInput = ref<HTMLInputElement | null>(null)
+const tabMenu = ref({ visible: false, x: 0, y: 0, tabId: '' })
 const visibleTools = computed(() => {
   const query = search.value.trim().toLowerCase()
   if (!query) return workspaceTools
@@ -41,6 +44,40 @@ function closeTab(tab: ToolTab): void {
   app.closeTab(tab.id)
 }
 
+function openTabMenu(event: MouseEvent, tab: ToolTab): void {
+  const menuWidth = 172
+  const menuHeight = 170
+  tabMenu.value = {
+    visible: true,
+    x: Math.max(8, Math.min(event.clientX, window.innerWidth - menuWidth - 8)),
+    y: Math.max(8, Math.min(event.clientY, window.innerHeight - menuHeight - 8)),
+    tabId: tab.id,
+  }
+}
+
+function closeTabMenu(): void {
+  tabMenu.value.visible = false
+}
+
+function tabsForMenu(mode: 'current' | 'others' | 'right' | 'all'): string[] {
+  const targetIndex = app.tabs.findIndex((tab) => tab.id === tabMenu.value.tabId)
+  if (targetIndex < 0) return []
+  return app.tabs
+    .filter((tab, index) => {
+      if (tab.toolId === 'home') return false
+      if (mode === 'current') return index === targetIndex
+      if (mode === 'others') return index !== targetIndex
+      if (mode === 'right') return index > targetIndex
+      return true
+    })
+    .map((tab) => tab.id)
+}
+
+function closeTabsFromMenu(mode: 'current' | 'others' | 'right' | 'all'): void {
+  app.closeTabs(tabsForMenu(mode))
+  closeTabMenu()
+}
+
 function cycleTheme(): void {
   const order: ThemeMode[] = ['system', 'light', 'dark']
   const index = order.indexOf(app.settings.theme)
@@ -48,6 +85,10 @@ function cycleTheme(): void {
 }
 
 function onKeydown(event: KeyboardEvent): void {
+  if (event.key === 'Escape' && tabMenu.value.visible) {
+    closeTabMenu()
+    return
+  }
   if (event.ctrlKey && event.key.toLowerCase() === 'k') {
     event.preventDefault()
     if (app.settings.sidebarCollapsed) app.toggleSidebar()
@@ -66,8 +107,14 @@ function onKeydown(event: KeyboardEvent): void {
 onMounted(() => {
   void app.bootstrap(homeTool.initialState())
   window.addEventListener('keydown', onKeydown)
+  window.addEventListener('pointerdown', closeTabMenu)
+  window.addEventListener('blur', closeTabMenu)
 })
-onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('pointerdown', closeTabMenu)
+  window.removeEventListener('blur', closeTabMenu)
+})
 </script>
 
 <template>
@@ -81,8 +128,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     <aside class="app-sidebar">
       <div class="brand-row">
         <button class="brand-home" type="button" aria-label="返回首页" @click="openTool('home')">
-          <div class="brand-mark" aria-hidden="true"><span>&lt;</span><i>/</i><span>&gt;</span></div>
-          <div v-if="!app.settings.sidebarCollapsed" class="brand-copy"><strong>DevToolkit</strong><small>Local workspace</small></div>
+          <div class="brand-mark" aria-hidden="true"><img :src="kaitoolsMarkWhite" alt="" /></div>
+          <div v-if="!app.settings.sidebarCollapsed" class="brand-copy"><strong>KAITools</strong><small>Local workspace</small></div>
         </button>
         <IconButton
           :icon="app.settings.sidebarCollapsed ? PanelLeftOpen : PanelLeftClose"
@@ -121,7 +168,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             class="tool-nav-main tooltip-anchor"
             type="button"
             :aria-label="tool.name"
-            :data-tooltip="app.settings.sidebarCollapsed ? tool.name : undefined"
+            :title="app.settings.sidebarCollapsed ? tool.name : undefined"
             @click="openTool(tool.id)"
           >
             <component :is="tool.icon" :size="17" :stroke-width="1.8" aria-hidden="true" />
@@ -138,7 +185,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
       </nav>
 
       <div class="sidebar-footer">
-        <IconButton :icon="themeIcon" :label="themeLabel" @click="cycleTheme" />
+        <div class="sidebar-footer-actions">
+          <IconButton :icon="GitFork" label="打开 Gitee 项目仓库" @click="app.openProjectRepository" />
+          <IconButton :icon="themeIcon" :label="themeLabel" @click="cycleTheme" />
+        </div>
         <div v-if="!app.settings.sidebarCollapsed" class="runtime-copy">
           <span>v{{ app.runtime?.version ?? '0.1.0' }}</span>
           <small v-if="isWebRuntime">浏览器 · 本地存储</small>
@@ -159,6 +209,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           :tabindex="tab.id === app.activeTabId ? 0 : -1"
           :aria-selected="tab.id === app.activeTabId"
           @click="app.activeTabId = tab.id"
+          @contextmenu.prevent.stop="openTabMenu($event, tab)"
           @keydown.enter="app.activeTabId = tab.id"
         >
           <component :is="toolsById[tab.toolId].icon" :size="14" aria-hidden="true" />
@@ -182,8 +233,24 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         />
       </div>
 
+      <div
+        v-if="tabMenu.visible"
+        class="tab-context-menu"
+        role="menu"
+        aria-label="标签页操作"
+        :style="{ left: `${tabMenu.x}px`, top: `${tabMenu.y}px` }"
+        @pointerdown.stop
+        @contextmenu.prevent
+      >
+        <button role="menuitem" type="button" :disabled="!tabsForMenu('current').length" @click="closeTabsFromMenu('current')">关闭当前</button>
+        <button role="menuitem" type="button" :disabled="!tabsForMenu('others').length" @click="closeTabsFromMenu('others')">关闭其他</button>
+        <button role="menuitem" type="button" :disabled="!tabsForMenu('right').length" @click="closeTabsFromMenu('right')">关闭右侧</button>
+        <div role="separator" />
+        <button role="menuitem" type="button" class="danger" :disabled="!tabsForMenu('all').length" @click="closeTabsFromMenu('all')">关闭所有</button>
+      </div>
+
       <div v-if="app.loadingError" class="fatal-state">
-        <strong>无法加载 DevToolkit</strong>
+        <strong>无法加载 KAITools</strong>
         <span>{{ app.loadingError }}</span>
       </div>
       <div v-else-if="!app.ready" class="loading-state"><span class="spinner" />正在启动</div>

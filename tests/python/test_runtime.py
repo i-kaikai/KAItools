@@ -9,14 +9,14 @@ from devtoolkit.paths import AppPaths
 
 def test_dark_title_bar_applies_native_dwm_colors(monkeypatch) -> None:
     calls: list[tuple[int, int, int]] = []
-    monkeypatch.setattr(application, "_native_window_handle", lambda window: 314 if window.title == "DevToolkit" else 0)
+    monkeypatch.setattr(application, "_native_window_handle", lambda window: 314 if window.title == "KAITools" else 0)
     monkeypatch.setattr(
         application,
         "_set_dwm_attribute",
         lambda hwnd, attribute, value: calls.append((hwnd, attribute, value)) or 0,
     )
 
-    assert application._apply_dark_title_bar(SimpleNamespace(title="DevToolkit")) is True
+    assert application._apply_dark_title_bar(SimpleNamespace(title="KAITools")) is True
     assert calls == [
         (314, 20, 1),
         (314, 34, application._colorref("#242a31")),
@@ -25,11 +25,32 @@ def test_dark_title_bar_applies_native_dwm_colors(monkeypatch) -> None:
     ]
 
 
+def test_application_icon_prefers_packaged_web_asset(tmp_path) -> None:
+    paths = AppPaths(tmp_path, tmp_path / "resources", tmp_path / "data")
+    source_icon = tmp_path / "frontend" / "public" / "brand" / application.APP_ICON_NAME
+    packaged_icon = paths.web_root / "brand" / application.APP_ICON_NAME
+    source_icon.parent.mkdir(parents=True)
+    packaged_icon.parent.mkdir(parents=True)
+    source_icon.write_bytes(b"source")
+    packaged_icon.write_bytes(b"packaged")
+
+    assert application._resolve_application_icon(paths) == str(packaged_icon.resolve())
+
+
 def test_webview2_version_prefers_official_loader(monkeypatch) -> None:
     monkeypatch.setattr(runtime.sys, "platform", "win32")
     monkeypatch.setattr(runtime, "_webview2_loader_version", lambda: "151.0.0.0")
 
     assert runtime.webview2_version() == "151.0.0.0"
+
+
+def test_project_repository_uses_fixed_gitee_url(monkeypatch) -> None:
+    opened: list[str] = []
+    monkeypatch.setattr(runtime.webbrowser, "open", lambda url: opened.append(url) or True)
+
+    assert runtime.open_project_repository() is True
+    assert opened == [runtime.PROJECT_REPOSITORY_URL]
+    assert runtime.PROJECT_REPOSITORY_URL == "https://gitee.com/i-_-kaikai/kaitools"
 
 
 def test_missing_webview2_closes_single_instance_lock(tmp_path, monkeypatch) -> None:

@@ -90,3 +90,32 @@ def test_api_rejects_stale_source_hash(tmp_path: Path) -> None:
 
     assert result["ok"] is False
     assert result["error"]["code"] == "HOSTS_STALE"
+
+
+def test_api_opens_only_fixed_project_repository(tmp_path: Path, monkeypatch) -> None:
+    paths = app_paths(tmp_path)
+    storage = AppStorage(paths)
+    storage.ensure_directories()
+    opened: list[str] = []
+    monkeypatch.setattr(
+        api_module,
+        "open_project_repository",
+        lambda: opened.append("https://gitee.com/i-_-kaikai/kaitools") or True,
+    )
+
+    result = DesktopApi(paths, storage).open_project_repository()
+
+    assert result == {"ok": True, "data": None}
+    assert opened == ["https://gitee.com/i-_-kaikai/kaitools"]
+
+
+def test_api_reports_project_repository_open_failure(tmp_path: Path, monkeypatch) -> None:
+    paths = app_paths(tmp_path)
+    storage = AppStorage(paths)
+    storage.ensure_directories()
+    monkeypatch.setattr(api_module, "open_project_repository", lambda: False)
+
+    result = DesktopApi(paths, storage).open_project_repository()
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "OPEN_EXTERNAL_FAILED"

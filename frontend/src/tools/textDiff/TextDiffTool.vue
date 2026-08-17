@@ -3,6 +3,7 @@ import { Copy, Trash2 } from '@lucide/vue'
 import { computed } from 'vue'
 import CodeEditor from '@/components/CodeEditor.vue'
 import IconButton from '@/components/IconButton.vue'
+import ResizableSplit from '@/components/ResizableSplit.vue'
 import SegmentedControl from '@/components/SegmentedControl.vue'
 import { useToolState } from '@/composables/useToolState'
 import { useToastStore } from '@/stores/toast'
@@ -11,7 +12,7 @@ import { compareText, getTextComparisonHighlights } from '@/utils/text'
 const props = defineProps<{ state: Record<string, unknown> }>()
 const emit = defineEmits<{ 'update:state': [state: Record<string, unknown>] }>()
 const toast = useToastStore()
-const model = useToolState(props.state, { left: '', right: '', mode: 'lines' as 'lines' | 'characters', ignoreWhitespace: false }, (state) => emit('update:state', state))
+const model = useToolState(props.state, { left: '', right: '', mode: 'lines' as 'lines' | 'characters', ignoreWhitespace: false, split: 50 }, (state) => emit('update:state', state))
 const changes = computed(() => compareText(model.left, model.right, model.mode, model.ignoreWhitespace))
 const highlights = computed(() => getTextComparisonHighlights(model.left, model.right, model.mode, model.ignoreWhitespace))
 const summary = computed(() => ({ added: changes.value.filter((part) => part.added).reduce((sum, part) => sum + (part.count ?? 0), 0), removed: changes.value.filter((part) => part.removed).reduce((sum, part) => sum + (part.count ?? 0), 0) }))
@@ -29,15 +30,15 @@ async function copy(): Promise<void> { await copyText(output.value); toast.show(
         <IconButton :icon="Trash2" label="清空" :disabled="!model.left && !model.right" @click="model.left = ''; model.right = ''" />
       </div>
     </header>
-    <div class="editor-split">
-      <div class="editor-panel">
+    <ResizableSplit v-model="model.split">
+      <template #left><div class="editor-panel">
         <div class="panel-label">原始文本</div>
         <CodeEditor v-model="model.left" label="左侧文本" :highlights="highlights.left" />
-      </div>
-      <div class="editor-panel">
+      </div></template>
+      <template #right><div class="editor-panel">
         <div class="panel-label">目标文本</div>
         <CodeEditor v-model="model.right" label="右侧文本" :highlights="highlights.right" />
-      </div>
-    </div>
+      </div></template>
+    </ResizableSplit>
   </section>
 </template>

@@ -65,12 +65,12 @@ export const workspaceTools: ToolDefinition[] = [
   {
     id: 'json',
     name: 'JSON',
-    description: '格式化、压缩与树视图',
-    keywords: ['json', '格式化', '校验', 'tree'],
+    description: '格式化、树视图与关系图',
+    keywords: ['json', '格式化', '校验', 'tree', 'graph', '关系图'],
     category: 'data',
     icon: Braces,
     component: defineAsyncComponent(() => import('./json/JsonTool.vue')),
-    initialState: () => ({ input: '{\n  "name": "DevToolkit",\n  "ready": true,\n  "count": 5\n}', indent: 2, outputMode: 'code' }),
+    initialState: () => ({ input: '{\n  "name": "KAITools",\n  "ready": true,\n  "count": 5\n}', indent: 2, outputMode: 'code' }),
   },
   {
     id: 'json-diff',
@@ -80,7 +80,7 @@ export const workspaceTools: ToolDefinition[] = [
     category: 'data',
     icon: GitCompareArrows,
     component: defineAsyncComponent(() => import('./jsonDiff/JsonDiffTool.vue')),
-    initialState: () => ({ left: '{\n  "name": "DevToolkit",\n  "version": 1\n}', right: '{\n  "name": "DevToolkit",\n  "version": 2\n}', ignoreOrder: true }),
+    initialState: () => ({ left: '{\n  "name": "KAITools",\n  "version": 1\n}', right: '{\n  "name": "KAITools",\n  "version": 2\n}', ignoreOrder: true }),
   },
   {
     id: 'json-java',
@@ -150,7 +150,7 @@ export const workspaceTools: ToolDefinition[] = [
     category: 'developer',
     icon: CalendarClock,
     component: defineAsyncComponent(() => import('./cron/CronTool.vue')),
-    initialState: () => ({ minute: '0', hour: '9', day: '*', month: '*', weekday: '1-5' }),
+    initialState: () => ({ minute: '0', hour: '9', day: '*', month: '*', weekday: '1-5', expression: '0 9 * * 1-5', timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, runCount: 10 }),
   },
   {
     id: 'sql',
@@ -170,7 +170,7 @@ export const workspaceTools: ToolDefinition[] = [
     category: 'data',
     icon: FileType2,
     component: defineAsyncComponent(() => import('./yaml/YamlTool.vue')),
-    initialState: () => ({ input: 'app:\n  name: DevToolkit\n  enabled: true\n', indent: 2 }),
+    initialState: () => ({ input: 'app:\n  name: KAITools\n  enabled: true\n', indent: 2 }),
   },
   {
     id: 'xml',
@@ -180,7 +180,7 @@ export const workspaceTools: ToolDefinition[] = [
     category: 'data',
     icon: CodeXml,
     component: defineAsyncComponent(() => import('./xml/XmlTool.vue')),
-    initialState: () => ({ input: '<root><item id="1">DevToolkit</item></root>', indent: 2, compact: false }),
+    initialState: () => ({ input: '<root><item id="1">KAITools</item></root>', indent: 2, compact: false }),
   },
   {
     id: 'text-diff',

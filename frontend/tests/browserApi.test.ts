@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { desktopApi } from '@/api/desktopApi'
+import { desktopApi, openRepositoryInBrowser, PROJECT_REPOSITORY_URL } from '@/api/desktopApi'
 import type { ToolTab } from '@/types'
 
 describe('browser API storage', () => {
@@ -11,6 +11,7 @@ describe('browser API storage', () => {
     expect(initial.ok).toBe(true)
     if (!initial.ok) return
     expect(initial.data.settings.theme).toBe('system')
+    expect(initial.data.settings.sidebarCollapsed).toBe(true)
     expect(initial.data.workspace.tabs).toEqual([])
 
     const tab: ToolTab = {
@@ -37,5 +38,38 @@ describe('browser API storage', () => {
     if (!result.ok) return
     expect(result.data.settings.theme).toBe('system')
     expect(result.data.workspace.tabs).toEqual([])
+  })
+})
+
+describe('project repository link', () => {
+  it('opens a detached tab with a no-referrer navigation', () => {
+    const append = vi.fn()
+    const replace = vi.fn()
+    const popup = {
+      opener: window,
+      document: {
+        createElement: vi.fn(() => ({ name: '', content: '' })),
+        head: { append },
+      },
+      location: { replace },
+      close: vi.fn(),
+    }
+    const openWindow = vi.fn(() => popup) as unknown as typeof window.open
+
+    const result = openRepositoryInBrowser(openWindow)
+
+    expect(result).toEqual({ ok: true, data: undefined })
+    expect(openWindow).toHaveBeenCalledWith('about:blank', '_blank')
+    expect(popup.opener).toBeNull()
+    expect(append).toHaveBeenCalledWith(expect.objectContaining({ name: 'referrer', content: 'no-referrer' }))
+    expect(replace).toHaveBeenCalledWith(PROJECT_REPOSITORY_URL)
+  })
+
+  it('reports when the browser blocks the new tab', () => {
+    const result = openRepositoryInBrowser(() => null)
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error.code).toBe('OPEN_EXTERNAL_FAILED')
   })
 })

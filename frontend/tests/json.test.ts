@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatJson, minifyJson, parseJsonDocument } from '@/utils/json'
+import { formatJson, minifyJson, parseJsonDocument, replaceJsonNode } from '@/utils/json'
+import { layoutJsonGraph } from '@/utils/jsonGraph'
 
 describe('JSON tools', () => {
   it('formats without changing large integer lexemes', () => {
@@ -24,5 +25,28 @@ describe('JSON tools', () => {
     expect(parseJsonDocument('{/* no */"a":1}').issues.length).toBeGreaterThan(0)
     expect(parseJsonDocument('{"a":1,}').issues.length).toBeGreaterThan(0)
   })
-})
 
+  it('lays out every visible JSON relationship and respects collapsed nodes', () => {
+    const tree = parseJsonDocument('{"user":{"id":900719925474099312345,"roles":["admin","editor"]}}').tree!
+    const expanded = layoutJsonGraph(tree, new Set())
+    expect(expanded.nodes).toHaveLength(3)
+    expect(expanded.edges).toHaveLength(2)
+    const userNode = expanded.nodes.find((node) => node.item.key === 'user')
+    expect(userNode?.entries.map((entry) => entry.item.key)).toEqual(['id', 'roles'])
+    expect(userNode?.entries.find((entry) => entry.item.key === 'id')?.item.valueText).toBe('900719925474099312345')
+
+    const user = tree.children[0]!
+    const collapsed = layoutJsonGraph(tree, new Set([user.id]))
+    expect(collapsed.nodes.map((node) => node.item.key)).toEqual(['$', 'user'])
+    expect(collapsed.nodes.find((node) => node.item.key === 'user')?.collapsed).toBe(true)
+  })
+
+  it('replaces an editable graph node without parsing away large integers', () => {
+    const source = '{\n  "user": {\n    "id": 900719925474099312345,\n    "name": "old"\n  }\n}'
+    const user = parseJsonDocument(source).tree!.children[0]!
+    const updated = replaceJsonNode(source, user, '{\n  "id": 900719925474099312345,\n  "name": "new"\n}')
+    expect(updated).toContain('900719925474099312345')
+    expect(updated).toContain('"name": "new"')
+    expect(parseJsonDocument(updated).issues).toHaveLength(0)
+  })
+})

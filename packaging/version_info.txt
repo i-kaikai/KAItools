@@ -13,15 +13,14 @@ VSVersionInfo(
     StringFileInfo([
       StringTable(
         u'040904B0',
-        [StringStruct(u'CompanyName', u'DevToolkit'),
-         StringStruct(u'FileDescription', u'DevToolkit Windows Desktop Toolbox'),
+        [StringStruct(u'CompanyName', u'KAITools'),
+         StringStruct(u'FileDescription', u'KAITools Windows Desktop Toolbox'),
          StringStruct(u'FileVersion', u'0.1.0'),
-         StringStruct(u'InternalName', u'DevToolkit'),
-         StringStruct(u'OriginalFilename', u'DevToolkit.exe'),
-         StringStruct(u'ProductName', u'DevToolkit'),
+         StringStruct(u'InternalName', u'KAITools'),
+         StringStruct(u'OriginalFilename', u'KAITools.exe'),
+         StringStruct(u'ProductName', u'KAITools'),
          StringStruct(u'ProductVersion', u'0.1.0')])
     ]),
     VarFileInfo([VarStruct(u'Translation', [1033, 1200])])
   ]
 )
-

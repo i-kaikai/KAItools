@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { normalizeIcpNumber, resolveRuntimeTarget } from '@/runtime'
+import { resolveRuntimeTarget } from '@/runtime'
 
 describe('runtime configuration', () => {
   it('selects web only for the explicit web build mode', () => {
@@ -9,8 +9,4 @@ describe('runtime configuration', () => {
     expect(resolveRuntimeTarget('development')).toBe('desktop')
   })
 
-  it('normalizes the optional ICP number', () => {
-    expect(normalizeIcpNumber('  京ICP备00000000号-1  ')).toBe('京ICP备00000000号-1')
-    expect(normalizeIcpNumber(undefined)).toBe('')
-  })
 })

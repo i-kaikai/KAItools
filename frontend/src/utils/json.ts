@@ -20,6 +20,8 @@ export interface JsonTreeItem {
   id: string
   key: string
   path: string
+  offset: number
+  length: number
   type: Node['type']
   valueText: string
   children: JsonTreeItem[]
@@ -98,10 +100,19 @@ function buildTree(text: string, node: Node, key = '$', path = '$'): JsonTreeIte
     id: `${node.offset}:${node.length}:${path}`,
     key,
     path,
+    offset: node.offset,
+    length: node.length,
     type: node.type,
     valueText: valueText(text, node),
     children,
   }
+}
+
+export function replaceJsonNode(source: string, item: JsonTreeItem, replacement: string): string {
+  const lineStart = source.lastIndexOf('\n', Math.max(0, item.offset - 1)) + 1
+  const indentation = source.slice(lineStart, item.offset).match(/^\s*/)?.[0] ?? ''
+  const indented = replacement.replace(/\n/g, `\n${indentation}`)
+  return `${source.slice(0, item.offset)}${indented}${source.slice(item.offset + item.length)}`
 }
 
 export function parseJsonDocument(text: string): JsonDocument {

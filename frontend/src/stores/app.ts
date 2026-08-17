@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { toRaw } from 'vue'
 
 import { desktopApi } from '@/api/desktopApi'
+import { useToastStore } from '@/stores/toast'
 import type { AppSettings, HostsProfiles, RuntimeInfo, ThemeMode, ToolId, ToolTab } from '@/types'
 
 let workspaceTimer: number | undefined
@@ -16,7 +17,7 @@ export const useAppStore = defineStore('app', {
   state: () => ({
     ready: false,
     loadingError: '',
-    settings: { schemaVersion: 1, theme: 'system', sidebarCollapsed: false } as AppSettings,
+    settings: { schemaVersion: 1, theme: 'system', sidebarCollapsed: true } as AppSettings,
     hostsProfiles: { schemaVersion: 1, groups: [] } as HostsProfiles,
     tabs: [] as ToolTab[],
     activeTabId: '',
@@ -64,13 +65,18 @@ export const useAppStore = defineStore('app', {
       this.activeTabId = tab.id
     },
     closeTab(tabId: string) {
-      const index = this.tabs.findIndex((tab) => tab.id === tabId)
-      if (index < 0) return
-      if (this.tabs[index]?.toolId === 'home') return
-      this.tabs.splice(index, 1)
-      if (!this.tabs.length) return
-      if (this.activeTabId === tabId) {
-        this.activeTabId = this.tabs[Math.min(index, this.tabs.length - 1)]?.id ?? ''
+      this.closeTabs([tabId])
+    },
+    closeTabs(tabIds: string[]) {
+      const closing = new Set(tabIds)
+      const activeIndex = this.tabs.findIndex((tab) => tab.id === this.activeTabId)
+      const activeWillClose = closing.has(this.activeTabId)
+      const remaining = this.tabs.filter((tab) => tab.toolId === 'home' || !closing.has(tab.id))
+      if (remaining.length === this.tabs.length) return
+      this.tabs = remaining
+      if (activeWillClose) {
+        const nextIndex = Math.min(Math.max(activeIndex, 0), remaining.length - 1)
+        this.activeTabId = remaining[nextIndex]?.id ?? remaining[0]?.id ?? ''
       }
       this.scheduleWorkspaceSave()
     },
@@ -101,6 +107,10 @@ export const useAppStore = defineStore('app', {
     toggleSidebar() {
       this.settings.sidebarCollapsed = !this.settings.sidebarCollapsed
       this.scheduleSettingsSave()
+    },
+    async openProjectRepository() {
+      const result = await desktopApi.openProjectRepository()
+      if (!result.ok) useToastStore().show(result.error.message, 'error')
     },
     setHostsProfiles(profiles: HostsProfiles) {
       this.hostsProfiles = profiles

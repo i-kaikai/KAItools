@@ -109,16 +109,20 @@ for (const viewport of [
   { width: 960, height: 640, name: 'compact' },
   { width: 1280, height: 800, name: 'desktop' },
   { width: 1600, height: 900, name: 'wide' },
+  { width: 2048, height: 1024, name: 'large' },
 ]) {
   test(`home and JSON workspace ${viewport.name}`, async ({ page }) => {
     await page.setViewportSize(viewport)
     await page.goto('/')
-    await expect(page.getByRole('heading', { name: 'DevToolkit' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'KAITools' })).toBeVisible({ timeout: 15_000 })
     await expect(page.locator('.particle-field')).toHaveAttribute('data-ready', 'true')
     await expect(page.locator('.particle-field')).toHaveAttribute('data-stage', 'hero')
     await expect(page.locator('.app-shell')).toHaveClass(/home-active/)
     await expect(page.getByRole('button', { name: '进入工具台' })).toBeVisible()
     await expect(page.locator('.home-orbit-copy')).toHaveCSS('opacity', '1')
+    await expect(page.locator('.home-orbit-copy h1')).toHaveCSS('font-size', '38px')
+    await expect(page.locator('.home-orbit-copy > small')).toHaveCSS('font-size', '10px')
+    await expect(page.getByRole('button', { name: '进入工具台' })).toHaveCSS('height', '48px')
     const bottomControls = await page.evaluate(() => {
       const visibleHeight = window.visualViewport?.height ?? window.innerHeight
       const entry = document.querySelector('.home-enter-action')?.getBoundingClientRect()
@@ -137,9 +141,23 @@ for (const viewport of [
     await page.screenshot({ path: resolve(qaDir, `home-orbit-${viewport.name}-light.png`), fullPage: true })
 
     await page.getByRole('button', { name: '进入工具台' }).click()
+    await expect(page.locator('.home-content')).toBeVisible()
+    if (viewport.name === 'large') {
+      const widthUsage = await page.evaluate(() => {
+        const content = document.querySelector('.home-content')?.getBoundingClientRect()
+        const workspace = document.querySelector('.workspace')?.getBoundingClientRect()
+        return content && workspace ? content.width / workspace.width : 0
+      })
+      expect(widthUsage).toBeGreaterThan(0.85)
+    }
     await expect(page.locator('.particle-field')).toHaveAttribute('data-stage', 'workbench')
     await expect(page.locator('.home-tool-card')).toHaveCount(16)
     await expect(page.locator('.home-category-group')).toHaveCount(5)
+    const currentDate = page.locator('.home-current-date')
+    await expect(currentDate).toBeVisible()
+    await expect(currentDate).toHaveAttribute('datetime', /^\d{4}-\d{2}-\d{2}$/)
+    await expect(currentDate).toHaveText(/^\d{4}年\d{1,2}月\d{1,2}日 · 星期[一二三四五六日]$/)
+    await expect(currentDate).toHaveCSS('font-size', '12px')
     await assertScrollContainers(page)
     await assertViewportIntegrity(page)
     await page.screenshot({ path: resolve(qaDir, `home-workbench-${viewport.name}-light.png`), fullPage: true })
@@ -225,15 +243,48 @@ test('particle planet and tool carousel render, move and respond to the wheel', 
   await expect(page.locator('.particle-field')).toHaveAttribute('data-stage', 'hero')
 })
 
-test('formatted JSON output remains editable and drives tree view', async ({ page }) => {
+test('formatted JSON output remains editable and drives tree and graph views', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto('/')
   await page.getByRole('button', { name: 'JSON', exact: true }).click()
-  await page.getByLabel('JSON 格式化结果').fill('{"edited": true, "count": 2}')
+  await page.getByLabel('JSON 格式化结果').fill('{"edited":true,"count":2,"meta":{"owner":"kai","active":true}}')
   await expect(page.getByLabel('JSON 格式化结果')).toContainText('edited')
   await page.getByRole('button', { name: '树视图' }).click()
   await expect(page.getByText('edited', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '关系图' }).click()
+  const graph = page.getByLabel('JSON 关系图')
+  await expect(graph).toBeVisible()
+  await expect(graph.locator('.json-graph-node')).toHaveCount(2)
+  const rootCard = graph.locator('.json-graph-node').first()
+  await expect(rootCard).toContainText('edited')
+  await expect(rootCard).toContainText('count')
+  await expect(rootCard).toContainText('meta')
+  await expect(graph.getByText('$', { exact: true })).toHaveCount(0)
+
+  await rootCard.click()
+  const nodeDialog = page.getByRole('dialog', { name: '节点内容' })
+  await expect(nodeDialog).toBeVisible()
+  await expect(nodeDialog.getByText('$', { exact: true })).toBeVisible()
+  await page.waitForTimeout(220)
+  await page.screenshot({ path: resolve(qaDir, 'json-node-editor-desktop-light.png'), fullPage: true })
+  await page.getByLabel('节点 JSON 内容').fill('{"edited":false,"count":9,"meta":{"owner":"kai","active":false}}')
+  await page.getByRole('button', { name: '应用到结果' }).click()
+  await expect(nodeDialog).toBeHidden()
+  await expect(rootCard).toContainText('9')
+
+  await graph.locator('.json-graph-node').nth(1).click()
+  await expect(nodeDialog.getByText('$.meta', { exact: true })).toBeVisible()
+  await page.getByLabel('节点 JSON 内容').fill('{"owner":"lee","active":true}')
+  await page.getByRole('button', { name: '应用到结果' }).click()
+  await expect(graph.locator('.json-graph-node').nth(1)).toContainText('lee')
+  await page.getByRole('button', { name: '放大关系图' }).click()
+  await expect(page.locator('.json-graph-toolbar')).toContainText('%')
   await assertViewportIntegrity(page)
+  await page.screenshot({ path: resolve(qaDir, 'json-graph-desktop-light.png'), fullPage: true })
+  await page.getByRole('button', { name: '跟随系统' }).click()
+  await page.getByRole('button', { name: '浅色主题' }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  await page.screenshot({ path: resolve(qaDir, 'json-graph-desktop-dark.png'), fullPage: true })
 })
 
 test('new conversion, formatting and analysis tools produce results', async ({ page }) => {
@@ -259,7 +310,7 @@ test('new conversion, formatting and analysis tools produce results', async ({ p
   await expect(page.getByLabel('右侧文本').locator('.cm-diff-mark-added')).toBeVisible()
 
   await page.getByRole('button', { name: '文本统计', exact: true }).click()
-  await page.getByLabel('文本统计输入').fill('你好 DevToolkit')
+  await page.getByLabel('文本统计输入').fill('你好 KAITools')
   await expect(page.getByLabel('文本统计结果')).toContainText('UTF-8 字节')
   await assertViewportIntegrity(page)
 })
@@ -287,15 +338,13 @@ test('all tools render and remain usable', async ({ page }, testInfo) => {
   }
 })
 
-test('web build persists local state and renders compliance details', async ({ page }, testInfo) => {
+test('web build persists local state without placeholder compliance details', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'web')
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto('/')
+  await page.getByRole('button', { name: '展开侧栏' }).click()
   await expect(page.getByText('浏览器 · 本地存储')).toBeVisible()
-  await expect(page.getByRole('link', { name: '京ICP备00000000号-1' })).toHaveAttribute(
-    'href',
-    'https://beian.miit.gov.cn/',
-  )
+  await expect(page.locator('a[href="https://beian.miit.gov.cn/"]')).toHaveCount(0)
 
   await page.getByRole('button', { name: '跟随系统' }).click()
   await page.getByRole('button', { name: 'JSON', exact: true }).click()
@@ -314,8 +363,8 @@ test('web build remains usable on a mobile viewport', async ({ page }, testInfo)
   test.skip(testInfo.project.name !== 'web')
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')
-  await expect(page.getByRole('heading', { name: 'DevToolkit' })).toBeVisible()
-  await expect(page.getByRole('link', { name: '京ICP备00000000号-1' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'KAITools' })).toBeVisible()
+  await expect(page.locator('a[href="https://beian.miit.gov.cn/"]')).toHaveCount(0)
   await assertViewportIntegrity(page)
   await page.screenshot({ path: resolve(qaDir, 'home-orbit-mobile-light.png'), fullPage: true })
 
@@ -336,6 +385,7 @@ test('web build remains usable on a mobile viewport', async ({ page }, testInfo)
 test('tabs support pinning, creating and closing without layout shift', async ({ page }) => {
   await page.setViewportSize({ width: 960, height: 640 })
   await page.goto('/')
+  await page.getByRole('button', { name: '展开侧栏' }).click()
   await page.getByRole('button', { name: '新建JSON标签' }).first().click()
   await expect(page.getByRole('tab')).toHaveCount(2)
   await page.getByRole('button', { name: '固定标签' }).last().click()
@@ -343,4 +393,145 @@ test('tabs support pinning, creating and closing without layout shift', async ({
   await page.getByRole('button', { name: '关闭标签' }).last().click()
   await expect(page.getByRole('tab')).toHaveCount(1)
   await assertViewportIntegrity(page)
+})
+
+test('all generated outputs remain editable and split panes can be resized', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  const cases = [
+    { tool: 'Base64 文本', inputLabel: 'Base64 文本输入', outputLabel: 'Base64 文本结果', input: 'hello', generated: 'aGVsbG8=' },
+    { tool: 'Java 转义', inputLabel: 'Java 转义输入', outputLabel: 'Java 转义结果', input: 'hello\nworld', generated: '\\n' },
+    { tool: 'JSON / JavaBean', inputLabel: 'JSON 转 JavaBean 输入', outputLabel: 'JSON JavaBean 转换结果', input: '{"name":"Kai"}', generated: 'class RootBean' },
+    { tool: 'SQL 美化', inputLabel: 'SQL 输入', outputLabel: 'SQL 格式化结果', input: 'select id from users', generated: 'SELECT' },
+    { tool: 'YAML 美化', inputLabel: 'YAML 输入', outputLabel: 'YAML 格式化结果', input: 'name: KAITools', generated: 'name' },
+    { tool: 'XML 格式化', inputLabel: 'XML 输入', outputLabel: 'XML 格式化结果', input: '<root><name>kai</name></root>', generated: '<root>' },
+  ]
+
+  for (const item of cases) {
+    await page.getByRole('button', { name: item.tool, exact: true }).click()
+    await page.getByLabel(item.inputLabel).fill(item.input)
+    const output = page.getByLabel(item.outputLabel)
+    await expect(output).toContainText(item.generated)
+    await output.fill(`edited ${item.tool}`)
+    await expect(output).toContainText(`edited ${item.tool}`)
+    await expect(page.getByRole('separator', { name: '调整左右编辑区域大小' })).toBeVisible()
+  }
+
+  await page.getByRole('button', { name: 'Java 转义', exact: true }).click()
+  const separator = page.getByRole('separator', { name: '调整左右编辑区域大小' })
+  const leftPanel = page.locator('.editor-split > .editor-panel').first()
+  const beforeWidth = (await leftPanel.boundingBox())!.width
+  const separatorBox = (await separator.boundingBox())!
+  await page.mouse.move(separatorBox.x + separatorBox.width / 2, separatorBox.y + separatorBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(separatorBox.x + 150, separatorBox.y + separatorBox.height / 2, { steps: 4 })
+  await page.mouse.up()
+  const afterWidth = (await leftPanel.boundingBox())!.width
+  expect(afterWidth).toBeGreaterThan(beforeWidth + 100)
+  await separator.press('ArrowLeft')
+  await separator.dblclick()
+  await expect(separator).toHaveAttribute('aria-valuenow', '50')
+  await assertViewportIntegrity(page)
+  await page.screenshot({ path: resolve(qaDir, 'editable-resizable-split-desktop-light.png'), fullPage: true })
+})
+
+test('tab context menu closes current, right-side and all tool tabs', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'JSON', exact: true }).click()
+  await page.getByRole('button', { name: 'Java 转义', exact: true }).click()
+  await page.getByRole('button', { name: '日期转换', exact: true }).click()
+  await expect(page.getByRole('tab')).toHaveCount(4)
+
+  await page.getByRole('tab', { name: 'JSON' }).click({ button: 'right' })
+  const menu = page.getByRole('menu', { name: '标签页操作' })
+  await expect(menu).toBeVisible()
+  await expect(menu.getByRole('menuitem', { name: '关闭当前' })).toBeEnabled()
+  await page.screenshot({ path: resolve(qaDir, 'tab-context-menu-desktop-light.png'), fullPage: true })
+  await menu.getByRole('menuitem', { name: '关闭右侧' }).click()
+  await expect(page.getByRole('tab')).toHaveCount(2)
+  await expect(page.getByRole('tab', { name: 'JSON' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Java 转义', exact: true }).click()
+  await page.getByRole('tab', { name: 'Java 转义' }).click({ button: 'right' })
+  await menu.getByRole('menuitem', { name: '关闭所有' }).click()
+  await expect(page.getByRole('tab')).toHaveCount(1)
+  await expect(page.getByRole('tab', { name: '首页' })).toBeVisible()
+  await assertViewportIntegrity(page)
+})
+
+test('Crontab supports raw expressions, field templates, time zones and run previews', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Crontab 生成器', exact: true }).click()
+
+  const expression = page.getByLabel('Cron 表达式')
+  await expression.fill('*/15 9-18 * * 1-5')
+  await expect(page.getByText('VALID', { exact: true })).toBeVisible()
+  await expect(page.getByLabel('分钟', { exact: true })).toHaveValue('*/15')
+  await expect(page.getByLabel('小时', { exact: true })).toHaveValue('9-18')
+  await page.getByLabel('Cron 时区').selectOption('Asia/Shanghai')
+  await page.getByLabel('执行次数').selectOption('10')
+  await expect(page.locator('.cron-runs li')).toHaveCount(10)
+
+  await page.getByRole('button', { name: '工作日 09:00', exact: true }).click()
+  await expect(expression).toHaveValue('0 9 * * 1-5')
+  await expect(page.getByText('每个工作日 09:00 执行')).toBeVisible()
+  await page.getByLabel('分钟快速设置').selectOption('*/5')
+  await expect(expression).toHaveValue('*/5 9 * * 1-5')
+
+  await expression.fill('0 0 9 * * 1-5')
+  await expect(page.getByText('INVALID', { exact: true })).toBeVisible()
+  await expect(page.getByText('标准 Crontab 表达式必须包含 5 个字段')).toBeVisible()
+  await page.getByRole('button', { name: '每季度首日', exact: true }).click()
+  await expect(page.getByText('VALID', { exact: true })).toBeVisible()
+  await assertViewportIntegrity(page)
+  await page.screenshot({ path: resolve(qaDir, 'cron-workbench-desktop-light.png'), fullPage: true })
+})
+
+test('Gitee repository entry works from the sidebar and home workspace', async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 640 })
+  await page.context().route('https://gitee.com/**', (route) => route.fulfill({ contentType: 'text/html', body: '<title>KAITools Gitee</title>' }))
+  await page.goto('/')
+
+  const sidebarLink = page.locator('.sidebar-footer').getByRole('button', { name: '打开 Gitee 项目仓库' })
+  await expect(sidebarLink).toBeVisible()
+  await expect(page.locator('.app-shell')).toHaveClass(/sidebar-collapsed/)
+  await expect(page.locator('.particle-field')).toHaveAttribute('data-ready', 'true')
+  await expect(page.locator('.home-orbit-copy')).toHaveCSS('opacity', '1')
+  await page.screenshot({ path: resolve(qaDir, 'repository-entry-sidebar-collapsed-light.png'), fullPage: true })
+  const sidebarPopupPromise = page.waitForEvent('popup')
+  await sidebarLink.click()
+  const sidebarPopup = await sidebarPopupPromise
+  await sidebarPopup.waitForURL('https://gitee.com/i-_-kaikai/kaitools')
+  await sidebarPopup.close()
+
+  await page.getByRole('button', { name: '展开侧栏' }).click()
+  await expect(sidebarLink).toBeVisible()
+  await expect(page.locator('.app-shell')).not.toHaveClass(/sidebar-collapsed/)
+  await assertViewportIntegrity(page)
+  await page.screenshot({ path: resolve(qaDir, 'repository-entry-sidebar-expanded-light.png'), fullPage: true })
+
+  await page.getByRole('button', { name: '首页', exact: true }).click()
+  await page.getByRole('button', { name: '进入工具台' }).click()
+  const homeRepositoryLink = page.locator('.home-system').getByRole('button', { name: '打开 Gitee 项目仓库' })
+  await expect(homeRepositoryLink).toContainText('i-_-kaikai/kaitools')
+  await page.screenshot({ path: resolve(qaDir, 'repository-entry-home-light.png'), fullPage: true })
+  const homePopupPromise = page.waitForEvent('popup')
+  await homeRepositoryLink.click()
+  const homePopup = await homePopupPromise
+  await homePopup.waitForURL('https://gitee.com/i-_-kaikai/kaitools')
+  await homePopup.close()
+
+  await page.evaluate(() => {
+    window.open = () => null
+  })
+  await homeRepositoryLink.click()
+  await expect(page.getByText('浏览器阻止了 Gitee 仓库窗口，请允许弹出窗口后重试')).toBeVisible()
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(sidebarLink).toBeHidden()
+  await expect(homeRepositoryLink).toBeVisible()
+  await assertViewportIntegrity(page)
+  await page.screenshot({ path: resolve(qaDir, 'repository-entry-home-mobile-light.png'), fullPage: true })
 })

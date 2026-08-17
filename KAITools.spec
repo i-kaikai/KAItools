@@ -3,9 +3,12 @@ from pathlib import Path
 
 ROOT = Path(SPECPATH)
 WEB_ROOT = ROOT / "build" / "web"
+APP_ICON = ROOT / "frontend" / "public" / "brand" / "kaitools-app-icon.ico"
 
 if not (WEB_ROOT / "index.html").is_file():
     raise SystemExit("Frontend build is missing. Run pnpm build first.")
+if not APP_ICON.is_file():
+    raise SystemExit(f"Application icon is missing: {APP_ICON}")
 
 a = Analysis(
     [str(ROOT / "desktop" / "main.py")],
@@ -34,7 +37,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="DevToolkit",
+    name="KAITools",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -46,6 +49,7 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     version=str(ROOT / "packaging" / "version_info.txt"),
+    icon=str(APP_ICON),
 )
 
 coll = COLLECT(
@@ -55,6 +59,5 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name="DevToolkit",
+    name="KAITools",
 )
-

@@ -55,7 +55,7 @@ function updateStageGeometry(): void {
     radiusX = Math.min(315, Math.max(220, width * 0.28))
     centerSpread = 1.15
   } else {
-    radiusX = Math.min(390, Math.max(230, width * 0.33))
+    radiusX = Math.min(560, Math.max(230, width * 0.34))
     centerSpread = 1.35
   }
   spreadLimit = Math.tanh(centerSpread)

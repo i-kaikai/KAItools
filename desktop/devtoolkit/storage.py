@@ -12,12 +12,29 @@ from .paths import AppPaths
 SCHEMA_VERSION = 1
 MAX_JSON_BYTES = 4 * 1024 * 1024
 THEMES = {"system", "light", "dark"}
-TOOL_IDS = {"json", "java", "timestamp", "md5", "hosts"}
+TOOL_IDS = {
+    "json",
+    "json-diff",
+    "json-java",
+    "java",
+    "timestamp",
+    "base64-text",
+    "base64-image",
+    "base64-file",
+    "cron",
+    "sql",
+    "yaml",
+    "xml",
+    "text-diff",
+    "text-stats",
+    "md5",
+    "hosts",
+}
 
 DEFAULT_SETTINGS: dict[str, Any] = {
     "schemaVersion": SCHEMA_VERSION,
     "theme": "system",
-    "sidebarCollapsed": False,
+    "sidebarCollapsed": True,
 }
 DEFAULT_WORKSPACE: dict[str, Any] = {
     "schemaVersion": SCHEMA_VERSION,

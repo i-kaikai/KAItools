@@ -22,6 +22,8 @@ from .single_instance import SingleInstance
 from .storage import AppStorage
 
 LOGGER = logging.getLogger(__name__)
+APP_TITLE = "KAITools"
+APP_ICON_NAME = "kaitools-app-icon.ico"
 
 
 def _colorref(hex_color: str) -> int:
@@ -46,7 +48,17 @@ def _native_window_handle(window: object) -> int:
     handle = getattr(native, "Handle", None)
     if handle is not None and hasattr(handle, "ToInt64"):
         return int(handle.ToInt64())
-    return _window_handle(str(getattr(window, "title", "DevToolkit")))
+    return _window_handle(str(getattr(window, "title", APP_TITLE)))
+
+
+def _resolve_application_icon(paths: object) -> str | None:
+    web_root = getattr(paths, "web_root")
+    application_root = getattr(paths, "application_root")
+    candidates = (
+        web_root / "brand" / APP_ICON_NAME,
+        application_root / "frontend" / "public" / "brand" / APP_ICON_NAME,
+    )
+    return next((str(path.resolve()) for path in candidates if path.is_file()), None)
 
 
 def _set_dwm_attribute(hwnd: int, attribute: int, value: int) -> int:
@@ -97,7 +109,7 @@ def _activate_window(window: object) -> None:
     try:
         window.restore()  # type: ignore[attr-defined]
         window.show()  # type: ignore[attr-defined]
-        hwnd = ctypes.windll.user32.FindWindowW(None, "DevToolkit")
+        hwnd = ctypes.windll.user32.FindWindowW(None, APP_TITLE)
         if hwnd:
             ctypes.windll.user32.SetForegroundWindow(hwnd)
     except Exception:
@@ -116,7 +128,7 @@ def main() -> int:
         return execute_request(Path(request_path), expected_sha, paths)
 
     if not is_supported_windows():
-        show_startup_error("DevToolkit 仅支持 Windows 10/11 64 位系统。")
+        show_startup_error("KAITools 仅支持 Windows 10/11 64 位系统。")
         return 2
 
     instance = SingleInstance()
@@ -140,7 +152,7 @@ def main() -> int:
 
         api = DesktopApi(paths, storage)
         window = webview.create_window(
-            "DevToolkit",
+            APP_TITLE,
             resolve_web_entry(paths),
             js_api=api,
             width=1280,
@@ -156,6 +168,7 @@ def main() -> int:
             func=_configure_native_window,
             args=(window,),
             gui="edgechromium",
+            icon=_resolve_application_icon(paths),
             debug=args.debug,
             http_server=True,
             private_mode=False,

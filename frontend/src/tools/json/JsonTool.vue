@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { Braces, Check, Copy, ListTree, Minimize2, Trash2 } from '@lucide/vue'
+import { Braces, Check, Copy, GitFork, ListTree, Minimize2, Trash2 } from '@lucide/vue'
 import { computed, watch } from 'vue'
 
 import CodeEditor from '@/components/CodeEditor.vue'
 import IconButton from '@/components/IconButton.vue'
+import ResizableSplit from '@/components/ResizableSplit.vue'
 import SegmentedControl from '@/components/SegmentedControl.vue'
 import { useToolState } from '@/composables/useToolState'
 import { useToastStore } from '@/stores/toast'
 import { copyText } from '@/utils/clipboard'
 import { formatJson, minifyJson, parseJsonDocument } from '@/utils/json'
+import JsonGraphView from './JsonGraphView.vue'
 import JsonTreeNode from './JsonTreeNode.vue'
 
 const props = defineProps<{ state: Record<string, unknown> }>()
@@ -16,7 +18,7 @@ const emit = defineEmits<{ 'update:state': [state: Record<string, unknown>] }>()
 const toast = useToastStore()
 const model = useToolState(
   props.state,
-  { input: '', output: '', indent: 2 as 2 | 4, outputMode: 'code', outputStyle: 'formatted' },
+  { input: '', output: '', indent: 2 as 2 | 4, outputMode: 'code', outputStyle: 'formatted', split: 50 },
   (state) => emit('update:state', state),
 )
 
@@ -75,8 +77,8 @@ async function copyOutput(): Promise<void> {
       </div>
     </header>
 
-    <div class="editor-split">
-      <div class="editor-panel" :class="{ invalid: firstIssue }">
+    <ResizableSplit v-model="model.split">
+      <template #left><div class="editor-panel" :class="{ invalid: firstIssue }">
         <div class="panel-label"><Braces :size="14" />输入</div>
         <CodeEditor
           v-model="model.input"
@@ -84,14 +86,17 @@ async function copyOutput(): Promise<void> {
           label="JSON 输入"
           :selection-offset="firstIssue?.offset"
         />
-      </div>
-      <div class="editor-panel result-panel">
+      </div></template>
+      <template #right><div class="editor-panel result-panel">
         <div class="panel-label panel-label-tabs">
           <button type="button" :class="{ active: model.outputMode === 'code' }" @click="model.outputMode = 'code'">
             <Minimize2 :size="14" />代码
           </button>
           <button type="button" :class="{ active: model.outputMode === 'tree' }" @click="model.outputMode = 'tree'">
             <ListTree :size="14" />树视图
+          </button>
+          <button type="button" :class="{ active: model.outputMode === 'graph' }" @click="model.outputMode = 'graph'">
+            <GitFork :size="14" />关系图
           </button>
         </div>
         <CodeEditor
@@ -100,11 +105,12 @@ async function copyOutput(): Promise<void> {
           language="json"
           label="JSON 格式化结果"
         />
-        <div v-else class="json-tree" aria-label="JSON 树视图">
+        <div v-else-if="model.outputMode === 'tree'" class="json-tree" aria-label="JSON 树视图">
           <JsonTreeNode v-if="outputDocument.tree" :item="outputDocument.tree" />
           <div v-else class="empty-state"><ListTree :size="22" /><span>暂无可展示的 JSON</span></div>
         </div>
-      </div>
-    </div>
+        <JsonGraphView v-else :root="outputDocument.tree" :source="model.output" @update:source="model.output = $event" />
+      </div></template>
+    </ResizableSplit>
   </section>
 </template>

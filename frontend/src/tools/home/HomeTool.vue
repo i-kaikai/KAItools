@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ArrowLeft, ArrowRight, ArrowUpRight, CircleDot, FolderCog, LayoutGrid, Layers3 } from '@lucide/vue'
+import { ArrowLeft, ArrowRight, ArrowUpRight, CircleDot, ExternalLink, FolderCog, LayoutGrid, Layers3 } from '@lucide/vue'
 import { computed, ref } from 'vue'
 
-import { icpNumber, isWebRuntime } from '@/runtime'
+import { isWebRuntime } from '@/runtime'
 import { useAppStore } from '@/stores/app'
 import { toolCategories, workspaceTools, type ToolDefinition } from '@/tools/registry'
 import ParticleField from './ParticleField.vue'
@@ -47,11 +47,17 @@ const animateOnEntry = (() => {
     return true
   }
 })()
-const today = new Intl.DateTimeFormat('zh-CN', {
+const currentDate = new Date()
+const todayLabel = `${new Intl.DateTimeFormat('zh-CN', {
+  year: 'numeric',
   month: 'long',
   day: 'numeric',
-  weekday: 'long',
-}).format(new Date())
+}).format(currentDate)} · ${new Intl.DateTimeFormat('zh-CN', { weekday: 'long' }).format(currentDate)}`
+const todayDateTime = [
+  currentDate.getFullYear(),
+  String(currentDate.getMonth() + 1).padStart(2, '0'),
+  String(currentDate.getDate()).padStart(2, '0'),
+].join('-')
 
 function openTool(tool: ToolDefinition): void {
   app.openTool(tool.id, tool.name, tool.initialState(), tool.singleton)
@@ -87,24 +93,24 @@ function releaseCard(): void {
       <section v-if="!entered" key="orbit" class="home-orbit" aria-labelledby="home-title">
         <div class="home-orbit-copy">
           <div class="home-kicker"><CircleDot :size="13" />LOCAL CORE · READY</div>
-          <h1 id="home-title">DevToolkit</h1>
+          <h1 id="home-title">KAITools</h1>
           <p>你的本地开发工具空间</p>
           <button class="home-enter-action" type="button" @click="enterWorkspace">
             <span>进入工具台</span>
             <ArrowRight :size="17" aria-hidden="true" />
           </button>
           <small>{{ workspaceTools.length }} 个模块 · 数据仅保存在本机</small>
-          <footer v-if="icpNumber" class="home-compliance">
-            <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">{{ icpNumber }}</a>
-          </footer>
         </div>
       </section>
 
       <div v-else key="workbench" class="home-content home-workbench">
         <header class="home-workbench-header">
           <div class="home-title-block">
-            <div class="home-kicker"><CircleDot :size="13" />WORKSPACE ONLINE <span>{{ today }}</span></div>
-            <h1>DevToolkit</h1>
+            <div class="home-status-line">
+              <div class="home-kicker"><CircleDot :size="13" />WORKSPACE ONLINE</div>
+              <time class="home-current-date" :datetime="todayDateTime">{{ todayLabel }}</time>
+            </div>
+            <h1>KAITools</h1>
             <p>选择一个工具开始处理</p>
           </div>
           <div class="home-header-actions">
@@ -141,7 +147,16 @@ function releaseCard(): void {
               <small>{{ pinnedTabs.length }} 个固定标签</small>
             </header>
             <dl class="home-system-list">
-              <div><dt>DevToolkit</dt><dd>v{{ app.runtime?.version ?? '0.1.0' }}</dd></div>
+              <div><dt>KAITools</dt><dd>v{{ app.runtime?.version ?? '0.1.0' }}</dd></div>
+              <div>
+                <dt>项目仓库</dt>
+                <dd>
+                  <button class="home-repository-link" type="button" aria-label="打开 Gitee 项目仓库" @click="app.openProjectRepository">
+                    <span>i-_-kaikai/kaitools</span>
+                    <ExternalLink :size="13" aria-hidden="true" />
+                  </button>
+                </dd>
+              </div>
               <template v-if="isWebRuntime">
                 <div><dt>运行环境</dt><dd>浏览器</dd></div>
                 <div><dt>数据存储</dt><dd>浏览器本地存储</dd></div>
@@ -172,9 +187,6 @@ function releaseCard(): void {
             </section>
           </div>
         </section>
-        <footer v-if="icpNumber" class="home-compliance">
-          <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">{{ icpNumber }}</a>
-        </footer>
       </div>
     </Transition>
   </section>

@@ -4,6 +4,7 @@ import { computed } from 'vue'
 
 import CodeEditor from '@/components/CodeEditor.vue'
 import IconButton from '@/components/IconButton.vue'
+import ResizableSplit from '@/components/ResizableSplit.vue'
 import { useToolState } from '@/composables/useToolState'
 import { useToastStore } from '@/stores/toast'
 import { copyText } from '@/utils/clipboard'
@@ -12,7 +13,7 @@ import { compareJson } from '@/utils/jsonDiff'
 const props = defineProps<{ state: Record<string, unknown> }>()
 const emit = defineEmits<{ 'update:state': [state: Record<string, unknown>] }>()
 const toast = useToastStore()
-const model = useToolState(props.state, { left: '', right: '' }, (state) => emit('update:state', state))
+const model = useToolState(props.state, { left: '', right: '', split: 50 }, (state) => emit('update:state', state))
 const comparison = computed(() => {
   try { return { result: compareJson(model.left, model.right), error: '' } }
   catch (error) { return { result: null, error: error instanceof Error ? error.message : 'JSON 对比失败' } }
@@ -41,15 +42,15 @@ async function copyResult(): Promise<void> {
         <IconButton :icon="Trash2" label="清空" :disabled="!model.left && !model.right" @click="model.left = ''; model.right = ''" />
       </div>
     </header>
-    <div class="editor-split">
-      <div class="editor-panel" :class="{ invalid: comparison.error.startsWith('左侧') }">
+    <ResizableSplit v-model="model.split">
+      <template #left><div class="editor-panel" :class="{ invalid: comparison.error.startsWith('左侧') }">
         <div class="panel-label">原始 JSON</div>
         <CodeEditor v-model="model.left" language="json" label="左侧 JSON" :highlights="comparison.result?.leftHighlights" />
-      </div>
-      <div class="editor-panel" :class="{ invalid: comparison.error.startsWith('右侧') }">
+      </div></template>
+      <template #right><div class="editor-panel" :class="{ invalid: comparison.error.startsWith('右侧') }">
         <div class="panel-label">目标 JSON</div>
         <CodeEditor v-model="model.right" language="json" label="右侧 JSON" :highlights="comparison.result?.rightHighlights" />
-      </div>
-    </div>
+      </div></template>
+    </ResizableSplit>
   </section>
 </template>

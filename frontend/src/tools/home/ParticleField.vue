@@ -133,7 +133,7 @@ function updateStage(stage: 'hero' | 'workbench'): void {
     targetOrbitOpacity = 0.2
     targetSatelliteOpacity = 0.9
   } else {
-    targetSystemX = 3.45
+    targetSystemX = Math.min(6.2, Math.max(2.5, (camera?.aspect ?? 1.6) * 1.86))
     targetSystemY = 1.08
     targetSystemScale = 0.4
     targetSphereOpacity = 0.12
@@ -151,6 +151,9 @@ function resize(): void {
   renderer.setSize(width, height, false)
   camera.aspect = width / height
   camera.updateProjectionMatrix()
+  if (props.stage === 'workbench') {
+    targetSystemX = Math.min(6.2, Math.max(2.5, camera.aspect * 1.86))
+  }
 }
 
 function render(time: number): void {
