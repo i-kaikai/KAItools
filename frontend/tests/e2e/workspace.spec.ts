@@ -177,8 +177,28 @@ test('particle planet and tool carousel render, move and respond to the wheel', 
   await page.getByRole('button', { name: '进入工具台' }).click()
   await expect(page.locator('.particle-field')).toHaveAttribute('data-stage', 'workbench')
   const carousel = page.locator('.home-tool-orbit')
+  await expect(carousel).toHaveAttribute('data-orbit-layout', 'landscape')
   await carousel.hover({ position: { x: 12, y: 12 } })
+  await page.waitForTimeout(200)
+  await expect(page.locator('.home-tool-card[data-front]')).toHaveCount(1)
   const frontCard = page.locator('.home-tool-card[data-front]').first()
+  const carouselAppearance = await carousel.evaluate((orbit) => {
+    const orbitStyle = getComputedStyle(orbit)
+    const cards = [...orbit.querySelectorAll<HTMLElement>('.home-tool-card')]
+    return {
+      maskImage: orbitStyle.maskImage || orbitStyle.webkitMaskImage,
+      opacities: cards.map((card) => Number.parseFloat(getComputedStyle(card).opacity)),
+      borderColors: cards.map((card) => getComputedStyle(card).borderColor),
+      edgeAlphas: cards.map((card) => Number.parseFloat(
+        getComputedStyle(card).getPropertyValue('--card-edge-alpha') || '1',
+      )),
+    }
+  })
+  expect(carouselAppearance.maskImage).toContain('linear-gradient')
+  expect(Math.min(...carouselAppearance.opacities)).toBeGreaterThan(0.9)
+  expect(new Set(carouselAppearance.borderColors).size).toBe(1)
+  expect(Math.max(...carouselAppearance.edgeAlphas)).toBeGreaterThan(0.9)
+  expect(Math.min(...carouselAppearance.edgeAlphas)).toBeLessThan(0.2)
   const frontTool = await frontCard.getAttribute('data-tool')
   await frontCard.hover({ position: { x: 120, y: 50 } })
   await expect(page.locator('.particle-field')).toHaveAttribute('data-active-tool', frontTool ?? 'json')
@@ -193,6 +213,7 @@ test('particle planet and tool carousel render, move and respond to the wheel', 
   await expect(carousel).toHaveAttribute('data-drag-active', 'true')
   const transformBeforeTouch = await frontCard.evaluate((card) => getComputedStyle(card).transform)
   await carousel.dispatchEvent('pointermove', { pointerId: 7, pointerType: 'touch', clientX: 500, clientY: 282, buttons: 1 })
+  await page.waitForTimeout(32)
   const transformAfterTouch = await frontCard.evaluate((card) => getComputedStyle(card).transform)
   expect(transformAfterTouch).not.toBe(transformBeforeTouch)
   await carousel.dispatchEvent('pointerup', { pointerId: 7, pointerType: 'touch', clientX: 500, clientY: 282, button: 0 })
@@ -298,6 +319,8 @@ test('web build remains usable on a mobile viewport', async ({ page }, testInfo)
   await assertViewportIntegrity(page)
   await page.screenshot({ path: resolve(qaDir, 'home-orbit-mobile-light.png'), fullPage: true })
 
+  await page.getByRole('button', { name: '进入工具台' }).click()
+  await expect(page.locator('.home-tool-orbit')).toHaveAttribute('data-orbit-layout', 'portrait')
   await page.getByRole('button', { name: 'Hosts', exact: true }).click()
   await expect(page.getByRole('heading', { name: '仅 Windows 桌面版可用' })).toBeVisible()
   await assertViewportIntegrity(page)
