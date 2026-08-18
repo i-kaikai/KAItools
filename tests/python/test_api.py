@@ -129,10 +129,10 @@ def test_api_opens_only_fixed_github_repository(tmp_path: Path, monkeypatch) -> 
     monkeypatch.setattr(
         api_module,
         "open_github_repository",
-        lambda: opened.append("https://github.com/imxukai/KAItools") or True,
+        lambda: opened.append("https://github.com/i-kaikai/KAItools") or True,
     )
 
     result = DesktopApi(paths, storage).open_github_repository()
 
     assert result == {"ok": True, "data": None}
-    assert opened == ["https://github.com/imxukai/KAItools"]
+    assert opened == ["https://github.com/i-kaikai/KAItools"]

@@ -2,6 +2,7 @@
 import { basicSetup } from 'codemirror'
 import { json } from '@codemirror/lang-json'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
+import { search } from '@codemirror/search'
 import { EditorState, StateEffect, StateField, type Range } from '@codemirror/state'
 import { Decoration, EditorView, type DecorationSet } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
@@ -96,6 +97,25 @@ const editorTheme = EditorView.theme({
   '.cm-cursor': { borderLeftColor: 'var(--accent)' },
 })
 
+const chineseSearchPhrases = EditorState.phrases.of({
+  Find: '查找',
+  Replace: '替换为',
+  next: '下一个',
+  previous: '上一个',
+  all: '全选匹配项',
+  'match case': '区分大小写',
+  regexp: '正则表达式',
+  'by word': '全字匹配',
+  replace: '替换',
+  'replace all': '全部替换',
+  close: '关闭查找',
+})
+
+const editorSearch = search({
+  top: true,
+  scrollToMatch: (range) => EditorView.scrollIntoView(range, { y: 'center' }),
+})
+
 onMounted(() => {
   if (!container.value) return
   editor = new EditorView({
@@ -105,6 +125,8 @@ onMounted(() => {
       extensions: [
         basicSetup,
         editorTheme,
+        chineseSearchPhrases,
+        editorSearch,
         highlightField,
         syntaxHighlighting(highlightStyle),
         EditorView.lineWrapping,

@@ -523,7 +523,7 @@ test('Gitee and GitHub repository entries use official icons and work from the w
   const githubSidebarPopupPromise = page.waitForEvent('popup')
   await githubSidebarLink.click()
   const githubSidebarPopup = await githubSidebarPopupPromise
-  await githubSidebarPopup.waitForURL('https://github.com/imxukai/KAItools')
+  await githubSidebarPopup.waitForURL('https://github.com/i-kaikai/KAItools')
   await githubSidebarPopup.close()
 
   await page.getByRole('button', { name: '展开侧栏' }).click()
@@ -537,7 +537,7 @@ test('Gitee and GitHub repository entries use official icons and work from the w
   const homeRepositoryLink = page.locator('.home-system').getByRole('button', { name: '打开 Gitee 仓库' })
   const githubHomeRepositoryLink = page.locator('.home-system').getByRole('button', { name: '打开 GitHub 仓库' })
   await expect(homeRepositoryLink).toContainText('i-_-kaikai/kaitools')
-  await expect(githubHomeRepositoryLink).toContainText('imxukai/KAItools')
+  await expect(githubHomeRepositoryLink).toContainText('i-kaikai/KAItools')
   await expect(page.locator('.home-system .repository-brand-icon')).toHaveCount(2)
   await page.screenshot({ path: resolve(qaDir, 'repository-entry-home-light.png'), fullPage: true })
   const homePopupPromise = page.waitForEvent('popup')
@@ -548,7 +548,7 @@ test('Gitee and GitHub repository entries use official icons and work from the w
   const githubHomePopupPromise = page.waitForEvent('popup')
   await githubHomeRepositoryLink.click()
   const githubHomePopup = await githubHomePopupPromise
-  await githubHomePopup.waitForURL('https://github.com/imxukai/KAItools')
+  await githubHomePopup.waitForURL('https://github.com/i-kaikai/KAItools')
   await githubHomePopup.close()
 
   await page.evaluate(() => {
@@ -570,12 +570,22 @@ test('tool search is localized, keyboard friendly and available while collapsed'
   await page.goto('/')
   await expect(page.locator('.app-shell')).toHaveClass(/sidebar-collapsed/)
 
-  await page.locator('.sidebar-search-button').click()
+  await page.getByRole('button', { name: '展开侧栏' }).click()
+  const sidebarInput = page.getByLabel('筛选工具')
+  await expect(page.locator('.tool-search > svg')).toHaveCount(0)
+  await expect(page.locator('.tool-search .tool-search-open svg')).toHaveCount(1)
+  await expect(page.locator('.tool-search kbd')).toHaveText('Ctrl K')
+  await sidebarInput.fill('日期')
+  await expect(page.locator('.tool-nav-row')).toHaveCount(1)
+  await expect(page.locator('.tool-nav-row')).toContainText('日期转换')
+  await expect(page.getByRole('dialog', { name: '搜索工具' })).toBeHidden()
+  await page.screenshot({ path: resolve(qaDir, 'sidebar-inline-search-desktop-light.png'), fullPage: true })
+  await page.locator('.tool-search-open').click()
+
   const dialog = page.getByRole('dialog', { name: '搜索工具' })
   const input = page.getByLabel('输入工具名称、用途或关键词')
   await expect(dialog).toBeVisible()
   await expect(dialog).toHaveCSS('transition-duration', '0s')
-  await expect(page.locator('.app-shell')).toHaveClass(/sidebar-collapsed/)
   await input.fill('定时')
   await expect(page.getByRole('option')).toHaveCount(1)
   await expect(page.getByRole('option')).toContainText('定时任务表达式')
@@ -592,11 +602,48 @@ test('tool search is localized, keyboard friendly and available while collapsed'
   await input.press('Escape')
   await expect(dialog).toBeHidden()
 
+  await page.getByRole('button', { name: '收起侧栏' }).click()
   await page.setViewportSize({ width: 390, height: 844 })
   await page.locator('.sidebar-search-button').click()
   await expect(dialog).toBeVisible()
   await assertViewportIntegrity(page)
   await page.screenshot({ path: resolve(qaDir, 'tool-search-mobile-light.png'), fullPage: true })
+})
+
+test('editor search panel is localized and docks above code content', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'JSON', exact: true }).click()
+
+  const editor = page.getByLabel('JSON 输入')
+  await editor.click()
+  await page.keyboard.press('Control+f')
+
+  const panel = page.locator('.code-editor .cm-panel.cm-search').filter({ has: page.locator('input[name=search]') })
+  await expect(panel).toBeVisible()
+  await expect(panel).toHaveCSS('position', 'relative')
+  await expect(panel.getByLabel('替换为')).toBeVisible()
+  await expect(panel.getByRole('button', { name: '上一个' })).toBeVisible()
+  await expect(panel.getByRole('button', { name: '下一个' })).toBeVisible()
+  await expect(panel.getByRole('button', { name: '全选匹配项' })).toBeVisible()
+  await expect(panel.getByLabel('区分大小写')).toBeVisible()
+  await expect(panel.getByLabel('正则表达式')).toBeVisible()
+  await expect(panel.getByLabel('全字匹配')).toBeVisible()
+
+  await panel.locator('input[name=search]').fill('KAITools')
+  await panel.getByLabel('替换为').fill('工具箱')
+  await panel.getByRole('button', { name: '全部替换' }).click()
+  await expect(editor).toContainText('工具箱')
+  const panelBox = await panel.boundingBox()
+  const firstLineBox = await editor.locator('.cm-line').first().boundingBox()
+  expect(panelBox).not.toBeNull()
+  expect(firstLineBox).not.toBeNull()
+  expect((panelBox?.y ?? 0) + (panelBox?.height ?? 0)).toBeLessThanOrEqual((firstLineBox?.y ?? 0) + 1)
+  await assertViewportIntegrity(page)
+  await page.screenshot({ path: resolve(qaDir, 'editor-search-floating-light.png'), fullPage: true })
+
+  await page.keyboard.press('Escape')
+  await expect(panel).toBeHidden()
 })
 
 test('Java unescape formats JSON by default and keeps generated output editable', async ({ page }) => {

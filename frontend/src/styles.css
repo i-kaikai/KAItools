@@ -121,10 +121,14 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .sidebar-home:not(.active):hover { color: var(--sidebar-text); background: var(--sidebar-hover); }
 .sidebar-collapsed .sidebar-home { justify-content: center; padding: 0; }
 
-.tool-search-trigger { display: flex; align-items: center; gap: 7px; width: calc(100% - 16px); height: 36px; margin: 10px 8px 8px; padding: 0 8px; border: 1px solid var(--sidebar-border); border-radius: 6px; color: var(--sidebar-muted); background: var(--sidebar-raised); cursor: pointer; text-align: left; transition: transform 140ms var(--ease-out), border-color 120ms ease, color 120ms ease, background-color 120ms ease; }
-.tool-search-trigger > span { flex: 1; }
-.tool-search-trigger:hover { border-color: #4b555f; color: var(--sidebar-text); background: #25292e; }
-.tool-search-trigger:active { transform: scale(.98); }
+.tool-search { display: flex; align-items: center; gap: 6px; width: calc(100% - 16px); height: 36px; margin: 10px 8px 8px; padding: 0 4px 0 8px; border: 1px solid var(--sidebar-border); border-radius: 6px; color: var(--sidebar-muted); background: var(--sidebar-raised); transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease; }
+.tool-search:focus-within { border-color: #4f8679; background: #25292e; box-shadow: 0 0 0 2px rgb(77 179 151 / 14%); }
+.tool-search > input { flex: 1; width: 100%; min-width: 0; border: 0; outline: 0; color: var(--sidebar-text); background: transparent; font-size: 12px; }
+.tool-search > input::placeholder { color: var(--sidebar-muted); }
+.tool-search > kbd { flex: 0 0 auto; }
+.tool-search-open { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 27px; width: 27px; height: 27px; padding: 0; border: 1px solid transparent; border-radius: 5px; color: var(--sidebar-muted); background: transparent; cursor: pointer; transition: transform 140ms var(--ease-out), color 120ms ease, background-color 120ms ease; }
+.tool-search-open:hover { color: var(--sidebar-text); background: var(--sidebar-hover); }
+.tool-search-open:active { transform: scale(.96); }
 .sidebar-search-button { align-self: center; margin: 6px 0 2px; color: var(--sidebar-muted); border-color: var(--sidebar-border); background: var(--sidebar-raised); }
 .sidebar-search-button:hover:not(:disabled) { color: var(--sidebar-text); background: var(--sidebar-hover); }
 kbd { padding: 2px 4px; border: 1px solid #3a3e44; border-bottom-width: 2px; border-radius: 4px; color: var(--sidebar-muted); background: #1a1c20; font: 9px/1.2 "Cascadia Code", monospace; white-space: nowrap; }
@@ -144,6 +148,7 @@ kbd { padding: 2px 4px; border: 1px solid #3a3e44; border-bottom-width: 2px; bor
 .tool-nav-row.active .tool-nav-main small { color: #717780; }
 .tool-nav-row > .icon-button { color: #737a84; }
 .tool-nav-row.active > .icon-button { color: #656b73; }
+.tool-search-empty-state { margin: 10px 8px; padding: 14px 8px; border: 1px dashed var(--sidebar-border); border-radius: 6px; color: var(--sidebar-muted); font-size: 11px; text-align: center; }
 .sidebar-collapsed .tool-nav { padding-inline: 8px; }
 .sidebar-collapsed .tool-nav-main { justify-content: center; padding-inline: 0; }
 .sidebar-footer { display: flex; align-items: center; gap: 8px; min-height: 56px; padding: 8px 10px; border-top: 1px solid var(--sidebar-border); }
@@ -409,7 +414,42 @@ html.is-resizing-rows, html.is-resizing-rows * { cursor: row-resize !important; 
 .panel-label-tabs { padding: 0 4px; }
 .panel-label-tabs button { display: flex; align-items: center; gap: 5px; height: 28px; padding: 0 8px; border: 0; border-radius: 4px; color: var(--text-faint); background: transparent; font-size: 10px; font-weight: 600; text-transform: uppercase; cursor: pointer; }
 .panel-label-tabs button.active { color: var(--accent); background: var(--accent-soft); }
-.code-editor { flex: 1; min-height: 0; }
+.code-editor { flex: 1; min-height: 0; container-type: inline-size; }
+.code-editor .cm-panels.cm-panels-top { position: sticky; top: 0; width: 100%; border-bottom: 1px solid var(--border-subtle); color: inherit; background: var(--surface-raised); }
+.code-editor .cm-panel.cm-search { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center; gap: 6px; width: 100%; padding: 8px 36px 8px 8px; border: 0; border-radius: 0; color: var(--text-secondary); background: var(--surface-raised); }
+.code-editor .cm-panel.cm-search input, .code-editor .cm-panel.cm-search button, .code-editor .cm-panel.cm-search label { margin: 0; }
+.code-editor .cm-panel.cm-search .cm-textfield { height: 28px; min-width: 0; padding: 0 8px; border: 1px solid var(--border); border-radius: 4px; outline: none; color: var(--text-primary); background: var(--surface); font: 11px/1.2 "JetBrains Mono", "Cascadia Code", Consolas, monospace; }
+.code-editor .cm-panel.cm-search .cm-textfield:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.code-editor .cm-panel.cm-search .cm-button { height: 28px; padding: 0 8px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-secondary); background: var(--surface); font-size: 10px; white-space: nowrap; cursor: pointer; transition: transform 140ms var(--ease-out), color 120ms ease, border-color 120ms ease, background-color 120ms ease; }
+.code-editor .cm-panel.cm-search .cm-button:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); color: var(--text-primary); background: var(--surface-hover); }
+.code-editor .cm-panel.cm-search .cm-button:active { transform: scale(.97); }
+.code-editor .cm-panel.cm-search [name=search] { grid-column: 1; grid-row: 1; }
+.code-editor .cm-panel.cm-search [name=next] { grid-column: 2; grid-row: 1; }
+.code-editor .cm-panel.cm-search [name=prev] { grid-column: 3; grid-row: 1; }
+.code-editor .cm-panel.cm-search [name=select] { grid-column: 4; grid-row: 1; }
+.code-editor .cm-panel.cm-search label { display: inline-flex; align-items: center; gap: 4px; min-height: 20px; color: var(--text-faint); font-size: 10px; white-space: nowrap; }
+.code-editor .cm-panel.cm-search label:nth-of-type(1) { grid-column: 1; grid-row: 2; }
+.code-editor .cm-panel.cm-search label:nth-of-type(2) { grid-column: 2; grid-row: 2; }
+.code-editor .cm-panel.cm-search label:nth-of-type(3) { grid-column: 3 / span 2; grid-row: 2; }
+.code-editor .cm-panel.cm-search input[type=checkbox] { width: 13px; height: 13px; margin: 0; accent-color: var(--accent); }
+.code-editor .cm-panel.cm-search br { display: none; }
+.code-editor .cm-panel.cm-search input[name=replace] { grid-column: 1; grid-row: 3; }
+.code-editor .cm-panel.cm-search button[name=replace] { grid-column: 2; grid-row: 3; }
+.code-editor .cm-panel.cm-search button[name=replaceAll] { grid-column: 3 / span 2; grid-row: 3; }
+.code-editor .cm-panel.cm-search [name=close] { position: absolute; top: 8px; right: 8px; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 4px; color: var(--text-faint); background: transparent; font-size: 18px; line-height: 1; cursor: pointer; }
+.code-editor .cm-panel.cm-search [name=close]:hover { color: var(--text-primary); background: var(--surface-hover); }
+.code-editor .cm-searchMatch { border-radius: 2px; background: color-mix(in srgb, #f0bb58 38%, transparent) !important; }
+.code-editor .cm-searchMatch-selected { background: color-mix(in srgb, var(--accent) 48%, transparent) !important; }
+@container (max-width: 440px) {
+  .code-editor .cm-panel.cm-search { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .code-editor .cm-panel.cm-search [name=select] { grid-column: 1; grid-row: 2; }
+  .code-editor .cm-panel.cm-search label:nth-of-type(1) { grid-column: 1; grid-row: 3; }
+  .code-editor .cm-panel.cm-search label:nth-of-type(2) { grid-column: 2; grid-row: 3; }
+  .code-editor .cm-panel.cm-search label:nth-of-type(3) { grid-column: 3; grid-row: 3; }
+  .code-editor .cm-panel.cm-search input[name=replace] { grid-column: 1; grid-row: 4; }
+  .code-editor .cm-panel.cm-search button[name=replace] { grid-column: 2; grid-row: 4; }
+  .code-editor .cm-panel.cm-search button[name=replaceAll] { grid-column: 3; grid-row: 4; }
+}
 .code-editor .cm-line.cm-diff-line-added { background: color-mix(in srgb, #4cb782 13%, transparent); }
 .code-editor .cm-line.cm-diff-line-removed { background: color-mix(in srgb, #d85b63 12%, transparent); }
 .code-editor .cm-diff-mark-added { border-radius: 2px; background: color-mix(in srgb, #35ad74 28%, transparent); }
@@ -661,7 +701,7 @@ html.is-resizing-rows, html.is-resizing-rows * { cursor: row-resize !important; 
 @media (max-width: 720px) {
   .app-shell, .app-shell.sidebar-collapsed { display: block; padding-bottom: 58px; }
   .app-sidebar { position: fixed; z-index: 30; inset: auto 0 0; display: flex; height: 58px; flex-direction: row; border-top: 1px solid var(--sidebar-border); border-right: 0; overflow: hidden; }
-  .brand-row, .tool-search-trigger, .nav-section-label, .sidebar-footer { display: none; }
+  .brand-row, .tool-search, .nav-section-label, .sidebar-footer { display: none; }
   .sidebar-home { justify-content: center; flex: 0 0 52px; width: 52px; min-height: 44px; margin: 7px 2px 7px 6px; padding: 0; }
   .sidebar-home span { display: none; }
   .sidebar-search-button { flex: 0 0 42px; width: 42px; height: 44px; margin: 7px 1px; border-color: transparent; background: transparent; }
@@ -732,7 +772,7 @@ html.is-resizing-rows, html.is-resizing-rows * { cursor: row-resize !important; 
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; }
-  .toast, .modal, .icon-button, .command-button, .home-enter-action, .home-orbit-return, .home-tool-card, .home-tool-card::after, .home-tab-list button, .sidebar-home, .brand-home, .particle-field, .home-orbit-copy, .home-stage-enter-active, .home-stage-leave-active, .home-kicker > svg { animation: none !important; transition-duration: 0ms !important; }
+  .toast, .modal, .icon-button, .command-button, .home-enter-action, .home-orbit-return, .home-tool-card, .home-tool-card::after, .home-tab-list button, .sidebar-home, .brand-home, .tool-search-open, .code-editor .cm-panel.cm-search .cm-button, .particle-field, .home-orbit-copy, .home-stage-enter-active, .home-stage-leave-active, .home-kicker > svg { animation: none !important; transition-duration: 0ms !important; }
 }
 
 @media (hover: none) {

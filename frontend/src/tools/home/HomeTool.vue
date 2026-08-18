@@ -169,7 +169,7 @@ function releaseCard(): void {
                 <dd>
                   <button class="home-repository-link" type="button" aria-label="打开 GitHub 仓库" @click="app.openGithubRepository">
                     <img class="repository-brand-icon" :src="githubLogo" alt="" />
-                    <span>imxukai/KAItools</span>
+                    <span>i-kaikai/KAItools</span>
                     <ExternalLink :size="13" aria-hidden="true" />
                   </button>
                 </dd>

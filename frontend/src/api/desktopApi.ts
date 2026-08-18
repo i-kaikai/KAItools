@@ -12,7 +12,7 @@ import { isWebRuntime } from '@/runtime'
 const BROWSER_KEY = 'devtoolkit.browser.state.v1'
 const LEGACY_MOCK_KEY = 'devtoolkit.mock.state.v1'
 export const PROJECT_REPOSITORY_URL = 'https://gitee.com/i-_-kaikai/kaitools'
-export const GITHUB_REPOSITORY_URL = 'https://github.com/imxukai/KAItools'
+export const GITHUB_REPOSITORY_URL = 'https://github.com/i-kaikai/KAItools'
 const DESKTOP_ONLY_METHODS = new Set([
   'read_hosts',
   'apply_hosts',

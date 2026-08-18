@@ -25,8 +25,14 @@ import type { ThemeMode, ToolTab } from '@/types'
 import { homeTool, toolsById, workspaceTools } from '@/tools/registry'
 
 const app = useAppStore()
+const sidebarSearch = ref('')
 const searchOpen = ref(false)
 const tabMenu = ref({ visible: false, x: 0, y: 0, tabId: '' })
+const visibleTools = computed(() => {
+  const query = sidebarSearch.value.trim().toLowerCase()
+  if (!query) return workspaceTools
+  return workspaceTools.filter((tool) => [tool.name, tool.description, ...tool.keywords].some((value) => value.toLowerCase().includes(query)))
+})
 const activeTool = computed(() => (app.activeTab ? toolsById[app.activeTab.toolId] : undefined))
 const themeIcon = computed(() => ({ system: Monitor, light: Sun, dark: Moon })[app.settings.theme])
 const themeLabel = computed(() => ({ system: '跟随系统', light: '浅色主题', dark: '深色主题' })[app.settings.theme])
@@ -168,17 +174,19 @@ onBeforeUnmount(() => {
         <span v-if="!app.settings.sidebarCollapsed">首页</span>
       </button>
 
-      <button v-if="!app.settings.sidebarCollapsed" class="tool-search-trigger" type="button" @click="openSearch">
-        <Search :size="15" aria-hidden="true" />
-        <span>搜索工具</span>
+      <div v-if="!app.settings.sidebarCollapsed" class="tool-search">
+        <input v-model="sidebarSearch" placeholder="搜索工具" aria-label="筛选工具" @keydown.esc="sidebarSearch = ''" />
         <kbd>Ctrl K</kbd>
-      </button>
+        <button class="tool-search-open tooltip-anchor" type="button" aria-label="打开全局搜索" data-tooltip="打开全局搜索 (Ctrl K)" @click="openSearch">
+          <Search :size="15" aria-hidden="true" />
+        </button>
+      </div>
       <IconButton v-else class="sidebar-search-button" :icon="Search" label="搜索工具" @click="openSearch" />
 
       <nav class="tool-nav" aria-label="开发工具">
-        <div v-if="!app.settings.sidebarCollapsed" class="nav-section-label"><span>工具</span><small>{{ workspaceTools.length }}</small></div>
+        <div v-if="!app.settings.sidebarCollapsed" class="nav-section-label"><span>工具</span><small>{{ visibleTools.length }}</small></div>
         <div
-          v-for="tool in workspaceTools"
+          v-for="tool in visibleTools"
           :key="tool.id"
           class="tool-nav-row"
           :class="[{ active: app.activeTab?.toolId === tool.id }, `tool-${tool.id}`]"
@@ -201,6 +209,7 @@ onBeforeUnmount(() => {
             @click="openTool(tool.id, true)"
           />
         </div>
+        <div v-if="!app.settings.sidebarCollapsed && !visibleTools.length" class="tool-search-empty-state">未找到匹配工具</div>
       </nav>
 
       <div class="sidebar-footer">

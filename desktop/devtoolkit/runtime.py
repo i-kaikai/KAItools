@@ -12,7 +12,7 @@ from .paths import AppPaths
 WEBVIEW2_DOWNLOAD_URL = "https://developer.microsoft.com/microsoft-edge/webview2/"
 WEBVIEW2_CLIENT_ID = "{F3017226-FE2A-4295-8BDF-00C3A19A7C66}"
 PROJECT_REPOSITORY_URL = "https://gitee.com/i-_-kaikai/kaitools"
-GITHUB_REPOSITORY_URL = "https://github.com/imxukai/KAItools"
+GITHUB_REPOSITORY_URL = "https://github.com/i-kaikai/KAItools"
 
 
 def is_supported_windows() -> bool:
