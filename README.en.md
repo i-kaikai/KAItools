@@ -31,12 +31,15 @@ Python, pywebview, WebView2, Vue 3, and TypeScript. Extract the ZIP and launch
 - **Date Converter**: automatic recognition of timestamps, ISO 8601, common date formats, Chinese dates, RFC values, and time zones, with local, UTC, ISO, and selected IANA-zone output.
 - **Crontab Generator**: two-way expression and field editing, field templates, presets, readable summaries, IANA time zones, and the next 5/10/20 runs.
 - **Regex Workbench**: live match highlighting, capture details, common flags, and replacement previews.
+- **Super Calculator**: scientific functions, base and bit operations, unit conversion, finance/date, plus matrix, complex, and statistics calculations.
+- **Notes**: notebooks, folders, and Markdown notes stored in desktop `data/notes/` or browser IndexedDB, with the pinned note surfaced on the home workspace.
 
 ### Text and system
 
 - **Text Diff**: line- or character-level comparison with highlighted changes.
 - **Text Statistics**: character, word, line, paragraph, and UTF-8 byte counts.
 - **Hosts**: direct system Hosts editing in the desktop build with diff preview, source digest checks, UAC save, and full-file backup and restore. The web build clearly marks this feature as desktop-only.
+- **Clipboard History**: desktop-only in-memory history for the latest 100 text clipboard entries. It clears on exit; the browser build provides a desktop download entry.
 
 Both panes remain editable in every side-by-side tool. The divider supports
 pointer dragging, keyboard adjustment, and double-click reset. Results from
@@ -47,6 +50,9 @@ Workspace tabs support pinning, multiple instances, and context-menu close opera
 
 - Desktop settings and pinned tabs are stored in the `data` directory beside the EXE; unpinned tabs remain in memory only.
 - The web build stores state in the current browser's `localStorage`. Tool input is not uploaded to a server.
+- Application settings are device-local and cover theme, particle quality (high, balanced, or off), reduced motion, workspace startup, editor font size, and line wrapping. Turning particles off releases the Three.js WebGL resources.
+- Pressing `Esc` or the global activation shortcut can hide the desktop app to the tray; the active window toggles to hidden with the same shortcut, tray actions restore or exit, and the title-bar close button exits directly.
+- The home system status adapts to the runtime: desktop reports CPU, memory, power, workspace-data, Windows/WebView2/data/tray/clipboard state, while the web build reports browser/network/storage/viewport/WebGL capability.
 - Hosts access is restricted to the fixed system path. Saves validate the source digest and syntax, request UAC, and back up the original file before atomic replacement.
 - The desktop bridge exposes a fixed allowlist and provides no arbitrary file writes, command execution, or arbitrary URL opening.
 
@@ -72,10 +78,16 @@ $env:DEVTOOLKIT_DEV_URL = 'http://127.0.0.1:5173'
 ## Verification and packaging
 
 ```powershell
+.\scripts\set_version.ps1 x.y.z
+.\scripts\check_version.ps1
 .\scripts\verify.ps1
 .\scripts\build_portable.ps1
 .\scripts\smoke_portable.ps1
 ```
+
+The root `VERSION` file is the only maintained version. Bump it for every delivery using semantic
+versioning; frontend, Python, and Windows file metadata derive from it during builds, and the check
+script blocks maintained version copies from entering a build.
 
 The portable directory is written to `dist/KAITools`; the ZIP and SHA-256 files
 are written to `release`.

@@ -9,7 +9,6 @@ frontend/node_modules/
 frontend/dist/
 frontend/playwright-report/
 frontend/test-results/
-
 build/
 dist/
 release/
@@ -22,3 +21,6 @@ bin-debug/
 bin-release/
 [Oo]bj/
 [Bb]in/
+
+# Context management data (session-local, not committed)
+.ctx/
