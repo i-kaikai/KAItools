@@ -1,9 +1,16 @@
 [project]
 name = "kaitools"
-version = "0.1.0"
+dynamic = ["version"]
 description = "KAITools local Windows developer toolbox"
 requires-python = ">=3.13,<3.14"
 dependencies = ["pywebview==6.2.1"]
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+version = { file = ["VERSION"] }
 
 [tool.pytest.ini_options]
 testpaths = ["tests/python"]

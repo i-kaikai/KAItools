@@ -1,8 +1,36 @@
 <script setup lang="ts">
 import { ArrowUpRight } from '@lucide/vue'
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-import { workspaceTools, type ToolDefinition } from '@/tools/registry'
+import type { ToolDefinition } from '@/tools/registry'
+import type { DashboardCard, DashboardCarouselMode } from '@/types'
+
+export interface CarouselItem {
+  card: DashboardCard
+  tool: ToolDefinition
+}
+
+interface StepTransition {
+  from: number
+  to: number
+  targetIndex: number
+  startedAt: number
+  durationMs: number
+}
+
+interface RingGeometry {
+  radiusX: number
+  radiusY: number
+  radiusZ: number
+}
+
+const props = defineProps<{
+  items: CarouselItem[]
+  mode: DashboardCarouselMode
+  classicRotationSpeed: number
+  stepIntervalMs: number
+  reducedMotion: boolean
+}>()
 
 const emit = defineEmits<{
   open: [tool: ToolDefinition]
@@ -11,207 +39,287 @@ const emit = defineEmits<{
 }>()
 
 const stage = ref<HTMLDivElement | null>(null)
-const cards: HTMLElement[] = []
-const phaseOffsets = workspaceTools.map((_, index) => (index / workspaceTools.length) * Math.PI * 2)
-const cardStates = workspaceTools.map(() => ({ sine: 0, depth: 0, x: 0 }))
+const cards = new Map<string, HTMLElement>()
 let resizeObserver: ResizeObserver | null = null
 let frameId = 0
-let lastTime = 0
+let lastFrameTime = 0
 let angle = 0
-let wheelVelocity = 0
-let radiusX = 255
-let centerSpread = 2.2
-let spreadLimit = Math.tanh(centerSpread)
-let autoVelocity = 0.14
-let layoutDirty = true
-let reducedMotion = false
+let activeIndex = 0
+let transition: StepTransition | null = null
+let queuedStep = 0
+let classicVelocity = 0
+let autoRotationTimer: number | undefined
+let wheelResetTimer: number | undefined
+let wheelDelta = 0
+let systemReducedMotion = false
 let pointerInside = false
 let activePointerId: number | null = null
-let pointerX = 0
-let pointerTime = 0
+let dragStartX = 0
+let dragStartAngle = 0
 let dragDistance = 0
 let dragged = false
+let geometry: RingGeometry = { radiusX: 160, radiusY: 22, radiusZ: 72 }
 
-function setCardRef(element: unknown, index: number): void {
-  if (element instanceof HTMLElement) cards[index] = element
+const AUTO_ROTATION_INTERVAL_MS = 3_000
+const STEP_TRANSITION_MS = 360
+const CLASSIC_FRAME_INTERVAL_MS = 1000 / 30
+const WHEEL_STEP_THRESHOLD = 40
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value))
 }
 
-function smoothstep(start: number, end: number, value: number): number {
-  const progress = clamp((value - start) / (end - start), 0, 1)
-  return progress * progress * (3 - 2 * progress)
+function shouldReduceMotion(): boolean {
+  return props.reducedMotion || systemReducedMotion
 }
 
-function updateStageGeometry(): void {
-  if (!stage.value) return
-  const width = stage.value.clientWidth
-  const compact = width < 640
-  const portrait = window.innerHeight > window.innerWidth
-  if (compact) {
-    radiusX = portrait
-      ? Math.min(245, Math.max(205, width * 0.5))
-      : Math.min(290, Math.max(220, width * 0.56))
-    centerSpread = portrait ? 1.75 : 1.55
-  } else if (portrait) {
-    radiusX = Math.min(315, Math.max(220, width * 0.28))
-    centerSpread = 1.15
+function modulo(value: number, divisor: number): number {
+  return ((value % divisor) + divisor) % divisor
+}
+
+function normalizeAngle(value: number): number {
+  let normalized = value % (Math.PI * 2)
+  if (normalized > Math.PI) normalized -= Math.PI * 2
+  if (normalized <= -Math.PI) normalized += Math.PI * 2
+  return normalized
+}
+
+function easeInOutCubic(value: number): number {
+  return value < 0.5 ? 4 * value * value * value : 1 - Math.pow(-2 * value + 2, 3) / 2
+}
+
+function setCardRef(element: unknown, cardId: string): void {
+  if (element instanceof HTMLElement) cards.set(cardId, element)
+  else cards.delete(cardId)
+}
+
+function cardWidth(): number {
+  const firstCard = cards.values().next().value as HTMLElement | undefined
+  if (firstCard?.clientWidth) return firstCard.clientWidth
+  return Math.min(286, Math.max(160, (stage.value?.clientWidth ?? 520) * 0.54))
+}
+
+function stepAngle(): number {
+  return props.items.length > 1 ? (Math.PI * 2) / props.items.length : 0
+}
+
+function angleForIndex(index: number): number {
+  return -index * stepAngle()
+}
+
+function nearestIndex(value = angle): number {
+  const count = props.items.length
+  if (count <= 1) return 0
+  return modulo(Math.round(-value / stepAngle()), count)
+}
+
+function nearestEquivalentAngle(target: number, current: number): number {
+  let result = target
+  while (result - current > Math.PI) result -= Math.PI * 2
+  while (result - current < -Math.PI) result += Math.PI * 2
+  return result
+}
+
+function updateGeometry(): void {
+  const host = stage.value
+  if (!host) return
+  const count = props.items.length
+  const width = host.clientWidth
+  const card = cardWidth()
+  if (count <= 1) {
+    geometry = { radiusX: 0, radiusY: 0, radiusZ: 0 }
   } else {
-    radiusX = Math.min(560, Math.max(230, width * 0.34))
-    centerSpread = 1.35
+    const pitchRatio = width < 420 ? 0.62 : width < 760 ? 0.7 : 0.78
+    const targetPitch = clamp(card * pitchRatio, Math.min(94, width * 0.3), card * 0.86)
+    const ringFromPitch = targetPitch / (2 * Math.max(Math.sin(Math.PI / count), 0.18))
+    const maxRadius = Math.max(card * 0.48, (width - card * 0.58) / 2)
+    geometry = {
+      radiusX: clamp(ringFromPitch, card * 0.44, maxRadius),
+      radiusY: clamp(card * 0.1, 10, 28),
+      radiusZ: clamp(card * 0.32, 44, 96),
+    }
   }
-  spreadLimit = Math.tanh(centerSpread)
-  autoVelocity = portrait ? 0.075 : 0.14
-  stage.value.dataset.orbitLayout = portrait ? 'portrait' : compact ? 'compact' : 'landscape'
-  layoutDirty = true
-}
-
-function setStyleProperty(card: HTMLElement, property: string, value: string): void {
-  if (card.style.getPropertyValue(property) !== value) card.style.setProperty(property, value)
-}
-
-function clearHandoverMask(card: HTMLElement): void {
-  if (!card.dataset.handoverRole) return
-  delete card.dataset.handoverRole
-  card.style.removeProperty('--card-left-edge-alpha')
-  card.style.removeProperty('--card-right-edge-alpha')
-  card.style.removeProperty('--card-left-edge-width')
-  card.style.removeProperty('--card-right-edge-width')
+  host.dataset.cardCount = String(count)
+  host.dataset.ringRadius = String(Math.round(geometry.radiusX))
+  host.dataset.orbitLayout = window.innerHeight > window.innerWidth ? 'portrait' : width < 640 ? 'compact' : 'landscape'
 }
 
 function layoutCards(): void {
-  if (!cards.length) return
-  const count = cards.length
-  let frontIndex = -1
-  let secondIndex = -1
-  let frontDepth = -1
-  let secondDepth = -1
+  const count = props.items.length
+  if (!count) return
+  stage.value?.setAttribute('data-active-index', String(nearestIndex()))
 
-  for (let index = 0; index < count; index += 1) {
-    const phase = angle + phaseOffsets[index]!
-    const sine = Math.sin(phase)
+  let frontIndex = 0
+  let frontDepth = -Infinity
+  const states = props.items.map((_, index) => {
+    const phase = angle + (index / count) * Math.PI * 2
     const depth = (Math.cos(phase) + 1) / 2
-    const x = (Math.tanh(sine * centerSpread) / spreadLimit) * radiusX
-    const state = cardStates[index]!
-    state.sine = sine
-    state.depth = depth
-    state.x = x
-
     if (depth > frontDepth) {
-      secondDepth = frontDepth
-      secondIndex = frontIndex
       frontDepth = depth
       frontIndex = index
-    } else if (depth > secondDepth) {
-      secondDepth = depth
-      secondIndex = index
     }
-  }
-
-  const handoverDepthGap = frontDepth - secondDepth
-  const handoverStrength = 1 - smoothstep(0.004, 0.028, handoverDepthGap)
-
-  cards.forEach((card, index) => {
-    const { sine, depth, x } = cardStates[index]!
-    const y = (1 - depth) * 18
-    const scale = 0.68 + depth * 0.32
-    const rotateY = -sine * 22
-    const isFront = index === frontIndex
-    const edgeFeather = smoothstep(0.12, 0.8, Math.abs(x) / radiusX)
-    const edgeAlpha = 1 - edgeFeather * 0.9
-    const edgeWidth = 12 + edgeFeather * 22
-    const edgeAlphaValue = edgeAlpha.toFixed(3)
-    const edgeWidthValue = `${edgeWidth.toFixed(2)}%`
-    const isHandoverCard = handoverStrength > 0 && (index === frontIndex || index === secondIndex)
-
-    setStyleProperty(card, '--card-edge-alpha', edgeAlphaValue)
-    setStyleProperty(card, '--card-edge-width', edgeWidthValue)
-
-    if (isHandoverCard) {
-      const handoverAlpha = 1 - handoverStrength * 0.9
-      const handoverWidth = 12 + handoverStrength * 24
-      const handoverAlphaValue = Math.min(edgeAlpha, handoverAlpha).toFixed(3)
-      const handoverWidthValue = `${Math.max(edgeWidth, handoverWidth).toFixed(2)}%`
-      if (x < 0) {
-        setStyleProperty(card, '--card-left-edge-alpha', '1')
-        setStyleProperty(card, '--card-left-edge-width', '0%')
-        setStyleProperty(card, '--card-right-edge-alpha', handoverAlphaValue)
-        setStyleProperty(card, '--card-right-edge-width', handoverWidthValue)
-        if (card.dataset.handoverRole !== 'incoming') card.dataset.handoverRole = 'incoming'
-      } else {
-        setStyleProperty(card, '--card-left-edge-alpha', handoverAlphaValue)
-        setStyleProperty(card, '--card-left-edge-width', handoverWidthValue)
-        setStyleProperty(card, '--card-right-edge-alpha', '1')
-        setStyleProperty(card, '--card-right-edge-width', '0%')
-        if (card.dataset.handoverRole !== 'outgoing') card.dataset.handoverRole = 'outgoing'
-      }
-    } else clearHandoverMask(card)
-
-    card.style.transform = `translate3d(calc(-50% + ${x.toFixed(2)}px), calc(-50% + ${y.toFixed(2)}px), ${(depth * 90).toFixed(2)}px) rotateY(${rotateY.toFixed(2)}deg) scale(${scale.toFixed(4)})`
-    const zIndex = String(Math.round(depth * 100))
-    if (card.style.zIndex !== zIndex) card.style.zIndex = zIndex
-    if (card.hasAttribute('data-front') !== isFront) card.toggleAttribute('data-front', isFront)
+    return {
+      x: Math.sin(phase) * geometry.radiusX,
+      y: (1 - depth) * geometry.radiusY,
+      z: (depth - 0.5) * geometry.radiusZ,
+      depth,
+      rotateY: -Math.sin(phase) * 14,
+    }
   })
-  layoutDirty = false
+
+  props.items.forEach((item, index) => {
+    const card = cards.get(item.card.id)
+    const state = states[index]
+    if (!card || !state) return
+    const scale = 0.68 + state.depth * 0.32
+    const opacity = 0.18 + state.depth * 0.82
+    card.style.transform = `translate3d(calc(-50% + ${state.x.toFixed(2)}px), calc(-50% + ${state.y.toFixed(2)}px), ${state.z.toFixed(2)}px) rotateY(${state.rotateY.toFixed(2)}deg) scale(${scale.toFixed(4)})`
+    card.style.opacity = opacity.toFixed(3)
+    card.style.zIndex = String(Math.round(state.depth * 100))
+    card.toggleAttribute('data-front', index === frontIndex)
+  })
+}
+
+function cancelAutoRotation(): void {
+  window.clearTimeout(autoRotationTimer)
+  autoRotationTimer = undefined
+}
+
+function scheduleAutoRotation(): void {
+  cancelAutoRotation()
+  if (
+    props.mode !== 'step' || shouldReduceMotion() || document.hidden ||
+    props.items.length < 2 || activePointerId !== null || transition
+  ) return
+  // Keep automatic stepping opposite to the forward drag direction: the incoming card travels right-to-left.
+  autoRotationTimer = window.setTimeout(() => requestStep(-1), Math.max(800, Math.min(6000, props.stepIntervalMs || AUTO_ROTATION_INTERVAL_MS)))
+}
+
+function requestFrame(): void {
+  if (!frameId && !document.hidden) frameId = window.requestAnimationFrame(render)
+}
+
+function beginTransition(targetIndex: number, durationMs = STEP_TRANSITION_MS): void {
+  const count = props.items.length
+  if (count < 2) return
+  cancelAutoRotation()
+  const target = modulo(targetIndex, count)
+  const targetAngle = nearestEquivalentAngle(angleForIndex(target), angle)
+  if (durationMs === 0 || shouldReduceMotion()) {
+    angle = normalizeAngle(targetAngle)
+    activeIndex = target
+    layoutCards()
+    scheduleAutoRotation()
+    return
+  }
+  transition = {
+    from: angle,
+    to: targetAngle,
+    targetIndex: target,
+    startedAt: performance.now(),
+    durationMs,
+  }
+  stage.value?.setAttribute('data-transitioning', 'true')
+  requestFrame()
+}
+
+function requestStep(direction: number): void {
+  if (props.mode !== 'step' || props.items.length < 2 || !direction) return
+  const normalizedDirection = direction > 0 ? 1 : -1
+  if (transition) {
+    queuedStep = normalizedDirection
+    return
+  }
+  activeIndex = nearestIndex()
+  beginTransition(activeIndex + normalizedDirection)
+}
+
+function advanceTransition(time: number): void {
+  const current = transition
+  if (!current) return
+  const progress = clamp((time - current.startedAt) / current.durationMs, 0, 1)
+  angle = current.from + (current.to - current.from) * easeInOutCubic(progress)
+  layoutCards()
+  if (progress < 1) {
+    requestFrame()
+    return
+  }
+  angle = normalizeAngle(current.to)
+  activeIndex = current.targetIndex
+  transition = null
+  stage.value?.removeAttribute('data-transitioning')
+  const nextStep = queuedStep
+  queuedStep = 0
+  if (nextStep) requestStep(nextStep)
+  else scheduleAutoRotation()
 }
 
 function render(time: number): void {
-  const delta = lastTime ? Math.min(0.032, (time - lastTime) / 1000) : 0.016
-  lastTime = time
-  if (!reducedMotion) {
-    const baseVelocity = pointerInside ? 0 : autoVelocity
-    const angularVelocity = baseVelocity + wheelVelocity
-    if (Math.abs(angularVelocity) > 0.0001) {
-      angle = (angle + angularVelocity * delta) % (Math.PI * 2)
-      layoutDirty = true
-    }
-    if (wheelVelocity !== 0) {
-      wheelVelocity += -wheelVelocity * 10 * delta
-      if (Math.abs(wheelVelocity) < 0.03) {
-        wheelVelocity = 0
-        stage.value?.removeAttribute('data-wheel-active')
-      }
+  frameId = 0
+  if (transition) {
+    advanceTransition(time)
+    return
+  }
+  if (props.mode !== 'classic' || shouldReduceMotion() || document.hidden) return
+  const elapsed = lastFrameTime ? time - lastFrameTime : CLASSIC_FRAME_INTERVAL_MS
+  if (elapsed >= CLASSIC_FRAME_INTERVAL_MS) {
+    const delta = Math.min(0.05, elapsed / 1000)
+    lastFrameTime = time
+    if (!pointerInside || classicVelocity !== 0) {
+      const radiansPerSecond = Math.max(6, Math.min(30, props.classicRotationSpeed || 16)) * Math.PI / 180
+      angle = normalizeAngle(angle + (radiansPerSecond + classicVelocity) * delta)
+      classicVelocity *= Math.pow(0.0003, delta)
+      if (Math.abs(classicVelocity) < 0.001) classicVelocity = 0
+      layoutCards()
     }
   }
-  if (layoutDirty) layoutCards()
-  frameId = window.requestAnimationFrame(render)
+  requestFrame()
+}
+
+function startManualMotion(): void {
+  cancelAutoRotation()
+  stage.value?.setAttribute('data-manual-motion', 'true')
+}
+
+function finishManualMotion(): void {
+  stage.value?.removeAttribute('data-manual-motion')
+  if (props.mode === 'step' && !transition) scheduleAutoRotation()
 }
 
 function onWheel(event: WheelEvent): void {
   if (!stage.value) return
   event.preventDefault()
-  const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE
-    ? 16
-    : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
-      ? stage.value.clientHeight
-      : 1
-  const impulse = clamp((event.deltaY * unit) / 45, -4, 4)
-  if (reducedMotion) {
-    angle = (angle + impulse * 0.08) % (Math.PI * 2)
-    layoutDirty = true
+  if (props.mode === 'classic') {
+    classicVelocity = clamp(classicVelocity + event.deltaY / 420, -1.4, 1.4)
+    requestFrame()
     return
   }
-  wheelVelocity = clamp(wheelVelocity + impulse, -5, 5)
-  stage.value.dataset.wheelActive = 'true'
+  wheelDelta += event.deltaY
+  window.clearTimeout(wheelResetTimer)
+  wheelResetTimer = window.setTimeout(() => { wheelDelta = 0 }, 140)
+  if (Math.abs(wheelDelta) < WHEEL_STEP_THRESHOLD) return
+  // Match the natural vertical wheel direction with the visual card movement.
+  const direction = -Math.sign(wheelDelta)
+  wheelDelta = 0
+  requestStep(direction)
 }
 
 function onPointerDown(event: PointerEvent): void {
   if (!stage.value || (event.pointerType === 'mouse' && event.button !== 0)) return
   activePointerId = event.pointerId
-  pointerX = event.clientX
-  pointerTime = event.timeStamp
+  dragStartX = event.clientX
+  dragStartAngle = angle
   dragDistance = 0
   dragged = false
-  wheelVelocity = 0
-  pointerInside = true
+  classicVelocity = 0
+  startManualMotion()
   stage.value.dataset.dragActive = 'true'
 }
 
 function onPointerMove(event: PointerEvent): void {
   if (!stage.value || event.pointerId !== activePointerId) return
-  const deltaX = event.clientX - pointerX
-  const elapsed = Math.max(8, event.timeStamp - pointerTime)
-  pointerX = event.clientX
-  pointerTime = event.timeStamp
-  dragDistance += Math.abs(deltaX)
+  const deltaX = event.clientX - dragStartX
+  dragDistance = Math.max(dragDistance, Math.abs(deltaX))
   if (!dragged && dragDistance > 8) {
     dragged = true
     try {
@@ -220,9 +328,9 @@ function onPointerMove(event: PointerEvent): void {
       // Synthetic events and older WebViews may not expose pointer capture.
     }
   }
-  angle = (angle + deltaX * 0.008) % (Math.PI * 2)
-  if (!reducedMotion) wheelVelocity = clamp((deltaX / elapsed) * 3.2, -5, 5)
-  layoutDirty = true
+  const motionRadius = Math.max(geometry.radiusX, 96)
+  angle = normalizeAngle(dragStartAngle + (deltaX / motionRadius) * 0.78)
+  layoutCards()
   event.preventDefault()
 }
 
@@ -234,8 +342,19 @@ function finishPointer(event: PointerEvent): void {
     // The browser may already have released capture after pointer cancellation.
   }
   activePointerId = null
-  pointerInside = event.pointerType === 'mouse'
   stage.value.removeAttribute('data-drag-active')
+  if (props.mode === 'step') beginTransition(nearestIndex(), 220)
+  else requestFrame()
+  finishManualMotion()
+  emit('release')
+}
+
+function onPointerEnter(): void {
+  pointerInside = true
+}
+
+function onPointerLeave(): void {
+  pointerInside = false
   emit('release')
 }
 
@@ -248,39 +367,70 @@ function onCardClick(event: MouseEvent, tool: ToolDefinition): void {
   emit('open', tool)
 }
 
-function onPointerEnter(): void {
-  pointerInside = true
-}
-
-function onPointerLeave(): void {
-  pointerInside = false
-  emit('release')
-}
-
-function clamp(value: number, minimum: number, maximum: number): number {
-  return Math.min(maximum, Math.max(minimum, value))
+function resetForMode(): void {
+  window.cancelAnimationFrame(frameId)
+  frameId = 0
+  transition = null
+  queuedStep = 0
+  classicVelocity = 0
+  lastFrameTime = 0
+  cancelAutoRotation()
+  activeIndex = nearestIndex()
+  if (props.mode === 'step') angle = normalizeAngle(angleForIndex(activeIndex))
+  stage.value?.setAttribute('data-carousel-mode', props.mode)
+  stage.value?.removeAttribute('data-transitioning')
+  updateGeometry()
+  layoutCards()
+  if (props.mode === 'classic' && !shouldReduceMotion()) requestFrame()
+  else scheduleAutoRotation()
 }
 
 function onVisibilityChange(): void {
-  window.cancelAnimationFrame(frameId)
-  if (!document.hidden) {
-    lastTime = 0
-    frameId = window.requestAnimationFrame(render)
+  if (document.hidden) {
+    window.cancelAnimationFrame(frameId)
+    frameId = 0
+    if (transition) {
+      angle = normalizeAngle(transition.to)
+      activeIndex = transition.targetIndex
+      transition = null
+      queuedStep = 0
+      layoutCards()
+    }
+    classicVelocity = 0
+    cancelAutoRotation()
+    stage.value?.setAttribute('data-animation-paused', 'true')
+    stage.value?.removeAttribute('data-transitioning')
+    return
   }
+  stage.value?.removeAttribute('data-animation-paused')
+  resetForMode()
 }
 
-onMounted(() => {
-  reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  resizeObserver = new ResizeObserver(updateStageGeometry)
+onMounted(async () => {
+  systemReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  await nextTick()
+  resizeObserver = new ResizeObserver(() => {
+    updateGeometry()
+    layoutCards()
+  })
   if (stage.value) resizeObserver.observe(stage.value)
   document.addEventListener('visibilitychange', onVisibilityChange)
-  updateStageGeometry()
-  layoutCards()
-  frameId = window.requestAnimationFrame(render)
+  resetForMode()
 })
+
+watch(() => props.items.map((item) => item.card.id), async () => {
+  await nextTick()
+  activeIndex = Math.min(activeIndex, Math.max(0, props.items.length - 1))
+  angle = normalizeAngle(angleForIndex(activeIndex))
+  resetForMode()
+}, { deep: true })
+
+watch(() => [props.mode, props.classicRotationSpeed, props.stepIntervalMs, props.reducedMotion], resetForMode)
 
 onBeforeUnmount(() => {
   window.cancelAnimationFrame(frameId)
+  window.clearTimeout(wheelResetTimer)
+  cancelAutoRotation()
   document.removeEventListener('visibilitychange', onVisibilityChange)
   resizeObserver?.disconnect()
 })
@@ -290,7 +440,7 @@ onBeforeUnmount(() => {
   <section class="home-tools" aria-labelledby="home-tools-title">
     <header class="home-section-heading">
       <div><span>TOOLS</span><h2 id="home-tools-title">工具模块</h2></div>
-      <small>{{ workspaceTools.length }} 个本地模块</small>
+      <small>{{ items.length }} 个首页模块</small>
     </header>
     <div
       ref="stage"
@@ -305,30 +455,30 @@ onBeforeUnmount(() => {
       @wheel="onWheel"
     >
       <button
-        v-for="(tool, index) in workspaceTools"
-        :key="tool.id"
-        :ref="(element) => setCardRef(element, index)"
+        v-for="(item, index) in items"
+        :key="item.card.id"
+        :ref="(element) => setCardRef(element, item.card.id)"
         class="home-tool-card"
-        :class="`tool-${tool.id}`"
-        :data-tool="tool.id"
-        :style="{ '--home-item-index': index }"
+        :class="`tool-${item.tool.id}`"
+        :data-tool="item.tool.id"
+        :style="{ '--home-item-index': index, '--tool-accent': item.card.accentColor }"
         type="button"
-        @pointerenter="emit('focus', tool)"
+        @pointerenter="emit('focus', item.tool)"
         @pointerleave="emit('release')"
         @pointercancel="emit('release')"
-        @focus="emit('focus', tool)"
+        @focus="emit('focus', item.tool)"
         @blur="emit('release')"
-        @click="onCardClick($event, tool)"
+        @click="onCardClick($event, item.tool)"
       >
         <span class="home-card-topline">
           <em>MODULE {{ String(index + 1).padStart(2, '0') }}</em>
           <ArrowUpRight :size="15" aria-hidden="true" />
         </span>
         <span class="home-card-main">
-          <span class="home-tool-icon"><component :is="tool.icon" :size="25" :stroke-width="1.65" aria-hidden="true" /></span>
+          <span class="home-tool-icon"><component :is="item.tool.icon" :size="25" :stroke-width="1.65" aria-hidden="true" /></span>
           <span class="home-tool-copy">
-            <strong>{{ tool.name }}</strong>
-            <small>{{ tool.description }}</small>
+            <strong>{{ item.card.title }}</strong>
+            <small>{{ item.card.description || item.tool.description }}</small>
           </span>
         </span>
         <span class="home-card-meter" aria-hidden="true">

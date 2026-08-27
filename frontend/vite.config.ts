@@ -2,9 +2,11 @@ import { fileURLToPath, URL } from 'node:url'
 
 import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vite'
+import { appVersionDefine } from './version.config.ts'
 
 export default defineConfig({
   base: './',
+  define: appVersionDefine,
   plugins: [vue()],
   resolve: {
     alias: {

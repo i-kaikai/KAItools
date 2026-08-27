@@ -10,7 +10,8 @@ $BuildWork = Join-Path $RepoRoot 'build\pyinstaller'
 $DistRoot = Join-Path $RepoRoot 'dist'
 $PortableRoot = Join-Path $DistRoot 'KAITools'
 $ReleaseRoot = Join-Path $RepoRoot 'release'
-$ZipPath = Join-Path $ReleaseRoot 'KAITools-v0.1.0-windows-x64.zip'
+$Version = (Get-Content -LiteralPath (Join-Path $RepoRoot 'VERSION') -Raw -Encoding UTF8).Trim()
+$ZipPath = Join-Path $ReleaseRoot "KAITools-v$Version-windows-x64.zip"
 $HashPath = "$ZipPath.sha256"
 
 & (Join-Path $PSScriptRoot 'verify.ps1') -SkipE2E:$SkipE2E

@@ -1,8 +1,9 @@
 import { expect, test, type Page } from '@playwright/test'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const qaDir = resolve(import.meta.dirname, '../../../build/qa')
+const appVersion = readFileSync(resolve(import.meta.dirname, '../../../VERSION'), 'utf8').trim()
 
 async function assertViewportIntegrity(page: Page): Promise<void> {
   const integrity = await page.evaluate(() => {
@@ -60,6 +61,7 @@ async function assertScrollContainers(page: Page): Promise<void> {
     return {
       sidebar: stateFor('.tool-nav'),
       tabs: stateFor('.tab-strip'),
+      homePage: stateFor('.home-page'),
       workbench: stateFor('.home-workbench'),
     }
   })
@@ -72,12 +74,51 @@ async function assertScrollContainers(page: Page): Promise<void> {
   expect(scrollState.tabs?.overflowX).toBe('auto')
   expect(scrollState.tabs?.overflowY).toBe('hidden')
   expect(scrollState.tabs?.scrollHeight).toBeLessThanOrEqual(scrollState.tabs?.clientHeight ?? 0)
+  if (scrollState.homePage) {
+    expect(scrollState.homePage.overflowX).toBe('hidden')
+    expect(scrollState.homePage.overflowY).toBe('auto')
+    expect(scrollState.homePage.scrollbarColor).not.toBe('auto')
+  }
   if (scrollState.workbench) {
-    expect(scrollState.workbench.overflowX).toBe('hidden')
-    expect(scrollState.workbench.overflowY).toBe('auto')
-    expect(scrollState.workbench.scrollbarColor).not.toBe('auto')
+    expect(scrollState.workbench.overflowX).toBe('visible')
+    expect(scrollState.workbench.overflowY).toBe('visible')
   }
 }
+
+async function openWorkspaceTool(page: Page, name: string): Promise<void> {
+  const shortcut = page.locator('.tool-nav').getByRole('button', { name, exact: true })
+  if (await shortcut.count()) {
+    await shortcut.first().click()
+    return
+  }
+
+  await page.getByRole('button', { name: '搜索工具' }).click()
+  const dialog = page.getByRole('dialog', { name: '搜索工具' })
+  const input = page.getByLabel('输入工具名称、用途或关键词')
+  await expect(dialog).toBeVisible()
+  await input.fill(name)
+  await input.press('Enter')
+  await expect(dialog).toBeHidden()
+}
+
+test('sidebar active tool uses a restrained dark selection in both themes', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  const expandSidebar = page.getByRole('button', { name: '展开侧栏' })
+  if (await expandSidebar.count()) await expandSidebar.click()
+  await openWorkspaceTool(page, 'Java 转义')
+
+  const activeTool = page.locator('.tool-nav-row.active')
+  await expect(activeTool).toContainText('Java 转义')
+  await expect(activeTool).toHaveCSS('background-color', 'rgb(53, 38, 77)')
+  await expect(activeTool).toHaveCSS('color', 'rgb(243, 237, 255)')
+  await page.screenshot({ path: resolve(qaDir, `sidebar-active-light-${testInfo.project.name}.png`), fullPage: true })
+
+  await page.locator('html').evaluate((element) => element.setAttribute('data-theme', 'dark'))
+  await expect(activeTool).toHaveCSS('background-color', 'rgb(43, 33, 65)')
+  await expect(activeTool).toHaveCSS('color', 'rgb(240, 234, 255)')
+  await page.screenshot({ path: resolve(qaDir, `sidebar-active-dark-${testInfo.project.name}.png`), fullPage: true })
+})
 
 async function sampleParticleCanvas(page: Page): Promise<{ brightPixels: number; colorRange: number; hash: number }> {
   return page.locator('.particle-canvas').evaluate((canvas: HTMLCanvasElement) => {
@@ -110,26 +151,26 @@ for (const viewport of [
   { width: 1280, height: 800, name: 'desktop' },
   { width: 1600, height: 900, name: 'wide' },
   { width: 2048, height: 1024, name: 'large' },
+  { width: 2560, height: 1440, name: 'qhd' },
+  { width: 3440, height: 1440, name: 'ultrawide' },
+  { width: 3840, height: 2160, name: '4k' },
 ]) {
   test(`home and JSON workspace ${viewport.name}`, async ({ page }) => {
     await page.setViewportSize(viewport)
     await page.goto('/')
     await expect(page.getByRole('heading', { name: 'KAITools' })).toBeVisible({ timeout: 15_000 })
     await expect(page.locator('.particle-field')).toHaveAttribute('data-ready', 'true')
-    await expect(page.locator('.particle-field')).toHaveAttribute('data-stage', 'hero')
+    await expect(page.locator('.particle-field')).toHaveAttribute('data-stage', 'workbench')
     await expect(page.locator('.app-shell')).toHaveClass(/home-active/)
-    await expect(page.getByRole('button', { name: '进入工具台' })).toBeVisible()
-    await expect(page.locator('.home-orbit-copy')).toHaveCSS('opacity', '1')
-    await expect(page.locator('.home-orbit-copy h1')).toHaveCSS('font-size', '38px')
-    await expect(page.locator('.home-orbit-copy > small')).toHaveCSS('font-size', '10px')
-    await expect(page.getByRole('button', { name: '进入工具台' })).toHaveCSS('height', '48px')
+    await expect(page.locator('.home-launchpad')).toBeVisible()
+    await expect(page.locator('.home-next .home-title-block h1')).toHaveCSS('font-size', '42px')
     const bottomControls = await page.evaluate(() => {
       const visibleHeight = window.visualViewport?.height ?? window.innerHeight
-      const entry = document.querySelector('.home-enter-action')?.getBoundingClientRect()
+      const launchpad = document.querySelector('.home-launchpad')?.getBoundingClientRect()
       const theme = document.querySelector('.sidebar-footer')?.getBoundingClientRect()
-      return { visibleHeight, entryBottom: entry?.bottom ?? Infinity, themeBottom: theme?.bottom ?? Infinity }
+      return { visibleHeight, launchpadTop: launchpad?.top ?? Infinity, themeBottom: theme?.bottom ?? Infinity }
     })
-    expect(bottomControls.entryBottom).toBeLessThanOrEqual(bottomControls.visibleHeight)
+    expect(bottomControls.launchpadTop).toBeLessThan(bottomControls.visibleHeight)
     expect(bottomControls.themeBottom).toBeLessThanOrEqual(bottomControls.visibleHeight)
     await assertScrollContainers(page)
     const homeTopbarColor = await page.locator('.tab-strip').evaluate((element) => getComputedStyle(element).backgroundColor)
@@ -138,37 +179,72 @@ for (const viewport of [
     expect(particleFrame.brightPixels).toBeGreaterThan(20)
     expect(particleFrame.colorRange).toBeGreaterThan(30)
     await assertViewportIntegrity(page)
-    await page.screenshot({ path: resolve(qaDir, `home-orbit-${viewport.name}-light.png`), fullPage: true })
+    if (viewport.width <= 2048) await page.screenshot({ path: resolve(qaDir, `home-launchpad-${viewport.name}-light.png`), fullPage: true })
 
-    await page.getByRole('button', { name: '进入工具台' }).click()
     await expect(page.locator('.home-content')).toBeVisible()
-    if (viewport.name === 'large') {
+    if (viewport.width >= 1600) {
       const widthUsage = await page.evaluate(() => {
         const content = document.querySelector('.home-content')?.getBoundingClientRect()
         const workspace = document.querySelector('.workspace')?.getBoundingClientRect()
         return content && workspace ? content.width / workspace.width : 0
       })
-      expect(widthUsage).toBeGreaterThan(0.85)
+      expect(widthUsage).toBeGreaterThan(0.98)
     }
     await expect(page.locator('.particle-field')).toHaveAttribute('data-stage', 'workbench')
-    await expect(page.locator('.home-tool-card')).toHaveCount(17)
+    await expect(page.locator('.home-launchpad')).toBeVisible()
+    await expect(page.locator('.home-pinned-note')).toBeVisible()
+    await expect(page.locator('.home-pinned-note')).toContainText('关于 KAITools')
+    const launchpadLayout = await page.evaluate(() => {
+      const launchpad = document.querySelector('.home-launchpad')?.getBoundingClientRect()
+      const launchpadCopy = document.querySelector('.home-launchpad-copy')?.getBoundingClientRect()
+      const deck = document.querySelector('.home-next-deck')?.getBoundingClientRect()
+      const pinnedNote = document.querySelector('.home-pinned-note')?.getBoundingClientRect()
+      const home = document.querySelector('.home-page')?.getBoundingClientRect()
+      const workspace = document.querySelector('.workspace')?.getBoundingClientRect()
+      return {
+        launchpadHeight: launchpad?.height ?? Infinity,
+        copyHeight: launchpadCopy?.height ?? Infinity,
+        copyWidth: launchpadCopy?.width ?? 0,
+        deckHeight: deck?.height ?? Infinity,
+        deckWidth: deck?.width ?? 0,
+        pinnedNoteHeight: pinnedNote?.height ?? Infinity,
+        pinnedNoteWidth: pinnedNote?.width ?? 0,
+        scrollbarRightDelta: Math.abs((home?.right ?? 0) - (workspace?.right ?? Infinity)),
+      }
+    })
+    if (viewport.width >= 1200) {
+      expect(Math.abs(launchpadLayout.copyHeight - launchpadLayout.deckHeight)).toBeLessThanOrEqual(2)
+      expect(Math.abs(launchpadLayout.copyHeight - launchpadLayout.pinnedNoteHeight)).toBeLessThanOrEqual(2)
+      expect(launchpadLayout.deckWidth / launchpadLayout.copyWidth).toBeGreaterThan(1.75)
+      expect(launchpadLayout.deckWidth / launchpadLayout.copyWidth).toBeLessThan(2.25)
+      expect(launchpadLayout.pinnedNoteWidth / launchpadLayout.copyWidth).toBeGreaterThan(.9)
+      expect(launchpadLayout.pinnedNoteWidth / launchpadLayout.copyWidth).toBeLessThan(1.1)
+      expect(launchpadLayout.scrollbarRightDelta).toBeLessThanOrEqual(1)
+    }
+    const openPinnedNote = page.getByRole('button', { name: '打开笔记', exact: true })
+    await expect(openPinnedNote).toHaveCSS('background-color', 'rgb(27, 24, 48)')
+    await openPinnedNote.hover()
+    await expect(openPinnedNote.locator('.home-pinned-note-action-icon')).not.toHaveCSS('transform', 'none')
+    await expect(page.locator('.home-active-module')).toHaveCount(0)
+    await expect(page.locator('.home-shortcut-grid')).toHaveCount(0)
+    await expect(page.locator('.home-tool-card')).toHaveCount(6)
     await expect(page.locator('.home-category-group')).toHaveCount(5)
     const currentDate = page.locator('.home-current-date')
     await expect(currentDate).toBeVisible()
     await expect(currentDate).toHaveAttribute('datetime', /^\d{4}-\d{2}-\d{2}$/)
     await expect(currentDate).toHaveText(/^\d{4}年\d{1,2}月\d{1,2}日 · 星期[一二三四五六日]$/)
-    await expect(currentDate).toHaveCSS('font-size', '12px')
+    await expect(currentDate).toHaveCSS('font-size', '13px')
     await assertScrollContainers(page)
     await assertViewportIntegrity(page)
-    await page.screenshot({ path: resolve(qaDir, `home-workbench-${viewport.name}-light.png`), fullPage: true })
+    if (viewport.width <= 2048) await page.screenshot({ path: resolve(qaDir, `home-workbench-${viewport.name}-light.png`), fullPage: true })
 
-    await page.locator('.home-tool-orbit').hover({ position: { x: 12, y: 12 } })
-    await page.locator('.home-tool-card[data-tool="json"]').click()
+    await page.locator('.home-tool-card[data-tool="json"]').focus()
+    await page.keyboard.press('Enter')
     await expect(page.getByRole('heading', { name: 'JSON' })).toBeVisible()
     await expect(page.getByLabel('JSON 输入')).toBeVisible()
     await expect(page.getByText('语法有效')).toBeVisible()
     await assertViewportIntegrity(page)
-    await page.screenshot({ path: resolve(qaDir, `json-${viewport.name}-light.png`), fullPage: true })
+    if (viewport.width <= 2048) await page.screenshot({ path: resolve(qaDir, `json-${viewport.name}-light.png`), fullPage: true })
 
     await page.getByRole('button', { name: '首页', exact: true }).click()
     await expect(page.locator('.particle-field')).toHaveAttribute('data-stage', 'workbench')
@@ -177,9 +253,181 @@ for (const viewport of [
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
     await page.mouse.move(viewport.width / 2, viewport.height / 2)
     await assertViewportIntegrity(page)
-    await page.screenshot({ path: resolve(qaDir, `home-workbench-${viewport.name}-dark.png`), fullPage: true })
+    if (viewport.width <= 2048) await page.screenshot({ path: resolve(qaDir, `home-workbench-${viewport.name}-dark.png`), fullPage: true })
   })
 }
+
+test('homepage surfaces local workspace overview, four system metrics, and an aligned collapsed rail', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 })
+  await page.goto('/')
+  await expect(page.locator('.home-workspace-overview')).toBeVisible()
+  await expect(page.locator('.home-overview-stat-grid > div')).toHaveCount(6)
+  await expect(page.locator('.home-session-tools')).toBeVisible()
+  await expect(page.locator('.home-local-mode-card')).toBeVisible()
+  await expect(page.locator('.home-pinned-note-content p')).toBeVisible()
+  await expect(page.getByRole('region', { name: '系统状态', exact: true })).toBeVisible()
+  await expect(page.locator('.system-status-hero strong')).toBeVisible()
+  await expect(page.locator('.system-status-metrics > div')).toHaveCount(4)
+  await expect(page.locator('.system-status-metrics')).toContainText(/CPU/)
+  await expect(page.locator('.system-status-metrics')).toContainText(/内存/)
+  await expect(page.locator('.system-status-metrics')).toContainText(/电量/)
+  await expect(page.locator('.system-status-metrics')).toContainText(/工作区数据/)
+
+  const shell = page.locator('.app-shell')
+  if (!await shell.evaluate((element) => element.classList.contains('sidebar-collapsed'))) {
+    await page.getByLabel('收起侧栏').click()
+  }
+  const alignment = await page.locator('.app-sidebar').evaluate((sidebar) => {
+    const center = sidebar.getBoundingClientRect().left + sidebar.getBoundingClientRect().width / 2
+    const buttons = [...sidebar.querySelectorAll<HTMLElement>('.tool-nav-main')]
+    return buttons.map((button) => Math.abs(button.getBoundingClientRect().left + button.getBoundingClientRect().width / 2 - center))
+  })
+  expect(Math.max(...alignment)).toBeLessThanOrEqual(1)
+  mkdirSync(qaDir, { recursive: true })
+  await page.screenshot({ path: resolve(qaDir, 'home-workbench-density.png'), fullPage: true })
+})
+
+test('default desktop height keeps the calculator compact and homepage shows current session tools', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await page.getByRole('button', { name: '超级计算器', exact: true }).click()
+  const calculatorLayout = await page.evaluate(() => {
+    const workspace = document.querySelector<HTMLElement>('.workspace')
+    return {
+      workspaceFits: (workspace?.scrollHeight ?? 0) <= (workspace?.clientHeight ?? 0) + 1,
+    }
+  })
+  expect(calculatorLayout.workspaceFits).toBe(true)
+
+  await page.getByRole('button', { name: '首页', exact: true }).click()
+  const sessionIconSpacing = await page.locator('.home-session-tool-grid').evaluate((list) => {
+    const row = list.querySelector<HTMLElement>('button')
+    const icon = row?.querySelector<SVGElement>('svg')
+    const text = row?.querySelector<HTMLElement>('span')
+    if (!row || !icon || !text) return null
+    return text.getBoundingClientRect().left - icon.getBoundingClientRect().right
+  })
+  if (sessionIconSpacing !== null) expect(sessionIconSpacing).toBeGreaterThanOrEqual(8)
+
+  await page.getByRole('button', { name: '笔记', exact: true }).click()
+  await page.getByRole('button', { name: '首页', exact: true }).click()
+  await expect(page.locator('.home-session-tool-grid')).toContainText('笔记')
+  await page.screenshot({ path: resolve(qaDir, 'home-workspace-overview.png'), fullPage: true })
+})
+
+test('notes use one collapsible tree and leave the editor available by default', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await openWorkspaceTool(page, '笔记')
+
+  const workspace = page.locator('.notes-workspace')
+  await expect(workspace).toBeVisible()
+  await expect(page.locator('.notes-tree-panel')).toBeVisible()
+  await expect(page.locator('.notes-list-panel')).toHaveCount(0)
+  await expect(page.getByLabel('Markdown 笔记内容')).toBeVisible()
+  await expect(page.getByRole('button', { name: '编辑', exact: true })).toHaveClass(/active/)
+  await expect(page.getByText('关于 KAITools', { exact: true })).toBeVisible()
+
+  await page.getByRole('button', { name: '文件夹', exact: true }).click()
+  const dialog = page.locator('.notes-dialog')
+  await dialog.locator('input').fill('接口设计')
+  await dialog.getByRole('button', { name: '保存', exact: true }).click()
+  await expect(page.locator('.notes-tree-panel').getByRole('button', { name: '接口设计', exact: true })).toBeVisible()
+
+  await page.locator('.notes-toolbar').getByRole('button', { name: '新建笔记', exact: true }).click()
+  await expect(page.getByLabel('笔记标题')).toHaveValue('未命名笔记')
+  await page.getByLabel('Markdown 笔记内容').fill('# 临时笔记')
+  await expect(page.getByLabel('Markdown 笔记内容')).toContainText('# 临时笔记')
+
+  await page.getByRole('button', { name: '收起笔记树' }).click()
+  await expect(page.locator('.notes-tree-panel')).toBeHidden()
+  await page.getByRole('button', { name: '展开笔记树' }).click()
+  await expect(page.locator('.notes-tree-panel')).toBeVisible()
+  await assertViewportIntegrity(page)
+})
+
+test('restores an account from the persistent refresh cookie after reload', async ({ page }) => {
+  await page.context().addCookies([{
+    name: 'KAITOOLS_REFRESH',
+    value: 'persisted-refresh-cookie',
+    url: 'https://tools.imkai.top/api/auth',
+    httpOnly: true,
+    sameSite: 'None',
+    secure: true,
+  }])
+  let refreshCalls = 0
+  await page.route('**/api/auth/token/refresh', async (route) => {
+    const origin = route.request().headers().origin ?? ''
+    if (route.request().method() === 'OPTIONS') {
+      await route.fulfill({ status: 204, headers: { 'access-control-allow-origin': origin, 'access-control-allow-credentials': 'true' } })
+      return
+    }
+    refreshCalls += 1
+    expect(route.request().headers().cookie ?? '').toContain('KAITOOLS_REFRESH=persisted-refresh-cookie')
+    await route.fulfill({
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': origin, 'access-control-allow-credentials': 'true' },
+      body: JSON.stringify({ ok: true, data: { accessToken: 'memory-only-token', expiresAt: '2030-01-01T00:00:00Z', user: { id: '00000000-0000-0000-0000-000000000001', email: 'persisted@example.test', displayName: '持久化账户', emailVerified: true } } }),
+    })
+  })
+
+  await page.goto('/')
+  await expect(page.locator('.workspace-topbar .account-entry')).toContainText('持久化账户')
+  await page.reload()
+  await expect(page.locator('.workspace-topbar .account-entry')).toContainText('持久化账户')
+  expect(refreshCalls).toBeGreaterThanOrEqual(2)
+})
+
+test('homepage card manager adds a local tool card and opens its tool', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await page.getByRole('button', { name: '展开侧栏' }).click()
+  await page.getByRole('button', { name: '管理首页卡片' }).click()
+  const dialog = page.getByRole('dialog', { name: '管理首页卡片' })
+  await expect(dialog).toBeVisible()
+  const dialogLayer = await page.evaluate(() => {
+    const sidebar = document.querySelector<HTMLElement>('.app-sidebar')
+    const backdrop = document.querySelector<HTMLElement>('.dashboard-card-backdrop')
+    return {
+      sidebarZ: Number(getComputedStyle(sidebar!).zIndex),
+      backdropZ: Number(getComputedStyle(backdrop!).zIndex),
+      viewportWidth: window.innerWidth,
+      backdropWidth: backdrop?.getBoundingClientRect().width ?? 0,
+    }
+  })
+  expect(dialogLayer.backdropZ).toBeGreaterThan(dialogLayer.sidebarZ)
+  expect(dialogLayer.backdropWidth).toBe(dialogLayer.viewportWidth)
+  await expect(dialog.locator('.dashboard-card-list-items > div')).toHaveCount(6)
+  await dialog.getByRole('radio', { name: '连续旋转' }).click()
+  await expect(dialog.getByRole('radio', { name: '连续旋转' })).toHaveAttribute('aria-checked', 'true')
+  await dialog.locator('.dashboard-card-catalog-items').getByRole('button', { name: /JSON/ }).first().click()
+  await dialog.getByLabel('标题').fill('快捷 JSON')
+  await dialog.getByLabel('描述').fill('格式化接口数据')
+  await dialog.getByRole('slider', { name: '连续旋转速度' }).fill('22')
+  await dialog.getByRole('radio', { name: '逐卡切换' }).click()
+  await dialog.getByRole('slider', { name: '逐卡停留时间' }).fill('2400')
+  await dialog.getByRole('radio', { name: '连续旋转' }).click()
+  await dialog.getByRole('button', { name: '保存首页卡片' }).click()
+  await expect(dialog).toBeHidden()
+  const card = page.locator('.home-tool-card[data-tool="json"]')
+  await expect(card).toBeVisible()
+  await expect(card).toContainText('快捷 JSON')
+  await page.reload()
+  await expect(page.locator('.home-tool-card[data-tool="json"]')).toContainText('快捷 JSON')
+  await page.getByRole('button', { name: '管理首页卡片' }).click()
+  await expect(page.getByRole('dialog', { name: '管理首页卡片' }).getByRole('radio', { name: '连续旋转' })).toHaveAttribute('aria-checked', 'true')
+  await expect(page.getByRole('slider', { name: '连续旋转速度' })).toHaveValue('22')
+  await expect(page.getByRole('slider', { name: '逐卡停留时间' })).toHaveValue('2400')
+  await page.getByRole('button', { name: '关闭首页卡片管理' }).click()
+  await expect(page.locator('.home-tool-orbit')).toHaveAttribute('data-carousel-mode', 'classic')
+  const classicCard = page.locator('.home-tool-card[data-front]').first()
+  const classicTransform = await classicCard.evaluate((card) => getComputedStyle(card).transform)
+  await page.waitForTimeout(350)
+  await expect.poll(() => classicCard.evaluate((card) => getComputedStyle(card).transform)).not.toBe(classicTransform)
+  await card.focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('heading', { name: 'JSON' })).toBeVisible()
+})
 
 test('particle planet and tool carousel render, move and respond to the wheel', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 })
@@ -193,64 +441,317 @@ test('particle planet and tool carousel render, move and respond to the wheel', 
   const secondFrame = await sampleParticleCanvas(page)
   expect(secondFrame.hash).not.toBe(firstFrame.hash)
 
-  await page.getByRole('button', { name: '进入工具台' }).click()
   await expect(page.locator('.particle-field')).toHaveAttribute('data-stage', 'workbench')
   const carousel = page.locator('.home-tool-orbit')
-  await expect(carousel).toHaveAttribute('data-orbit-layout', 'landscape')
+  await expect(carousel).toHaveAttribute('data-orbit-layout', /^(compact|landscape)$/)
   await carousel.hover({ position: { x: 12, y: 12 } })
   await page.waitForTimeout(200)
   await expect(page.locator('.home-tool-card[data-front]')).toHaveCount(1)
   const frontCard = page.locator('.home-tool-card[data-front]').first()
+  await expect(frontCard).toHaveCSS('will-change', 'auto')
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+  })
+  const frontToolBeforePause = await frontCard.getAttribute('data-tool')
+  const activeIndexBeforeAutoStep = Number(await carousel.getAttribute('data-active-index'))
+  const transformWhilePaused = await frontCard.evaluate((card) => getComputedStyle(card).transform)
+  await page.waitForTimeout(3_300)
+  await expect.poll(() => frontCard.evaluate((card) => getComputedStyle(card).transform)).toBe(transformWhilePaused)
+  await page.evaluate(() => {
+    delete (document as unknown as { hidden?: boolean }).hidden
+    document.dispatchEvent(new Event('visibilitychange'))
+  })
+  await page.waitForTimeout(3_300)
+  await expect(page.locator('.home-tool-card[data-front]').first()).not.toHaveAttribute('data-tool', frontToolBeforePause ?? '')
+  const activeIndexAfterAutoStep = Number(await carousel.getAttribute('data-active-index'))
+  expect((activeIndexAfterAutoStep - activeIndexBeforeAutoStep + 6) % 6).toBe(5)
   const carouselAppearance = await carousel.evaluate((orbit) => {
-    const orbitStyle = getComputedStyle(orbit)
     const cards = [...orbit.querySelectorAll<HTMLElement>('.home-tool-card')]
     return {
-      maskImage: orbitStyle.maskImage || orbitStyle.webkitMaskImage,
-      opacities: cards.map((card) => Number.parseFloat(getComputedStyle(card).opacity)),
-      borderColors: cards.map((card) => getComputedStyle(card).borderColor),
-      edgeAlphas: cards.map((card) => Number.parseFloat(
-        getComputedStyle(card).getPropertyValue('--card-edge-alpha') || '1',
-      )),
+      cardCount: orbit.dataset.cardCount,
+      radius: Number(orbit.dataset.ringRadius),
+      opacities: cards.map((card) => ({ front: card.hasAttribute('data-front'), value: Number.parseFloat(getComputedStyle(card).opacity) })),
+      perspective: getComputedStyle(orbit).perspective,
     }
   })
-  expect(carouselAppearance.maskImage).toContain('linear-gradient')
-  expect(Math.min(...carouselAppearance.opacities)).toBeGreaterThan(0.9)
-  expect(new Set(carouselAppearance.borderColors).size).toBe(1)
-  expect(Math.max(...carouselAppearance.edgeAlphas)).toBeGreaterThan(0.9)
-  expect(Math.min(...carouselAppearance.edgeAlphas)).toBeLessThan(0.2)
+  expect(carouselAppearance.cardCount).toBe('6')
+  expect(carouselAppearance.radius).toBeGreaterThan(0)
+  expect(carouselAppearance.perspective).not.toBe('none')
+  expect(carouselAppearance.opacities.find((card) => card.front)?.value).toBeGreaterThan(0.9)
+  expect(Math.min(...carouselAppearance.opacities.map((card) => card.value))).toBeLessThan(0.7)
   const frontTool = await frontCard.getAttribute('data-tool')
   await frontCard.hover({ position: { x: 120, y: 50 } })
   await expect(page.locator('.particle-field')).toHaveAttribute('data-active-tool', frontTool ?? 'json')
   const transformBeforeWheel = await frontCard.evaluate((card) => getComputedStyle(card).transform)
+  // Hold manual motion during the assertion so the configurable auto-step timer
+  // cannot race the deliberate wheel input.
+  await carousel.dispatchEvent('pointerdown', { pointerId: 6, pointerType: 'mouse', clientX: 680, clientY: 280, button: 0 })
   await carousel.dispatchEvent('wheel', { deltaY: 480, deltaMode: 0 })
-  await expect(carousel).toHaveAttribute('data-wheel-active', 'true')
+  await expect(carousel).toHaveAttribute('data-transitioning', 'true')
   await page.waitForTimeout(120)
   const transformAfterWheel = await frontCard.evaluate((card) => getComputedStyle(card).transform)
   expect(transformAfterWheel).not.toBe(transformBeforeWheel)
+  await expect.poll(() => carousel.getAttribute('data-transitioning')).toBeNull()
+  const activeIndexAfterWheel = Number(await carousel.getAttribute('data-active-index'))
+  // A real wheel may begin during the tail of a previous motion, so verify the
+  // user-visible card update rather than relying on an internal phase index.
+  expect(activeIndexAfterWheel).not.toBeNaN()
+  await carousel.dispatchEvent('pointerup', { pointerId: 6, pointerType: 'mouse', clientX: 680, clientY: 280, button: 0 })
+  await expect.poll(() => carousel.getAttribute('data-transitioning')).toBeNull()
 
   await carousel.dispatchEvent('pointerdown', { pointerId: 7, pointerType: 'touch', clientX: 680, clientY: 280, button: 0 })
   await expect(carousel).toHaveAttribute('data-drag-active', 'true')
   const transformBeforeTouch = await frontCard.evaluate((card) => getComputedStyle(card).transform)
   await carousel.dispatchEvent('pointermove', { pointerId: 7, pointerType: 'touch', clientX: 500, clientY: 282, buttons: 1 })
-  await page.waitForTimeout(32)
-  const transformAfterTouch = await frontCard.evaluate((card) => getComputedStyle(card).transform)
-  expect(transformAfterTouch).not.toBe(transformBeforeTouch)
+  await expect.poll(
+    () => frontCard.evaluate((card) => getComputedStyle(card).transform),
+    { timeout: 400 },
+  ).not.toBe(transformBeforeTouch)
   await carousel.dispatchEvent('pointerup', { pointerId: 7, pointerType: 'touch', clientX: 500, clientY: 282, button: 0 })
   await expect(carousel).not.toHaveAttribute('data-drag-active', 'true')
   await page.mouse.move(2, 2)
   await expect(page.locator('.particle-field')).not.toHaveAttribute('data-active-tool', frontTool ?? 'json')
 
-  await page.getByRole('button', { name: '返回环星' }).click()
-  await expect(page.locator('.particle-field')).toHaveAttribute('data-stage', 'hero')
-
   await page.getByRole('button', { name: 'JSON', exact: true }).click()
   await page.getByRole('tab', { name: '首页' }).click()
   await expect(page.locator('.particle-field')).toHaveAttribute('data-stage', 'workbench')
-  await expect(page.getByRole('button', { name: '进入工具台' })).toBeHidden()
-
-  await page.getByRole('button', { name: '返回环星' }).click()
   await page.getByRole('button', { name: '首页', exact: true }).click()
   await expect(page.locator('.particle-field')).toHaveAttribute('data-stage', 'workbench')
+})
+
+test('application settings apply local performance, workspace and editor preferences', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'JSON', exact: true }).click()
+  await page.getByRole('button', { name: '固定标签' }).click()
+  await page.getByRole('tab', { name: '首页' }).click()
+  await page.getByRole('button', { name: '应用设置' }).click()
+  const dialog = page.getByRole('dialog', { name: '应用设置' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('radio', { name: '高质量', exact: true })).toHaveAttribute('aria-checked', 'true')
+  await dialog.getByRole('radio', { name: '均衡', exact: true }).click()
+  await expect(page.locator('.particle-field')).toHaveAttribute('data-quality', 'balanced')
+  await dialog.getByLabel('减少动态效果').check()
+  await expect(page.locator('html')).toHaveAttribute('data-motion', 'reduced')
+  const carousel = page.locator('.home-tool-orbit')
+  const indexBeforeReducedWait = await carousel.getAttribute('data-active-index')
+  await page.waitForTimeout(2_000)
+  await expect(carousel).toHaveAttribute('data-active-index', indexBeforeReducedWait ?? '0')
+  await dialog.getByLabel('编辑器字号').selectOption('16')
+  await dialog.getByLabel('编辑器自动换行').uncheck()
+  await dialog.getByRole('radio', { name: '默认收起', exact: true }).click()
+  await dialog.getByLabel('启动时恢复固定标签').uncheck()
+  const capture = dialog.getByRole('button', { name: '录入全局唤起快捷键' })
+  if (testInfo.project.name === 'web') {
+    await expect(capture).toBeDisabled()
+    await expect(dialog.getByRole('status')).toContainText('网页环境由浏览器管理系统快捷键')
+  } else {
+    await capture.click()
+    await page.keyboard.press('Control+Alt+F8')
+    await expect(capture).toContainText('Ctrl + Alt + F8')
+    await expect(dialog.getByRole('status')).toContainText('保存后立即生效')
+  }
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  await page.waitForTimeout(420)
+  await page.reload()
+  await expect(page.locator('.app-shell')).toHaveClass(/sidebar-collapsed/)
+  await expect(page.locator('.workspace-tab[data-tool="json"]')).toHaveCount(0)
+  await expect(page.locator('.particle-field')).toHaveAttribute('data-quality', 'balanced')
+  await expect(page.locator('html')).toHaveAttribute('data-motion', 'reduced')
+  await page.getByRole('button', { name: 'JSON', exact: true }).click()
+  const editor = page.getByLabel('JSON 输入')
+  await expect(editor).toHaveCSS('font-size', '16px')
+  await expect(editor).toHaveCSS('white-space', 'pre')
+  await page.getByRole('button', { name: '应用设置' }).click()
+  const reopened = page.getByRole('dialog', { name: '应用设置' })
+  await reopened.getByRole('radio', { name: '关闭', exact: true }).click()
+  await expect(page.locator('.particle-field')).toHaveCount(0)
+  await expect(page.locator('.particle-canvas')).toHaveCount(0)
+})
+
+test('application settings remain usable at the compact desktop minimum', async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 640 })
+  await page.goto('/')
+  await page.getByRole('button', { name: '应用设置' }).click()
+  const dialog = page.getByRole('dialog', { name: '应用设置' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('radiogroup', { name: '背景粒子质量' })).toBeVisible()
+  await expect(dialog.getByLabel('编辑器字号')).toBeVisible()
+  await expect(dialog.getByRole('button', { name: '保存并启用' })).toBeVisible()
+  await assertViewportIntegrity(page)
+})
+
+test('expanded sidebar shows complete application and WebView2 versions', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 960, height: 640 })
+  await page.goto('/')
+  const expandSidebar = page.getByRole('button', { name: '展开侧栏' })
+  if (await expandSidebar.count()) await expandSidebar.click()
+
+  const runtime = page.locator('.brand-row .sidebar-runtime')
+  const version = runtime.locator('.runtime-version')
+  const environment = runtime.locator(':scope > small')
+  await expect(version).toContainText(`v${appVersion}`)
+  await environment.evaluate((element) => { element.textContent = 'WebView2 139.0.3405.125' })
+
+  const measurements = await runtime.evaluate((element) => {
+    const environment = element.querySelector<HTMLElement>(':scope > small')
+    return {
+      runtime: { clientWidth: element.clientWidth, scrollWidth: element.scrollWidth },
+      environment: environment ? { clientWidth: environment.clientWidth, scrollWidth: environment.scrollWidth } : null,
+    }
+  })
+  expect(measurements.runtime.scrollWidth, JSON.stringify(measurements)).toBeLessThanOrEqual(measurements.runtime.clientWidth + 1)
+  expect(measurements.environment).not.toBeNull()
+  expect(measurements.environment?.scrollWidth, JSON.stringify(measurements)).toBeLessThanOrEqual((measurements.environment?.clientWidth ?? 0) + 1)
+  const placement = await page.locator('.app-sidebar').evaluate((sidebar) => {
+    const brand = sidebar.querySelector<HTMLElement>('.brand-row')?.getBoundingClientRect()
+    const runtime = sidebar.querySelector<HTMLElement>('.sidebar-runtime')?.getBoundingClientRect()
+    const home = sidebar.querySelector<HTMLElement>('.sidebar-home')?.getBoundingClientRect()
+    const footer = sidebar.querySelector<HTMLElement>('.sidebar-footer')?.getBoundingClientRect()
+    return { brand, runtime, home, footer }
+  })
+  expect(placement.brand).not.toBeNull()
+  expect(placement.runtime).not.toBeNull()
+  expect(placement.home).not.toBeNull()
+  expect(placement.footer).not.toBeNull()
+  expect(placement.runtime!.top).toBeGreaterThan(placement.brand!.top)
+  expect(placement.runtime!.bottom).toBeLessThanOrEqual(placement.brand!.bottom)
+  expect(placement.runtime!.bottom).toBeLessThanOrEqual(placement.home!.top)
+  expect(placement.runtime!.top).toBeLessThan(placement.footer!.top)
+  await assertViewportIntegrity(page)
+
+  mkdirSync(qaDir, { recursive: true })
+  await page.screenshot({ path: resolve(qaDir, `sidebar-runtime-${testInfo.project.name || 'desktop'}.png`), fullPage: true })
+})
+
+test('Escape hides the desktop shell through the fixed tray bridge', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name === 'web', 'The browser build intentionally has no tray bridge.')
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await page.evaluate(() => {
+    window.pywebview = {
+      api: {
+        hide_to_tray: async () => {
+          document.documentElement.dataset.trayBridgeCalled = 'true'
+          return { ok: true, data: null }
+        },
+      },
+    }
+  })
+  await page.keyboard.press('Escape')
+  await expect(page.locator('html')).toHaveAttribute('data-tray-bridge-called', 'true')
+})
+
+test('calculator and system status remain usable in the local workbench', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  const systemStatus = page.getByRole('region', { name: '系统状态', exact: true })
+  await expect(systemStatus).toBeVisible()
+  await page.getByRole('button', { name: '刷新系统状态' }).click()
+  await expect(systemStatus).toContainText(/同步服务/)
+
+  await page.getByRole('button', { name: '超级计算器', exact: true }).click()
+  await page.getByLabel('科学计算表达式').fill('sqrt(2)^2 + sin(pi / 2)')
+  await page.getByRole('button', { name: '计算', exact: true }).click()
+  await expect(page.locator('.calculator-result-stage code')).toHaveText('3')
+  await page.getByRole('radio', { name: '程序员', exact: true }).click()
+  await page.getByLabel('程序员输入整数').fill('FF')
+  await page.getByLabel('程序员输入进制').selectOption('16')
+  await expect(page.locator('.calculator-base-grid code').nth(2)).toHaveText('255')
+  await page.getByRole('radio', { name: '金融/日期', exact: true }).click()
+  await page.getByLabel('本金金额').fill('100')
+  await page.getByLabel('年利率').fill('10')
+  await page.getByLabel('期数').fill('2')
+  await expect(page.locator('.calculator-inline-result code')).toHaveText('121')
+  await page.getByRole('radio', { name: '工程', exact: true }).click()
+  await expect(page.locator('.calculator-inline-result code')).toHaveText('-2')
+
+  await page.getByRole('radio', { name: '科学', exact: true }).click()
+  await page.evaluate(() => {
+    document.documentElement.dataset.theme = 'light'
+  })
+  await expect(page.getByRole('button', { name: '清空', exact: true })).toHaveCSS('color', 'rgb(25, 27, 31)')
+  mkdirSync(qaDir, { recursive: true })
+  await page.screenshot({ path: resolve(qaDir, 'calculator-workbench-light.png'), fullPage: true })
+})
+
+test('clipboard history remains discoverable but desktop-only in the web build', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'web', 'Desktop build exercises the real clipboard bridge.')
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.context().route('https://gitee.com/**', (route) => route.fulfill({ contentType: 'text/html', body: '<title>Desktop download</title>' }))
+  await page.goto('/')
+  await page.getByRole('button', { name: '剪切板历史', exact: true }).click()
+  await expect(page.getByText('剪切板历史仅 Windows 桌面版可用')).toBeVisible()
+  const popupPromise = page.waitForEvent('popup')
+  await page.getByRole('button', { name: '下载 Windows 桌面版' }).click()
+  const popup = await popupPromise
+  await popup.waitForURL('https://gitee.com/i-_-kaikai/kaitools/releases')
+  await popup.close()
+})
+
+test('ring geometry stays compact across card counts and viewports', async ({ page }) => {
+  const toolIds = ['json', 'java', 'timestamp', 'base64-text', 'cron', 'notes', 'json-diff', 'json-java', 'base64-image', 'base64-file', 'sql', 'yaml', 'xml', 'text-diff', 'text-stats', 'regex', 'hosts', 'md5']
+  const scenarios = [
+    { count: 1, viewport: { width: 960, height: 640 } },
+    { count: 2, viewport: { width: 1280, height: 800 } },
+    { count: 3, viewport: { width: 1920, height: 1080 } },
+    { count: 6, viewport: { width: 3440, height: 1440 } },
+    { count: toolIds.length, viewport: { width: 390, height: 844 } },
+  ]
+
+  await page.goto('/')
+  for (const scenario of scenarios) {
+    await page.setViewportSize(scenario.viewport)
+    const cards = toolIds.slice(0, scenario.count).map((toolId, index) => ({
+      id: `geometry-${toolId}`,
+      toolId,
+      title: toolId,
+      description: toolId,
+      accentColor: '#35d0a7',
+      sortOrder: index,
+      enabled: true,
+    }))
+    await page.evaluate((dashboardCards) => {
+      localStorage.setItem('devtoolkit.browser.state.v1', JSON.stringify({ dashboardCards }))
+    }, { schemaVersion: 1, carouselMode: 'step', classicRotationSpeed: 16, stepIntervalMs: 1600, cards })
+    await page.reload()
+    const carousel = page.locator('.home-tool-orbit')
+    await expect(page.locator('.home-tool-card')).toHaveCount(scenario.count)
+    const geometry = await carousel.evaluate((orbit) => {
+      const stage = orbit.getBoundingClientRect()
+      const cards = [...orbit.querySelectorAll<HTMLElement>('.home-tool-card')].map((card) => {
+        const rect = card.getBoundingClientRect()
+        return {
+          front: card.hasAttribute('data-front'),
+          left: rect.left,
+          right: rect.right,
+          top: rect.top,
+          bottom: rect.bottom,
+          center: rect.left + rect.width / 2,
+          width: rect.width,
+        }
+      })
+      const front = cards.find((card) => card.front)
+      if (!front) return null
+      const left = cards.filter((card) => card.center < front.center - 1).sort((a, b) => b.center - a.center)[0]
+      const right = cards.filter((card) => card.center > front.center + 1).sort((a, b) => a.center - b.center)[0]
+      return {
+        cardCount: Number(orbit.dataset.cardCount),
+        radius: Number(orbit.dataset.ringRadius),
+        frontWithinStage: front.left >= stage.left - 1 && front.right <= stage.right + 1 && front.top >= stage.top - 1 && front.bottom <= stage.bottom + 1,
+        neighborGap: Math.max(0, ...(left ? [front.left - left.right] : []), ...(right ? [right.left - front.right] : [])),
+        frontWidth: front.width,
+      }
+    })
+    expect(geometry).not.toBeNull()
+    expect(geometry?.cardCount).toBe(scenario.count)
+    expect(geometry?.frontWithinStage).toBe(true)
+    if (scenario.count === 1) expect(geometry?.radius).toBe(0)
+    else expect(geometry?.radius).toBeGreaterThan(0)
+    if (scenario.count >= 3) expect(geometry?.neighborGap).toBeLessThanOrEqual((geometry?.frontWidth ?? 0) * 0.25)
+  }
 })
 
 test('formatted JSON output remains editable and drives tree and graph views', async ({ page }) => {
@@ -301,25 +802,26 @@ test('new conversion, formatting and analysis tools produce results', async ({ p
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto('/')
 
-  await page.getByRole('button', { name: 'Base64 文本', exact: true }).click()
+  await openWorkspaceTool(page, 'Base64 文本')
   await page.getByLabel('Base64 文本输入').fill('你好')
   await expect(page.getByLabel('Base64 文本结果')).toContainText('5L2g5aW9')
 
-  await page.getByRole('button', { name: 'SQL 美化', exact: true }).click()
+  await openWorkspaceTool(page, 'SQL 美化')
   await page.getByLabel('SQL 输入').fill('select id,name from users where enabled=1')
   await expect(page.getByLabel('SQL 格式化结果')).toContainText('SELECT')
 
-  await page.getByRole('button', { name: 'JSON 对比', exact: true }).click()
+  await openWorkspaceTool(page, 'JSON 对比')
   await expect(page.getByLabel('JSON 差异结果')).toHaveCount(0)
   await expect(page.getByLabel('左侧 JSON').locator('.cm-diff-mark-removed')).toBeVisible()
   await expect(page.getByLabel('右侧 JSON').locator('.cm-diff-mark-added')).toBeVisible()
+  await expect(page.getByLabel('左侧 JSON').locator('.cm-diff-mark-removed')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
 
-  await page.getByRole('button', { name: '文本比较', exact: true }).click()
+  await openWorkspaceTool(page, '文本比较')
   await expect(page.getByLabel('文本差异结果')).toHaveCount(0)
   await expect(page.getByLabel('左侧文本').locator('.cm-diff-mark-removed')).toBeVisible()
   await expect(page.getByLabel('右侧文本').locator('.cm-diff-mark-added')).toBeVisible()
 
-  await page.getByRole('button', { name: '文本统计', exact: true }).click()
+  await openWorkspaceTool(page, '文本统计')
   await page.getByLabel('文本统计输入').fill('你好 KAITools')
   await expect(page.getByLabel('文本统计结果')).toContainText('UTF-8 字节')
   await assertViewportIntegrity(page)
@@ -329,7 +831,7 @@ test('all tools render and remain usable', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto('/')
   for (const tool of ['JSON / JavaBean', 'Java 转义', '日期转换', 'Base64 图片', 'Base64 文件', 'Crontab 生成器', 'YAML 美化', 'XML 格式化', '文本比较', 'Hosts', 'MD5 摘要']) {
-    await page.getByRole('button', { name: tool, exact: true }).click()
+    await openWorkspaceTool(page, tool)
     await expect(page.getByRole('heading', { name: tool, exact: true })).toBeVisible()
     if (tool === '日期转换') {
       await page.getByLabel('日期、时间或时间戳').fill('2024年1月1日 08时00分00秒')
@@ -376,9 +878,8 @@ test('web build remains usable on a mobile viewport', async ({ page }, testInfo)
   await expect(page.getByRole('heading', { name: 'KAITools' })).toBeVisible()
   await expect(page.locator('a[href="https://beian.miit.gov.cn/"]')).toHaveCount(0)
   await assertViewportIntegrity(page)
-  await page.screenshot({ path: resolve(qaDir, 'home-orbit-mobile-light.png'), fullPage: true })
+  await page.screenshot({ path: resolve(qaDir, 'home-launchpad-mobile-light.png'), fullPage: true })
 
-  await page.getByRole('button', { name: '进入工具台' }).click()
   await expect(page.locator('.home-tool-orbit')).toHaveAttribute('data-orbit-layout', 'portrait')
   await page.getByRole('button', { name: 'Hosts', exact: true }).click()
   await expect(page.getByRole('heading', { name: '仅 Windows 桌面版可用' })).toBeVisible()
@@ -418,7 +919,7 @@ test('all generated outputs remain editable and split panes can be resized', asy
   ]
 
   for (const item of cases) {
-    await page.getByRole('button', { name: item.tool, exact: true }).click()
+    await openWorkspaceTool(page, item.tool)
     await page.getByLabel(item.inputLabel).fill(item.input)
     const output = page.getByLabel(item.outputLabel)
     await expect(output).toContainText(item.generated)
@@ -427,7 +928,7 @@ test('all generated outputs remain editable and split panes can be resized', asy
     await expect(page.getByRole('separator', { name: '调整左右编辑区域大小' })).toBeVisible()
   }
 
-  await page.getByRole('button', { name: 'Java 转义', exact: true }).click()
+  await openWorkspaceTool(page, 'Java 转义')
   const separator = page.getByRole('separator', { name: '调整左右编辑区域大小' })
   const leftPanel = page.locator('.editor-split > .editor-panel').first()
   const beforeWidth = (await leftPanel.boundingBox())!.width
@@ -513,7 +1014,15 @@ test('Gitee and GitHub repository entries use official icons and work from the w
   await expect.poll(() => page.locator('.repository-brand-button img').evaluateAll((images) => images.every((image) => (image as HTMLImageElement).naturalWidth > 0))).toBe(true)
   await expect(page.locator('.app-shell')).toHaveClass(/sidebar-collapsed/)
   await expect(page.locator('.particle-field')).toHaveAttribute('data-ready', 'true')
-  await expect(page.locator('.home-orbit-copy')).toHaveCSS('opacity', '1')
+  await expect(page.locator('.home-launchpad')).toBeVisible()
+  const collapsedCenters = await page.locator('.app-sidebar').evaluate((sidebar) => {
+    const selectors = ['.sidebar-home', '.sidebar-search-button', '.tool-nav-row .tool-nav-main', '.sidebar-manage-row .tool-nav-main']
+    return selectors.map((selector) => {
+      const rect = sidebar.querySelector<HTMLElement>(selector)?.getBoundingClientRect()
+      return rect ? rect.left + rect.width / 2 : -1
+    })
+  })
+  expect(Math.max(...collapsedCenters) - Math.min(...collapsedCenters)).toBeLessThanOrEqual(1)
   await page.screenshot({ path: resolve(qaDir, 'repository-entry-sidebar-collapsed-light.png'), fullPage: true })
   const sidebarPopupPromise = page.waitForEvent('popup')
   await sidebarLink.click()
@@ -610,6 +1119,38 @@ test('tool search is localized, keyboard friendly and available while collapsed'
   await page.screenshot({ path: resolve(qaDir, 'tool-search-mobile-light.png'), fullPage: true })
 })
 
+test('editor selection highlights only the real partial range above semantic marks', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await openWorkspaceTool(page, 'Java 转义')
+  const editor = page.getByLabel('Java 转义输入')
+  await editor.fill('alpha alpha alpha')
+  await editor.click()
+  await page.keyboard.press('Control+Home')
+  for (let index = 0; index < 5; index += 1) await page.keyboard.press('Shift+ArrowRight')
+  const selection = editor.locator('..').locator('.cm-selectionLayer .cm-selectionBackground')
+  await expect(selection).toHaveCount(1)
+  const selectionVisual = await selection.evaluate((element) => {
+    const rect = element.getBoundingClientRect()
+    return { width: rect.width, background: getComputedStyle(element).backgroundColor, zIndex: getComputedStyle(element.parentElement!).zIndex }
+  })
+  expect(selectionVisual.width).toBeGreaterThan(20)
+  expect(selectionVisual.width).toBeLessThan(80)
+  expect(selectionVisual.background).not.toBe('rgba(0, 0, 0, 0)')
+  expect(Number(selectionVisual.zIndex)).toBeGreaterThanOrEqual(4)
+  const matchMarkers = editor.locator('.cm-selectionMatch')
+  if (await matchMarkers.count()) await expect(matchMarkers.first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+
+  await openWorkspaceTool(page, '文本比较')
+  const diffEditor = page.getByLabel('左侧文本')
+  await diffEditor.fill('alpha alpha alpha')
+  await diffEditor.click()
+  await page.keyboard.press('Control+Home')
+  for (let index = 0; index < 5; index += 1) await page.keyboard.press('Shift+ArrowRight')
+  await expect(diffEditor.locator('..').locator('.cm-selectionLayer .cm-selectionBackground')).toHaveCount(1)
+  await expect(diffEditor.locator('.cm-diff-mark-removed').first()).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+})
+
 test('editor search panel is localized and docks above code content', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto('/')
@@ -704,4 +1245,94 @@ test('Java unescape formats JSON by default and keeps generated output editable'
   await output.fill('手动修改后的结果')
   await expect(output).toContainText('手动修改后的结果')
   await page.screenshot({ path: resolve(qaDir, 'java-unescape-json-editable-light.png'), fullPage: true })
+})
+
+test('account entry remains fixed at the top right and detects the configured service', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.context().route('https://tools.imkai.top/api/health', (route) => route.fulfill({
+    contentType: 'application/json',
+    headers: { 'access-control-allow-origin': route.request().headers().origin ?? '', 'access-control-allow-credentials': 'true' },
+    body: JSON.stringify({ ok: true, data: { status: 'ready', mode: 'api' } }),
+  }))
+  await page.goto('/')
+  const accountEntry = page.locator('.workspace-topbar .account-entry')
+  await expect(accountEntry).toBeVisible()
+  await expect(accountEntry).toContainText('本地模式')
+  await accountEntry.click()
+  const dialog = page.getByRole('dialog', { name: '账户与同步' })
+  await expect(dialog).toBeVisible()
+  const email = dialog.getByLabel('邮箱')
+  await expect(email).toBeEnabled()
+  await email.fill('local@example.test')
+  await expect(email).toHaveValue('local@example.test')
+  await expect(dialog.getByPlaceholder('http://127.0.0.1:8080')).toHaveCount(0)
+  await expect(dialog).toContainText('LOCAL-FIRST')
+  const bounds = await dialog.evaluate((element) => element.getBoundingClientRect())
+  expect(bounds.right).toBeLessThanOrEqual(1280)
+  expect(bounds.top).toBeGreaterThanOrEqual(48)
+  await assertViewportIntegrity(page)
+})
+
+test('developer mode unlocks from the version and exposes local service tools', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.route('**/api/health', (route) => route.fulfill({
+    contentType: 'application/json',
+    body: JSON.stringify({ ok: true, data: { status: 'ready', mode: 'api' } }),
+  }))
+  await page.goto('/')
+  await page.getByRole('button', { name: '展开侧栏' }).click()
+  const version = page.locator('.runtime-version')
+  await expect(version).toBeVisible()
+  if (testInfo.project.name === 'web') {
+    await expect(version).not.toContainText('DEV')
+    for (let click = 0; click < 6; click += 1) await version.click()
+    await expect(page.getByRole('dialog', { name: '开发者模式' })).toHaveCount(0)
+    await version.click()
+  } else {
+    await version.click()
+  }
+  const dialog = page.getByRole('dialog', { name: '开发者模式' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByPlaceholder('http://127.0.0.1:8080')).toBeEditable()
+  await dialog.getByRole('button', { name: '测试连接' }).click()
+  await expect(dialog.getByRole('status')).toContainText('服务已就绪 · ready')
+  if (testInfo.project.name === 'web') {
+    await expect(dialog).toContainText('浏览器请使用 F12')
+    await dialog.getByRole('button', { name: '完成' }).click()
+    await page.reload()
+    const expandSidebar = page.getByRole('button', { name: '展开侧栏' })
+    if (await expandSidebar.count()) await expandSidebar.click()
+    await expect(page.locator('.runtime-version')).toContainText('DEV')
+  } else {
+    await expect(dialog).toContainText('打开 WebView2 DevTools')
+  }
+})
+
+test('local account panel connects and registers against the test service', async ({ page }) => {
+  test.skip(process.env.KAITOOLS_LOCAL_INTEGRATION !== 'true', 'Requires a locally configured PostgreSQL-backed KAITools API service.')
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await page.getByRole('button', { name: '展开侧栏' }).click()
+  await page.locator('.runtime-version').click()
+  const developerDialog = page.getByRole('dialog', { name: '开发者模式' })
+  await developerDialog.getByLabel('使用本机服务覆盖服务器').check()
+  await developerDialog.getByRole('button', { name: '测试连接' }).click()
+  await expect(developerDialog).toContainText('服务已就绪')
+  await developerDialog.getByRole('button', { name: '完成' }).click()
+  await page.locator('.workspace-topbar .account-entry').click()
+  const dialog = page.getByRole('dialog', { name: '账户与同步' })
+  await dialog.getByRole('tab', { name: '注册' }).click()
+  const email = `playwright-${Date.now()}@example.test`
+  await dialog.getByLabel('邮箱').fill(email)
+  await dialog.getByLabel('显示名称').fill('本地联调')
+  await dialog.getByLabel('密码').fill('LocalTestingPass123')
+  await dialog.getByRole('button', { name: '获取验证码' }).click()
+  const codeMessage = dialog.locator('.account-auth-hint')
+  await expect(codeMessage).toContainText('测试验证码')
+  const code = (await codeMessage.textContent())?.match(/(\d{6})/)?.[1]
+  expect(code).toBeTruthy()
+  await dialog.getByPlaceholder('6 位验证码').fill(code!)
+  await dialog.getByRole('button', { name: '注册并登录' }).click()
+  await expect(dialog).toContainText('本地联调')
+  await expect(page.locator('.workspace-topbar .account-entry')).toContainText('本地联调')
 })

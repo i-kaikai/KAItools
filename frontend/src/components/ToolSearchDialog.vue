@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { ArrowRight, Search, X } from '@lucide/vue'
+import { ArrowRight, Pin, PinOff, Search, X } from '@lucide/vue'
 import { computed, nextTick, ref, watch } from 'vue'
 
 import { toolCategories, workspaceTools, type ToolDefinition } from '@/tools/registry'
 
-const props = defineProps<{ open: boolean }>()
+const props = defineProps<{ open: boolean; shortcutIds: string[] }>()
 const emit = defineEmits<{
   close: []
   select: [tool: ToolDefinition]
+  toggleShortcut: [tool: ToolDefinition]
 }>()
 
 const input = ref<HTMLInputElement | null>(null)
@@ -28,7 +29,10 @@ const localizedNames: Record<string, string> = {
   xml: 'XML 文档格式化',
   'text-diff': '文本差异比较',
   'text-stats': '文本内容统计',
+  notes: 'Markdown 笔记与备忘录',
   hosts: 'Hosts 文件编辑',
+  calculator: '超级计算器',
+  'clipboard-history': '剪切板历史',
   md5: 'MD5 文本摘要',
 }
 const categoryNames = Object.fromEntries(toolCategories.map((category) => [category.id, category.name]))
@@ -56,6 +60,10 @@ function moveSelection(direction: 1 | -1): void {
 
 function selectTool(tool: ToolDefinition): void {
   emit('select', tool)
+}
+
+function isShortcut(tool: ToolDefinition): boolean {
+  return props.shortcutIds.includes(tool.id)
 }
 
 function onInputKeydown(event: KeyboardEvent): void {
@@ -116,16 +124,17 @@ watch(query, () => (selectedIndex.value = 0))
       </div>
 
       <div id="tool-search-results" class="tool-search-results" role="listbox" aria-label="工具搜索结果">
-        <button
+        <div
           v-for="(tool, index) in results"
           :id="`tool-search-result-${index}`"
           :key="tool.id"
-          type="button"
           role="option"
+          tabindex="-1"
           :aria-selected="index === selectedIndex"
           :class="{ selected: index === selectedIndex }"
           @pointerenter="selectedIndex = index"
           @click="selectTool(tool)"
+          @keydown.enter.prevent="selectTool(tool)"
         >
           <span class="tool-search-result-icon"><component :is="tool.icon" :size="18" :stroke-width="1.8" aria-hidden="true" /></span>
           <span class="tool-search-result-copy">
@@ -133,8 +142,18 @@ watch(query, () => (selectedIndex.value = 0))
             <small>{{ tool.name }} · {{ tool.description }}</small>
           </span>
           <span class="tool-search-category">{{ categoryNames[tool.category] }}</span>
+          <button
+            class="tool-search-shortcut"
+            type="button"
+            :aria-label="isShortcut(tool) ? `从侧栏移除 ${tool.name}` : `添加 ${tool.name} 到侧栏`"
+            :title="isShortcut(tool) ? '从侧栏移除' : '添加到侧栏'"
+            @click.stop="emit('toggleShortcut', tool)"
+          >
+            <PinOff v-if="isShortcut(tool)" :size="15" aria-hidden="true" />
+            <Pin v-else :size="15" aria-hidden="true" />
+          </button>
           <ArrowRight :size="15" aria-hidden="true" />
-        </button>
+        </div>
         <div v-if="!results.length" class="tool-search-empty">
           <Search :size="23" aria-hidden="true" />
           <strong>没有找到匹配工具</strong>

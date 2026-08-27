@@ -1,4 +1,7 @@
 export type ThemeMode = 'system' | 'light' | 'dark'
+export type ParticleQuality = 'high' | 'balanced' | 'off'
+export type MotionMode = 'system' | 'reduced'
+export type SidebarStartup = 'remember' | 'collapsed' | 'expanded'
 export type EditorHighlightKind = 'added' | 'removed' | 'match'
 
 export interface EditorHighlight {
@@ -26,6 +29,9 @@ export type ToolId =
   | 'regex'
   | 'md5'
   | 'hosts'
+  | 'notes'
+  | 'clipboard-history'
+  | 'calculator'
 
 export interface ApiError {
   code: string
@@ -41,6 +47,58 @@ export interface AppSettings {
   schemaVersion: number
   theme: ThemeMode
   sidebarCollapsed: boolean
+  particleQuality: ParticleQuality
+  motionMode: MotionMode
+  sidebarStartup: SidebarStartup
+  restorePinnedTabsOnLaunch: boolean
+  editorFontSize: number
+  editorLineWrapping: boolean
+  clipboardMonitoringEnabled: boolean
+  systemStatusRefreshSeconds: 0 | 30 | 60 | 300
+  developerModeEnabled: boolean
+  /** Windows desktop global shortcut that restores KAITools to the foreground. */
+  activationHotkey: string
+}
+
+export interface BackendConnection {
+  schemaVersion: number
+  /** Local-only override used exclusively by the hidden developer mode. */
+  localApiOrigin: string
+  /** Never takes effect unless developerModeEnabled is true. */
+  useLocalApi: boolean
+}
+
+export interface SidebarShortcuts {
+  schemaVersion: number
+  toolIds: ToolId[]
+}
+
+export interface ShortcutSyncState {
+  schemaVersion: number
+  accountId: string | null
+  mode: 'pending' | 'enabled' | 'paused'
+  revision: number | null
+  pendingToolIds: ToolId[] | null
+}
+
+export interface DashboardCard {
+  id: string
+  toolId: ToolId
+  title: string
+  description: string
+  accentColor: string
+  sortOrder: number
+  enabled: boolean
+}
+
+export type DashboardCarouselMode = 'classic' | 'step'
+
+export interface DashboardCards {
+  schemaVersion: number
+  cards: DashboardCard[]
+  carouselMode: DashboardCarouselMode
+  classicRotationSpeed: number
+  stepIntervalMs: number
 }
 
 export interface ToolTab {
@@ -77,11 +135,77 @@ export interface RuntimeInfo {
   dataDirectory: string
 }
 
+export interface ClipboardHistoryItem {
+  id: string
+  text: string
+  createdAt: string
+  truncated: boolean
+}
+
+export interface ClipboardHistorySnapshot {
+  enabled: boolean
+  maxEntries: number
+  maxBytes: number
+  items: ClipboardHistoryItem[]
+}
+
+export interface SystemStatusSnapshot {
+  capturedAt: string
+  runtime: 'desktop' | 'web'
+  system: Record<string, string | number | boolean | null>
+  application: Record<string, string | number | boolean | null | Record<string, string | number | boolean | null>>
+}
+
 export interface BootstrapState {
   settings: AppSettings
+  backendConnection: BackendConnection
+  sidebarShortcuts: SidebarShortcuts
+  shortcutSync: ShortcutSyncState
+  dashboardCards: DashboardCards
   workspace: { schemaVersion: number; tabs: ToolTab[] }
   hostsProfiles: HostsProfiles
   runtime: RuntimeInfo
+}
+
+export type NoteSyncStatus = 'local' | 'pending' | 'synced' | 'conflict'
+
+export interface Notebook {
+  id: string
+  name: string
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface NoteFolder {
+  id: string
+  notebookId: string
+  parentId: string | null
+  name: string
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface NoteDocument {
+  id: string
+  notebookId: string
+  folderId: string | null
+  title: string
+  content: string
+  pinned: boolean
+  revision: number
+  syncStatus: NoteSyncStatus
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface NotesState {
+  schemaVersion: number
+  notebooks: Notebook[]
+  folders: NoteFolder[]
+  notes: NoteDocument[]
 }
 
 export interface HostsBackup {

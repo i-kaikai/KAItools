@@ -1,8 +1,11 @@
 import {
   Binary,
+  BookOpenText,
   Braces,
   CalendarClock,
+  Calculator,
   ChartNoAxesColumn,
+  Clipboard,
   Clock3,
   Code2,
   CodeXml,
@@ -49,6 +52,7 @@ export interface ToolDefinition {
   singleton?: boolean
   initialState: () => Record<string, unknown>
   chainInput?: (value: string) => Record<string, unknown>
+  desktopOnly?: boolean
 }
 
 export const homeTool: ToolDefinition = {
@@ -60,7 +64,7 @@ export const homeTool: ToolDefinition = {
   icon: House,
   component: defineAsyncComponent(() => import('./home/HomeTool.vue')),
   singleton: true,
-  initialState: () => ({ entered: false }),
+  initialState: () => ({}),
 }
 
 export const workspaceTools: ToolDefinition[] = [
@@ -224,6 +228,17 @@ export const workspaceTools: ToolDefinition[] = [
     chainInput: (value) => ({ input: value }),
   },
   {
+    id: 'notes',
+    name: '笔记',
+    description: 'Markdown 笔记与本地同步',
+    keywords: ['notes', 'markdown', 'md', '笔记', '备忘录', '文档'],
+    category: 'text',
+    icon: BookOpenText,
+    component: defineAsyncComponent(() => import('./notes/NotesTool.vue')),
+    singleton: true,
+    initialState: () => ({}),
+  },
+  {
     id: 'hosts',
     name: 'Hosts',
     description: '直接编辑系统 Hosts 文件',
@@ -232,7 +247,31 @@ export const workspaceTools: ToolDefinition[] = [
     icon: Network,
     component: defineAsyncComponent(() => import('./hosts/HostsTool.vue')),
     singleton: true,
+    desktopOnly: true,
     initialState: () => ({ selectedGroupId: 'default', search: '', previewOpen: false }),
+  },
+  {
+    id: 'calculator',
+    name: '超级计算器',
+    description: '科学、程序员、金融与工程计算',
+    keywords: ['calculator', 'math', 'finance', 'matrix', '计算器', '金融', '矩阵', '进制'],
+    category: 'developer',
+    icon: Calculator,
+    component: defineAsyncComponent(() => import('./calculator/CalculatorTool.vue')),
+    initialState: () => ({ section: 'scientific', expression: '', expressionResult: '' }),
+    chainInput: (value) => ({ section: 'scientific', expression: value }),
+  },
+  {
+    id: 'clipboard-history',
+    name: '剪切板历史',
+    description: '管理 Windows 纯文本剪切板记录',
+    keywords: ['clipboard', 'history', '剪切板', '历史', '复制'],
+    category: 'system',
+    icon: Clipboard,
+    component: defineAsyncComponent(() => import('./clipboardHistory/ClipboardHistoryTool.vue')),
+    singleton: true,
+    desktopOnly: true,
+    initialState: () => ({}),
   },
   {
     id: 'md5',

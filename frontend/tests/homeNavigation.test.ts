@@ -8,7 +8,7 @@ import { homeTool } from '@/tools/registry'
 describe('home navigation', () => {
   beforeEach(() => setActivePinia(createPinia()))
 
-  it('starts on the orbit and opens the existing home tab in workbench mode', () => {
+  it('keeps the home tab as a direct workspace without stage state', () => {
     const app = useAppStore()
     app.tabs = [
       { id: 'home-tab', toolId: 'home', title: '首页', pinned: false, state: homeTool.initialState() },
@@ -16,16 +16,16 @@ describe('home navigation', () => {
     ]
     app.activeTabId = 'home-tab'
 
-    expect(app.activeTab?.state.entered).toBe(false)
+    expect(app.activeTab?.state).toEqual({})
 
     app.activateTab('json-tab')
     app.activateTab('home-tab')
 
     expect(app.activeTabId).toBe('home-tab')
-    expect(app.activeTab?.state.entered).toBe(true)
+    expect(app.activeTab?.state).toEqual({})
   })
 
-  it('opens home in workbench mode through the sidebar tool action', () => {
+  it('opens the existing home tab through the sidebar tool action', () => {
     const app = useAppStore()
     app.tabs = [
       { id: 'home-tab', toolId: 'home', title: '首页', pinned: false, state: homeTool.initialState() },
@@ -34,6 +34,6 @@ describe('home navigation', () => {
     app.openTool('home', '首页', homeTool.initialState(), true)
 
     expect(app.activeTabId).toBe('home-tab')
-    expect(app.activeTab?.state.entered).toBe(true)
+    expect(app.activeTab?.state).toEqual({})
   })
 })

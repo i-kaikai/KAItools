@@ -27,6 +27,6 @@ export default defineConfig({
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: false,
     timeout: 60_000,
-    env: process.env,
+    env: { ...process.env, VITE_KAITOOLS_ENABLE_SERVICE_CONFIGURATION: 'true' },
   },
 })

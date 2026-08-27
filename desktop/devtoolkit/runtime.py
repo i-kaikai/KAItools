@@ -13,6 +13,7 @@ WEBVIEW2_DOWNLOAD_URL = "https://developer.microsoft.com/microsoft-edge/webview2
 WEBVIEW2_CLIENT_ID = "{F3017226-FE2A-4295-8BDF-00C3A19A7C66}"
 PROJECT_REPOSITORY_URL = "https://gitee.com/i-_-kaikai/kaitools"
 GITHUB_REPOSITORY_URL = "https://github.com/i-kaikai/KAItools"
+DESKTOP_DOWNLOAD_URL = "https://gitee.com/i-_-kaikai/kaitools/releases"
 
 
 def is_supported_windows() -> bool:
@@ -91,6 +92,32 @@ def open_project_repository() -> bool:
 
 def open_github_repository() -> bool:
     return bool(webbrowser.open(GITHUB_REPOSITORY_URL))
+
+
+def open_desktop_download() -> bool:
+    return bool(webbrowser.open(DESKTOP_DOWNLOAD_URL))
+
+
+def open_developer_tools(window: object) -> None:
+    """Enable and open the fixed WebView2 DevTools window on the WinForms UI thread."""
+    native = getattr(window, "native", None)
+    browser = getattr(native, "browser", None)
+    webview = getattr(browser, "webview", None)
+    core = getattr(webview, "CoreWebView2", None)
+    if native is None or core is None:
+        raise RuntimeError("WebView2 开发者工具尚未就绪")
+
+    from System import Action
+
+    def show() -> None:
+        core.Settings.AreDevToolsEnabled = True
+        core.Settings.AreDefaultContextMenusEnabled = True
+        core.OpenDevToolsWindow()
+
+    if native.InvokeRequired:
+        native.Invoke(Action(show))
+    else:
+        show()
 
 
 def show_startup_error(message: str, offer_webview_download: bool = False) -> None:

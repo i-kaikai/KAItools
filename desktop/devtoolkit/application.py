@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 
 from .api import DesktopApi
+from .clipboard import ClipboardHistoryService
+from .hotkeys import GlobalActivationHotkey, HotkeyError
 from .hosts import execute_request
 from .logging_config import configure_logging
 from .paths import resolve_paths
@@ -19,7 +21,9 @@ from .runtime import (
     webview2_version,
 )
 from .single_instance import SingleInstance
-from .storage import AppStorage
+from .storage import AppStorage, StorageError
+from .tray import TrayController, TrayError
+from .version import APP_VERSION
 
 LOGGER = logging.getLogger(__name__)
 APP_TITLE = "KAITools"
@@ -89,13 +93,18 @@ def _apply_dark_title_bar(window: object) -> bool:
         return False
 
 
-def _configure_native_window(window: object) -> None:
+def _configure_native_window(window: object, tray: TrayController) -> None:
     events = getattr(window, "events", None)
     shown = getattr(events, "shown", None)
     if shown is None or not shown.wait(15):
         LOGGER.warning("dark_title_bar_wait_timeout")
         return
     _apply_dark_title_bar(window)
+    try:
+        tray.initialize()
+    except TrayError as exc:
+        LOGGER.exception("tray_initialization_failed")
+        raise RuntimeError(str(exc)) from exc
 
 
 def _arguments() -> argparse.Namespace:
@@ -107,11 +116,16 @@ def _arguments() -> argparse.Namespace:
 
 def _activate_window(window: object) -> None:
     try:
-        window.restore()  # type: ignore[attr-defined]
-        window.show()  # type: ignore[attr-defined]
-        hwnd = ctypes.windll.user32.FindWindowW(None, APP_TITLE)
+        hwnd = _native_window_handle(window)
         if hwnd:
-            ctypes.windll.user32.SetForegroundWindow(hwnd)
+            user32 = ctypes.windll.user32
+            # The hotkey and duplicate-launch paths run off the WebView UI thread.
+            # ShowWindowAsync only touches the fixed native window handle, so it does
+            # not require executing arbitrary JavaScript or dispatching UI commands.
+            user32.ShowWindowAsync(hwnd, 9)  # SW_RESTORE
+            user32.ShowWindowAsync(hwnd, 5)  # SW_SHOW
+            user32.BringWindowToTop(hwnd)
+            user32.SetForegroundWindow(hwnd)
     except Exception:
         LOGGER.exception("window_activation_failed")
 
@@ -134,6 +148,9 @@ def main() -> int:
     instance = SingleInstance()
     if not instance.acquire_or_notify():
         return 0
+    activation_hotkey: GlobalActivationHotkey | None = None
+    tray: TrayController | None = None
+    clipboard: ClipboardHistoryService | None = None
     try:
         detected_webview2 = webview2_version()
         if not detected_webview2:
@@ -150,7 +167,11 @@ def main() -> int:
 
         import webview
 
-        api = DesktopApi(paths, storage)
+        settings = storage.load_all()["settings"]
+        clipboard = ClipboardHistoryService()
+        clipboard.set_enabled(settings.get("clipboardMonitoringEnabled") is not False)
+        clipboard.start()
+        api = DesktopApi(paths, storage, clipboard=clipboard)
         window = webview.create_window(
             APP_TITLE,
             resolve_web_entry(paths),
@@ -162,18 +183,38 @@ def main() -> int:
             background_color="#05070a",
             text_select=True,
         )
-        instance.listen(lambda: _activate_window(window))
-        LOGGER.info("application_start version=0.1.0 webview2=%s", detected_webview2)
+        tray = TrayController(window, _resolve_application_icon(paths))
+        activation_hotkey = GlobalActivationHotkey(tray.toggle_for_hotkey)
+        try:
+            configured_hotkey = settings["activationHotkey"]
+            registered_hotkey = activation_hotkey.start(configured_hotkey)
+            LOGGER.info("activation_hotkey_registered hotkey=%s", registered_hotkey)
+        except (HotkeyError, StorageError) as exc:
+            # A conflicting shortcut must not prevent the local-first desktop app from starting.
+            LOGGER.warning("activation_hotkey_unavailable reason=%s", exc)
+        api.bind_activation_hotkey(activation_hotkey)
+        api.bind_window(window)
+        api.bind_tray(tray)
+        api.bind_clipboard(clipboard)
+        instance.listen(tray.show)
+        LOGGER.info("application_start version=%s webview2=%s", APP_VERSION, detected_webview2)
         webview.start(
             func=_configure_native_window,
-            args=(window,),
+            args=(window, tray),
             gui="edgechromium",
             icon=_resolve_application_icon(paths),
             debug=args.debug,
             http_server=True,
             private_mode=False,
+            storage_path=str(paths.webview_profile_dir),
         )
         LOGGER.info("application_stop")
         return 0
     finally:
+        if activation_hotkey is not None:
+            activation_hotkey.stop()
+        if tray is not None:
+            tray.dispose()
+        if clipboard is not None:
+            clipboard.stop()
         instance.close()

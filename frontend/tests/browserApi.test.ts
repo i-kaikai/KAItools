@@ -7,7 +7,8 @@ import {
   openRepositoryInBrowser,
   PROJECT_REPOSITORY_URL,
 } from '@/api/desktopApi'
-import type { ToolTab } from '@/types'
+import { APP_VERSION } from '@/version'
+import type { DashboardCards, ToolTab } from '@/types'
 
 describe('browser API storage', () => {
   beforeEach(() => localStorage.clear())
@@ -16,8 +17,26 @@ describe('browser API storage', () => {
     const initial = await desktopApi.loadState()
     expect(initial.ok).toBe(true)
     if (!initial.ok) return
+    expect(initial.data.runtime.version).toBe(APP_VERSION)
     expect(initial.data.settings.theme).toBe('system')
     expect(initial.data.settings.sidebarCollapsed).toBe(true)
+    expect(initial.data.shortcutSync).toMatchObject({ accountId: null, mode: 'pending', pendingToolIds: null })
+    expect(initial.data.dashboardCards.cards.map((card) => card.toolId)).toEqual(['json', 'java', 'timestamp', 'base64-text', 'cron', 'notes'])
+    expect(initial.data.dashboardCards.carouselMode).toBe('step')
+    expect(initial.data.dashboardCards.classicRotationSpeed).toBe(16)
+    expect(initial.data.dashboardCards.stepIntervalMs).toBe(1600)
+    expect(initial.data.settings.developerModeEnabled).toBe(false)
+    expect(initial.data.settings.activationHotkey).toBe('Ctrl+Alt+K')
+    expect(initial.data.settings).toMatchObject({
+      particleQuality: 'high',
+      motionMode: 'system',
+      sidebarStartup: 'remember',
+      restorePinnedTabsOnLaunch: true,
+      editorFontSize: 13,
+      editorLineWrapping: true,
+      clipboardMonitoringEnabled: true,
+      systemStatusRefreshSeconds: 0,
+    })
     expect(initial.data.workspace.tabs).toEqual([])
 
     const tab: ToolTab = {
@@ -27,13 +46,21 @@ describe('browser API storage', () => {
       pinned: true,
       state: { input: '{"ready":true}' },
     }
-    await desktopApi.saveSettings({ settings: { ...initial.data.settings, theme: 'dark' } })
+    const dashboardCards: DashboardCards = {
+      schemaVersion: 1,
+      cards: [{ id: 'card-json', toolId: 'json', title: '快捷 JSON', description: '格式化接口数据', accentColor: '#35d0a7', sortOrder: 0, enabled: true }],
+      carouselMode: 'classic',
+      classicRotationSpeed: 22,
+      stepIntervalMs: 2400,
+    }
+    await desktopApi.saveSettings({ settings: { ...initial.data.settings, theme: 'dark' }, dashboardCards })
     await desktopApi.saveWorkspace([tab])
 
     const restored = await desktopApi.loadState()
     expect(restored.ok).toBe(true)
     if (!restored.ok) return
     expect(restored.data.settings.theme).toBe('dark')
+    expect(restored.data.dashboardCards).toEqual(dashboardCards)
     expect(restored.data.workspace.tabs).toEqual([tab])
   })
 
@@ -45,6 +72,59 @@ describe('browser API storage', () => {
     expect(result.data.settings.theme).toBe('system')
     expect(result.data.workspace.tabs).toEqual([])
   })
+
+  it('migrates an old loopback API setting into a disabled developer-only override', async () => {
+    localStorage.setItem('devtoolkit.browser.state.v1', JSON.stringify({
+      settings: { schemaVersion: 1, theme: 'dark', sidebarCollapsed: false, developerModeEnabled: false },
+      backendConnection: { schemaVersion: 1, apiOrigin: 'http://127.0.0.1:8080' },
+    }))
+
+    const result = await desktopApi.loadState()
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.data.backendConnection).toEqual({
+      schemaVersion: 1,
+      localApiOrigin: 'http://127.0.0.1:8080',
+      useLocalApi: false,
+    })
+  })
+
+  it('migrates missing preferences and clamps invalid editor settings', async () => {
+    localStorage.setItem('devtoolkit.browser.state.v1', JSON.stringify({
+      settings: { schemaVersion: 1, theme: 'dark', sidebarCollapsed: false, editorFontSize: 99, particleQuality: 'ultra' },
+    }))
+
+    const result = await desktopApi.loadState()
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.data.settings).toMatchObject({
+      theme: 'dark',
+      particleQuality: 'high',
+      motionMode: 'system',
+      editorFontSize: 13,
+      editorLineWrapping: true,
+    })
+  })
+
+  it('does not pretend that the browser can register a Windows global hotkey', async () => {
+    const result = await desktopApi.setActivationHotkey('Ctrl+Alt+F8')
+
+    expect(result).toEqual({ ok: false, error: { code: 'DESKTOP_ONLY', message: '全局唤起快捷键仅 Windows 桌面版可用' } })
+  })
+
+  it('provides detailed browser system status without a desktop bridge', async () => {
+    const result = await desktopApi.getSystemStatus()
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.data.runtime).toBe('web')
+    expect(result.data.system).toHaveProperty('viewport')
+    expect(result.data.system).toMatchObject({ cpuName: null, powerSource: 'unavailable', powerPercent: null })
+    expect(result.data.application).toHaveProperty('indexedDbAvailable')
+  })
+
 })
 
 describe('project repository link', () => {

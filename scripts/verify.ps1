@@ -8,13 +8,15 @@ $RepoRoot = Split-Path -Parent $PSScriptRoot
 $Python = Join-Path $RepoRoot '.venv\Scripts\python.exe'
 $Frontend = Join-Path $RepoRoot 'frontend'
 
+& (Join-Path $PSScriptRoot 'check_version.ps1')
+
 if (-not (Test-Path -LiteralPath $Python)) {
     throw 'Missing .venv. Create it with Python 3.13 and install requirements-dev.txt.'
 }
 
 Push-Location $Frontend
 try {
-    & pnpm install --frozen-lockfile
+    & pnpm install --frozen-lockfile --config.confirmModulesPurge=false
     if ($LASTEXITCODE -ne 0) { throw 'pnpm install failed' }
     & pnpm typecheck
     if ($LASTEXITCODE -ne 0) { throw 'frontend typecheck failed' }

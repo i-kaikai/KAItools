@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { Check, Copy, DatabaseBackup, Eye, FileText, Laptop, RefreshCw, RotateCcw, ShieldCheck, X } from '@lucide/vue'
+import { Check, Copy, DatabaseBackup, Eye, FileText, RefreshCw, RotateCcw, ShieldCheck, X } from '@lucide/vue'
 import { computed, onMounted, ref } from 'vue'
 
 import { desktopApi } from '@/api/desktopApi'
 import CodeEditor from '@/components/CodeEditor.vue'
+import DesktopOnlyState from '@/components/DesktopOnlyState.vue'
 import IconButton from '@/components/IconButton.vue'
 import { useToolState } from '@/composables/useToolState'
 import { isWebRuntime } from '@/runtime'
@@ -149,13 +150,7 @@ onMounted(() => {
       </div>
     </header>
 
-    <div v-if="isWebRuntime" class="desktop-only-state" role="status">
-      <Laptop :size="28" :stroke-width="1.6" aria-hidden="true" />
-      <div>
-        <h2>仅 Windows 桌面版可用</h2>
-        <p>浏览器无法读取或修改当前设备的 Hosts 文件。</p>
-      </div>
-    </div>
+    <DesktopOnlyState v-if="isWebRuntime" title="仅 Windows 桌面版可用" description="浏览器无法读取或修改当前设备的 Hosts 文件。" />
 
     <template v-else>
       <div class="editor-panel hosts-file-panel">

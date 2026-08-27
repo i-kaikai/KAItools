@@ -89,8 +89,12 @@ describe('new local developer tools', () => {
   it('registers chain-compatible tools with deterministic input mappings', () => {
     const regex = workspaceTools.find((tool) => tool.id === 'regex')
     const json = workspaceTools.find((tool) => tool.id === 'json')
+    const calculator = workspaceTools.find((tool) => tool.id === 'calculator')
+    const clipboardHistory = workspaceTools.find((tool) => tool.id === 'clipboard-history')
     expect(regex?.chainInput?.('alpha')).toEqual({ input: 'alpha' })
     expect(json?.chainInput?.('{"ok":true}')).toEqual({ input: '{"ok":true}', outputMode: 'code' })
+    expect(calculator?.chainInput?.('2 + 2')).toEqual({ section: 'scientific', expression: '2 + 2' })
+    expect(clipboardHistory?.desktopOnly).toBe(true)
     expect(workspaceTools.filter((tool) => tool.chainInput).length).toBeGreaterThanOrEqual(10)
   })
 })

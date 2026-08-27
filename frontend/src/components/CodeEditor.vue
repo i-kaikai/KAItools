@@ -1,20 +1,22 @@
 <script setup lang="ts">
 import { basicSetup } from 'codemirror'
 import { json } from '@codemirror/lang-json'
+import { markdown } from '@codemirror/lang-markdown'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { SearchQuery, closeSearchPanel, findNext, findPrevious, getSearchQuery, replaceAll, replaceNext, search, selectMatches, setSearchQuery } from '@codemirror/search'
-import { EditorState, StateEffect, StateField, type Range } from '@codemirror/state'
+import { Compartment, EditorState, StateEffect, StateField, type Range } from '@codemirror/state'
 import { Decoration, EditorView, type DecorationSet, type Panel, type ViewUpdate } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { EditorHighlight } from '@/types'
+import { useAppStore } from '@/stores/app'
 import { countSearchMatchesInChunks, type SearchMatchRange } from '@/utils/chunkedSearchCount'
 
 const props = withDefaults(
   defineProps<{
     modelValue: string
     readonly?: boolean
-    language?: 'json' | 'plain'
+    language?: 'json' | 'markdown' | 'plain'
     label: string
     selectionOffset?: number
     highlights?: EditorHighlight[]
@@ -23,9 +25,12 @@ const props = withDefaults(
 )
 
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
+const app = useAppStore()
 const container = ref<HTMLDivElement | null>(null)
 let editor: EditorView | undefined
 let externalUpdate = false
+const typographyCompartment = new Compartment()
+const wrappingCompartment = new Compartment()
 
 const setHighlights = StateEffect.define<EditorHighlight[]>()
 
@@ -79,7 +84,6 @@ const editorTheme = EditorView.theme({
     height: '100%',
     color: 'var(--text-primary)',
     backgroundColor: 'transparent',
-    fontSize: '13px',
   },
   '.cm-scroller': {
     fontFamily: '"JetBrains Mono", "Cascadia Code", Consolas, monospace',
@@ -93,7 +97,11 @@ const editorTheme = EditorView.theme({
     borderRight: '1px solid var(--border-subtle)',
   },
   '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'var(--editor-active-line)' },
-  '.cm-selectionBackground, ::selection': { backgroundColor: 'var(--selection) !important' },
+  '.cm-selectionLayer': { zIndex: '4 !important', pointerEvents: 'none' },
+  '.cm-cursorLayer': { zIndex: '5 !important' },
+  '.cm-selectionBackground': { backgroundColor: 'var(--selection-overlay) !important' },
+  '::selection': { backgroundColor: 'var(--selection) !important' },
+  '.cm-selectionMatch': { backgroundColor: 'transparent !important', boxShadow: 'none !important' },
   '&.cm-focused': { outline: 'none' },
   '.cm-cursor': { borderLeftColor: 'var(--accent)' },
 })
@@ -111,6 +119,10 @@ const chineseSearchPhrases = EditorState.phrases.of({
   'replace all': '全部替换',
   close: '关闭查找',
 })
+
+function typographyTheme(fontSize: number) {
+  return EditorView.theme({ '&': { fontSize: `${fontSize}px` } })
+}
 
 class CountedSearchPanel implements Panel {
   readonly dom: HTMLElement
@@ -362,11 +374,12 @@ onMounted(() => {
         editorSearch,
         highlightField,
         syntaxHighlighting(highlightStyle),
-        EditorView.lineWrapping,
+        typographyCompartment.of(typographyTheme(app.settings.editorFontSize)),
+        wrappingCompartment.of(app.settings.editorLineWrapping ? EditorView.lineWrapping : []),
         EditorState.readOnly.of(props.readonly),
         EditorView.editable.of(!props.readonly),
         EditorView.contentAttributes.of({ 'aria-label': props.label }),
-        ...(props.language === 'json' ? [json()] : []),
+        ...(props.language === 'json' ? [json()] : props.language === 'markdown' ? [markdown()] : []),
         EditorView.updateListener.of((update) => {
           if (update.docChanged && !externalUpdate) emit('update:modelValue', update.state.doc.toString())
         }),
@@ -396,6 +409,18 @@ watch(
 )
 
 watch(() => props.highlights, (highlights) => applyHighlights(highlights), { deep: true })
+
+watch(
+  () => [app.settings.editorFontSize, app.settings.editorLineWrapping] as const,
+  ([fontSize, lineWrapping]) => {
+    editor?.dispatch({
+      effects: [
+        typographyCompartment.reconfigure(typographyTheme(fontSize)),
+        wrappingCompartment.reconfigure(lineWrapping ? EditorView.lineWrapping : []),
+      ],
+    })
+  },
+)
 
 onBeforeUnmount(() => editor?.destroy())
 </script>
