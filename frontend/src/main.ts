@@ -4,15 +4,10 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import { setActiveLocale } from './i18n'
 import './styles/index.css'
+import { syncAppViewportHeight } from './viewport'
 
-function syncViewportHeight(): void {
-  const height = window.visualViewport?.height ?? window.innerHeight
-  document.documentElement.style.setProperty('--app-viewport-height', `${Math.round(height)}px`)
-}
-
-syncViewportHeight()
+syncAppViewportHeight()
 setActiveLocale('zh-CN')
-window.addEventListener('resize', syncViewportHeight)
-window.visualViewport?.addEventListener('resize', syncViewportHeight)
+window.addEventListener('resize', syncAppViewportHeight)
 
 createApp(App).use(createPinia()).mount('#app')

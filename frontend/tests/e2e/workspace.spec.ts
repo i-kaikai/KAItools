@@ -21,11 +21,17 @@ async function assertViewportIntegrity(page: Page): Promise<void> {
         scroll: [button.scrollWidth, button.scrollHeight],
       }))
     const result = {
+      appRect: (() => {
+        const rect = document.querySelector('#app')?.getBoundingClientRect()
+        return rect ? { top: rect.top, bottom: rect.bottom, height: rect.height } : null
+      })(),
       documentFits:
         document.body.scrollWidth <= window.innerWidth &&
         document.body.scrollHeight <= window.innerHeight &&
         (document.querySelector('#app')?.scrollWidth ?? 0) <= window.innerWidth &&
-        (document.querySelector('#app')?.scrollHeight ?? 0) <= window.innerHeight,
+        (document.querySelector('#app')?.scrollHeight ?? 0) <= window.innerHeight &&
+        Math.abs((document.querySelector('#app')?.getBoundingClientRect().top ?? Infinity)) <= 1 &&
+        Math.abs((document.querySelector('#app')?.getBoundingClientRect().bottom ?? -Infinity) - window.innerHeight) <= 1,
       buttonsFit: overflowingButtons.length === 0,
       overflowingButtons,
       dimensions: {
