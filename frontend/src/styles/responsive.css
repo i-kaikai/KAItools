@@ -91,6 +91,7 @@
   .split-separator::before { width: 42px; height: 2px; }
   .media-workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(280px, 1fr) minmax(240px, .8fr); flex: 0 0 540px; }
   .file-meta-band { grid-template-columns: minmax(0, 1fr); }
+  .hash-result-actions { min-height: 36px; }
   .qr-options, .image-studio-controls { align-items: stretch; }.qr-options label, .image-studio-controls label { flex: 1 1 110px; }.video-audio-workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(220px, 1fr) minmax(220px, 1fr); flex: 0 0 460px; }
   .cron-expression input { font-size: 14px; }
   .cron-summary { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }

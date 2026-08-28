@@ -3,6 +3,9 @@ from __future__ import annotations
 import logging
 import time
 import webbrowser
+import base64
+import binascii
+import re
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +22,7 @@ from .hosts import (
     sha256_bytes,
 )
 from .hotkeys import GlobalActivationHotkey, HotkeyError, normalize_activation_hotkey
-from .clipboard import ClipboardHistoryService, write_clipboard_text
+from .clipboard import ClipboardHistoryService, PNG_SIGNATURE, write_clipboard_png, write_clipboard_text
 from .paths import AppPaths
 from .runtime import open_desktop_download, open_developer_tools, open_github_repository, open_project_repository, open_webview2_download, webview2_version
 from .storage import AppStorage, StorageError
@@ -28,6 +31,8 @@ from .system_status import SystemStatusCollector
 from .version import APP_VERSION
 
 LOGGER = logging.getLogger(__name__)
+MAX_CLIPBOARD_PNG_BYTES = 8 * 1024 * 1024
+PNG_DATA_URL = re.compile(r"data:image/png;base64,([A-Za-z0-9+/]+={0,2})\Z")
 
 
 def _success(data: Any = None) -> dict[str, Any]:
@@ -175,6 +180,22 @@ class DesktopApi:
             return _failure("CLIPBOARD_TEXT_INVALID", "复制内容必须为不超过 16KB 的文本")
         if not write_clipboard_text(value):
             return _failure("CLIPBOARD_WRITE_FAILED", "无法写入系统剪切板")
+        return _success()
+
+    def copy_png(self, value: Any) -> dict[str, Any]:
+        if not isinstance(value, str) or len(value) > MAX_CLIPBOARD_PNG_BYTES * 2:
+            return _failure("CLIPBOARD_PNG_INVALID", "二维码图片数据无效")
+        match = PNG_DATA_URL.fullmatch(value)
+        if match is None:
+            return _failure("CLIPBOARD_PNG_INVALID", "仅支持 PNG Data URL")
+        try:
+            raw = base64.b64decode(match.group(1), validate=True)
+        except (ValueError, binascii.Error):
+            return _failure("CLIPBOARD_PNG_INVALID", "PNG Base64 数据无效")
+        if not raw.startswith(PNG_SIGNATURE) or len(raw) > MAX_CLIPBOARD_PNG_BYTES:
+            return _failure("CLIPBOARD_PNG_INVALID", "PNG 图片无效或过大")
+        if not write_clipboard_png(raw):
+            return _failure("CLIPBOARD_WRITE_FAILED", "无法写入 PNG 到系统剪切板")
         return _success()
 
     def get_system_status(self) -> dict[str, Any]:

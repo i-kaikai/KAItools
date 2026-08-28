@@ -1,24 +1,25 @@
 <script setup lang="ts">
-import { Copy, Download, ImageUp, QrCode, ScanQrCode, Trash2 } from '@lucide/vue'
+import { Clipboard, Copy, Download, ImageUp, QrCode, Trash2 } from '@lucide/vue'
 import jsQR from 'jsqr'
 import QRCodeGenerator from 'qrcode'
 import { computed, ref, watch } from 'vue'
 
 import CodeEditor from '@/components/CodeEditor.vue'
+import FileDropzone from '@/components/FileDropzone.vue'
 import IconButton from '@/components/IconButton.vue'
 import ResizableSplit from '@/components/ResizableSplit.vue'
 import SegmentedControl from '@/components/SegmentedControl.vue'
 import ToolChainButton from '@/components/ToolChainButton.vue'
 import { useToolState } from '@/composables/useToolState'
 import { useToastStore } from '@/stores/toast'
-import { copyText } from '@/utils/clipboard'
+import { copyPngDataUrl, copyText } from '@/utils/clipboard'
+import { imageMimeType } from '@/utils/mediaFiles'
 
 type QrMode = 'generate' | 'decode'
 
 const props = defineProps<{ state: Record<string, unknown> }>()
 const emit = defineEmits<{ 'update:state': [state: Record<string, unknown>] }>()
 const toast = useToastStore()
-const picker = ref<HTMLInputElement | null>(null)
 const generating = ref(false)
 const generationError = ref('')
 const decodeError = ref('')
@@ -42,7 +43,7 @@ const model = useToolState(
 const activeError = computed(() => model.mode === 'generate' ? generationError.value : decodeError.value)
 const status = computed(() => {
   if (activeError.value) return activeError.value
-  if (model.mode === 'generate') return generating.value ? '正在生成二维码…' : '内容仅在当前设备处理，可下载 PNG'
+  if (model.mode === 'generate') return generating.value ? '正在生成二维码…' : '内容仅在当前设备处理，可复制或下载 PNG'
   return model.output ? '二维码内容已识别，可继续编辑或发送到其他工具' : '选择包含二维码的图片进行本地识别'
 })
 
@@ -86,12 +87,8 @@ function readImage(file: File): Promise<HTMLImageElement> {
   })
 }
 
-async function decodeFile(event: Event): Promise<void> {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file) return
-  if (!file.type.startsWith('image/')) {
+async function decodeImage(file: File): Promise<void> {
+  if (!imageMimeType(file)) {
     toast.show('请选择包含二维码的图片', 'error')
     return
   }
@@ -124,10 +121,18 @@ function download(): void {
   link.click()
 }
 
-async function copy(): Promise<void> {
-  const value = model.mode === 'generate' ? model.text : model.output
-  await copyText(value)
+async function copyContent(): Promise<void> {
+  await copyText(model.mode === 'generate' ? model.text : model.output)
   toast.show(model.mode === 'generate' ? '二维码内容已复制' : '识别结果已复制', 'success')
+}
+
+async function copyImage(): Promise<void> {
+  try {
+    const target = await copyPngDataUrl(model.output)
+    toast.show(target === 'desktop' ? '二维码图片已复制到 Windows 剪贴板' : '二维码图片已复制', 'success')
+  } catch (cause) {
+    toast.show(cause instanceof Error ? cause.message : '无法复制二维码图片，请下载 PNG', 'error')
+  }
 }
 
 function clear(): void {
@@ -152,10 +157,9 @@ watch(
       <div><h1>二维码工具</h1><p :class="{ error: activeError }">{{ status }}</p></div>
       <div class="toolbar">
         <SegmentedControl :model-value="model.mode" label="二维码模式" :options="[{ value: 'generate', label: '生成二维码' }, { value: 'decode', label: '图片解码' }]" @update:model-value="model.mode = $event as QrMode" />
-        <input ref="picker" class="visually-hidden" type="file" accept="image/*" aria-label="二维码图片选择" @change="decodeFile" />
-        <IconButton v-if="model.mode === 'decode'" :icon="ImageUp" label="选择二维码图片" @click="picker?.click()" />
         <ToolChainButton v-if="model.mode === 'decode'" :value="model.output" source-name="二维码" />
-        <IconButton :icon="Copy" :label="model.mode === 'generate' ? '复制二维码内容' : '复制识别结果'" :disabled="!(model.mode === 'generate' ? model.text : model.output)" @click="copy" />
+        <IconButton v-if="model.mode === 'generate'" :icon="Clipboard" label="复制二维码图片" :disabled="!model.output" @click="copyImage" />
+        <IconButton :icon="Copy" :label="model.mode === 'generate' ? '复制二维码内容' : '复制识别结果'" :disabled="!(model.mode === 'generate' ? model.text : model.output)" @click="copyContent" />
         <IconButton v-if="model.mode === 'generate'" :icon="Download" label="下载二维码 PNG" :disabled="!model.output" @click="download" />
         <IconButton :icon="Trash2" label="清空当前内容" :disabled="!(model.mode === 'generate' ? model.text : model.output)" @click="clear" />
       </div>
@@ -170,7 +174,7 @@ watch(
     <ResizableSplit v-model="model.split">
       <template #left>
         <div v-if="model.mode === 'generate'" class="editor-panel"><div class="panel-label">二维码内容</div><CodeEditor v-model="model.text" label="二维码内容" /></div>
-        <div v-else class="qr-image-panel"><div class="panel-label">待识别图片</div><img v-if="decodePreview" :src="decodePreview" alt="二维码识别图片" /><div v-else class="empty-state"><ScanQrCode :size="30" /><span>选择二维码图片后本地识别</span></div></div>
+        <div v-else class="qr-image-panel"><div class="panel-label">待识别图片</div><template v-if="decodePreview"><img :src="decodePreview" alt="二维码识别图片" /><button class="file-replace-action" type="button" @click="clear"><ImageUp :size="15" />清除并重新选择图片</button></template><FileDropzone v-else accept="image/*" label="二维码图片输入" prompt="拖入或粘贴二维码图片" detail="点击选择，或聚焦后按 Ctrl+V" @file="decodeImage" /></div>
       </template>
       <template #right>
         <div v-if="model.mode === 'generate'" class="qr-image-panel"><div class="panel-label">二维码预览</div><img v-if="model.output" :src="model.output" alt="二维码预览" /><div v-else class="empty-state"><QrCode :size="30" /><span>输入内容后生成二维码</span></div></div>

@@ -8,6 +8,7 @@ from typing import Any
 
 CF_UNICODETEXT = 13
 GMEM_MOVEABLE = 0x0002
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 if sys.platform == "win32":
     _USER32 = ctypes.WinDLL("user32", use_last_error=True)
@@ -21,6 +22,8 @@ if sys.platform == "win32":
     _USER32.EmptyClipboard.restype = ctypes.c_bool
     _USER32.SetClipboardData.argtypes = [ctypes.c_uint, ctypes.c_void_p]
     _USER32.SetClipboardData.restype = ctypes.c_void_p
+    _USER32.RegisterClipboardFormatW.argtypes = [ctypes.c_wchar_p]
+    _USER32.RegisterClipboardFormatW.restype = ctypes.c_uint
     _KERNEL32.GlobalLock.argtypes = [ctypes.c_void_p]
     _KERNEL32.GlobalLock.restype = ctypes.c_void_p
     _KERNEL32.GlobalUnlock.argtypes = [ctypes.c_void_p]
@@ -85,6 +88,37 @@ def write_clipboard_text(value: str) -> bool:
         if not _USER32.SetClipboardData(CF_UNICODETEXT, memory):
             return False
         # Clipboard now owns the global-memory block.
+        memory = None
+        return True
+    finally:
+        if memory:
+            _KERNEL32.GlobalFree(memory)
+        _USER32.CloseClipboard()
+
+
+def write_clipboard_png(value: bytes) -> bool:
+    """Write a validated PNG stream under Windows' registered PNG clipboard format."""
+
+    if sys.platform != "win32" or not value.startswith(PNG_SIGNATURE) or not _USER32.OpenClipboard(None):
+        return False
+    memory = None
+    try:
+        png_format = _USER32.RegisterClipboardFormatW("PNG")
+        if not png_format or not _USER32.EmptyClipboard():
+            return False
+        memory = _KERNEL32.GlobalAlloc(GMEM_MOVEABLE, len(value))
+        if not memory:
+            return False
+        pointer = _KERNEL32.GlobalLock(memory)
+        if not pointer:
+            return False
+        try:
+            ctypes.memmove(pointer, value, len(value))
+        finally:
+            _KERNEL32.GlobalUnlock(memory)
+        if not _USER32.SetClipboardData(png_format, memory):
+            return False
+        # Clipboard owns the memory after SetClipboardData succeeds.
         memory = None
         return True
     finally:

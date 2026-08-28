@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { nameVariants, splitIdentifier } from '@/utils/naming'
+import { convertIdentifierLines, nameVariants, splitIdentifier } from '@/utils/naming'
 
 describe('naming conversion', () => {
   it('splits separators, casing boundaries, and acronyms into stable words', () => {
@@ -16,5 +16,9 @@ describe('naming conversion', () => {
       constant: 'HTTP_SERVER_RESPONSE_CODE',
       dot: 'http.server.response.code',
     })
+  })
+
+  it('converts every input line in order while preserving empty lines', () => {
+    expect(convertIdentifierLines('HTTPServer\n\nresponse_code', 'kebab')).toBe('http-server\n\nresponse-code')
   })
 })

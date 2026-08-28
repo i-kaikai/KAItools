@@ -360,7 +360,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     category: 'encoding',
     icon: Hash,
     ...lazyTool(() => import('./md5/Md5Tool.vue')),
-    initialState: () => ({ input: '', algorithm: 'md5', uppercase: false }),
+    initialState: () => ({ input: '', output: '', algorithm: 'md5', uppercase: false, split: 50 }),
     chainInput: (value) => ({ input: value }),
   },
   {
@@ -371,7 +371,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     category: 'developer',
     icon: CaseSensitive,
     ...lazyTool(() => import('./naming/NamingTool.vue')),
-    initialState: () => ({ input: '', output: '', split: 50 }),
+    initialState: () => ({ input: '', target: 'camel', output: '', split: 50 }),
     chainInput: (value) => ({ input: value }),
   },
   {
