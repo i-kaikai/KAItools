@@ -3,9 +3,11 @@ import { AudioLines, Download, FileAudio, FileUp, Pause, Play, Trash2 } from '@l
 import { computed, onBeforeUnmount, ref } from 'vue'
 
 import IconButton from '@/components/IconButton.vue'
+import FileDropzone from '@/components/FileDropzone.vue'
 import { useToolState } from '@/composables/useToolState'
 import { useToastStore } from '@/stores/toast'
 import { supportedAudioOutputFormats, type AudioOutputFormat } from '@/utils/videoAudio'
+import { isVideoFile } from '@/utils/mediaFiles'
 
 interface CapturableVideo extends HTMLVideoElement {
   captureStream?: () => MediaStream
@@ -15,7 +17,6 @@ interface CapturableVideo extends HTMLVideoElement {
 const props = defineProps<{ state: Record<string, unknown> }>()
 const emit = defineEmits<{ 'update:state': [state: Record<string, unknown>] }>()
 const toast = useToastStore()
-const picker = ref<HTMLInputElement | null>(null)
 const sourceUrl = ref('')
 const outputUrl = ref('')
 const sourceName = ref('')
@@ -66,12 +67,8 @@ function waitFor(video: HTMLVideoElement, eventName: 'loadedmetadata' | 'ended')
   })
 }
 
-async function selectFile(event: Event): Promise<void> {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file) return
-  if (!file.type.startsWith('video/')) {
+async function importVideo(file: File): Promise<void> {
+  if (!isVideoFile(file)) {
     toast.show('请选择视频文件', 'error')
     return
   }
@@ -188,8 +185,6 @@ onBeforeUnmount(clear)
       <div><h1>视频转音频</h1><p :class="{ error }">{{ status }}</p></div>
       <div class="toolbar">
         <select v-model="model.mimeType" class="compact-select" aria-label="音频输出格式" :disabled="converting || !formats.length"><option v-for="format in formats" :key="format.mimeType" :value="format.mimeType">{{ format.label }}</option></select>
-        <input ref="picker" class="visually-hidden" type="file" accept="video/*" aria-label="视频文件选择" @change="selectFile" />
-        <IconButton :icon="FileUp" label="选择视频" :disabled="converting" @click="picker?.click()" />
         <IconButton v-if="converting" :icon="Pause" label="停止提取" @click="stop" />
         <IconButton v-else :icon="Play" label="提取音频" :disabled="!sourceUrl || !formats.length" @click="convert" />
         <IconButton :icon="Download" label="下载音频" :disabled="!outputUrl" @click="download" />
@@ -197,7 +192,7 @@ onBeforeUnmount(clear)
       </div>
     </header>
     <div class="video-audio-workspace">
-      <section class="video-audio-source"><header><FileUp :size="17" /><span>源视频</span></header><div v-if="sourceUrl" class="video-audio-content"><strong>{{ sourceName }}</strong><small>{{ sourceSize.toLocaleString() }} 字节 · {{ sourceDuration ? `${Math.ceil(sourceDuration)} 秒` : '读取时长中' }}</small><video :src="sourceUrl" controls muted /></div><div v-else class="empty-state"><FileUp :size="30" /><span>选择视频文件后开始提取</span></div></section>
+      <section class="video-audio-source"><header><FileUp :size="17" /><span>源视频</span></header><div v-if="sourceUrl" class="video-audio-content"><strong>{{ sourceName }}</strong><small>{{ sourceSize.toLocaleString() }} 字节 · {{ sourceDuration ? `${Math.ceil(sourceDuration)} 秒` : '读取时长中' }}</small><video :src="sourceUrl" controls muted /><button class="file-replace-action" type="button" :disabled="converting" @click="clear"><FileUp :size="15" />清除并重新选择视频</button></div><FileDropzone v-else accept="video/*" label="视频文件输入" prompt="拖入或粘贴视频文件" detail="点击选择，或聚焦后按 Ctrl+V" :disabled="converting" @file="importVideo" /></section>
       <section class="video-audio-source"><header><AudioLines :size="17" /><span>音频结果</span></header><div v-if="outputUrl" class="video-audio-content"><strong>{{ model.outputName }}</strong><small>{{ outputSize.toLocaleString() }} 字节 · {{ selectedFormat?.label }}</small><audio :src="outputUrl" controls /></div><div v-else class="empty-state"><FileAudio :size="30" /><span>提取后可在这里播放和下载音频</span></div></section>
     </div>
   </section>

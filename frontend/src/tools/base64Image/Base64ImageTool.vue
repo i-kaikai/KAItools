@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { Copy, Download, ImageUp, Trash2 } from '@lucide/vue'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed } from 'vue'
 
 import CodeEditor from '@/components/CodeEditor.vue'
+import FileDropzone from '@/components/FileDropzone.vue'
 import IconButton from '@/components/IconButton.vue'
 import ResizableSplit from '@/components/ResizableSplit.vue'
 import SegmentedControl from '@/components/SegmentedControl.vue'
@@ -10,17 +11,13 @@ import { useToolState } from '@/composables/useToolState'
 import { useToastStore } from '@/stores/toast'
 import { bytesToBase64, bytesToBlob, bytesToDataUrl, parseImageBase64 } from '@/utils/base64'
 import { copyText } from '@/utils/clipboard'
+import { imageMimeType } from '@/utils/mediaFiles'
 
 type ImageParseResult = { data: { mimeType: string; bytes: Uint8Array } | null; error: string }
-
-const imageMimeTypesByExtension: Record<string, string> = {
-  avif: 'image/avif', bmp: 'image/bmp', gif: 'image/gif', ico: 'image/x-icon', jpeg: 'image/jpeg', jpg: 'image/jpeg', png: 'image/png', svg: 'image/svg+xml', tif: 'image/tiff', tiff: 'image/tiff', webp: 'image/webp',
-}
 
 const props = defineProps<{ state: Record<string, unknown> }>()
 const emit = defineEmits<{ 'update:state': [state: Record<string, unknown>] }>()
 const toast = useToastStore()
-const picker = ref<HTMLInputElement | null>(null)
 // Legacy tabs stored one Data URL. Treat it as decode input so preview, copy, and download stay available.
 const legacyDataUrl = !('mode' in props.state) && !('sourceDataUrl' in props.state) && typeof props.state.dataUrl === 'string'
   ? props.state.dataUrl
@@ -65,12 +62,6 @@ const status = computed(() => {
 })
 const activeValue = computed(() => model.mode === 'encode' ? encodedOutput.value : model.base64)
 
-function imageMimeType(file: File): string | undefined {
-  if (file.type.startsWith('image/')) return file.type
-  const extension = file.name.split('.').pop()?.toLowerCase()
-  return extension ? imageMimeTypesByExtension[extension] : undefined
-}
-
 async function importImage(file: File): Promise<void> {
   const mimeType = imageMimeType(file)
   if (!mimeType) {
@@ -80,23 +71,6 @@ async function importImage(file: File): Promise<void> {
   model.fileName = file.name || `pasted-image.${mimeType.split('/')[1] || 'png'}`
   model.mimeType = mimeType
   model.sourceDataUrl = bytesToDataUrl(new Uint8Array(await file.arrayBuffer()), mimeType)
-}
-
-async function selectFile(event: Event): Promise<void> {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (file) await importImage(file)
-}
-
-function onPaste(event: ClipboardEvent): void {
-  if (model.mode !== 'encode') return
-  const clipboard = event.clipboardData
-  const item = Array.from(clipboard?.items ?? []).find((candidate) => candidate.type.startsWith('image/'))
-  const file = item?.getAsFile() ?? Array.from(clipboard?.files ?? []).find((candidate) => Boolean(imageMimeType(candidate)))
-  if (!file) return
-  event.preventDefault()
-  void importImage(file)
 }
 
 function download(): void {
@@ -119,8 +93,6 @@ function clear(): void {
   else model.base64 = ''
 }
 
-onMounted(() => window.addEventListener('paste', onPaste))
-onBeforeUnmount(() => window.removeEventListener('paste', onPaste))
 </script>
 
 <template>
@@ -133,8 +105,6 @@ onBeforeUnmount(() => window.removeEventListener('paste', onPaste))
       <div class="toolbar">
         <SegmentedControl :model-value="model.mode" label="转换方向" :options="[{ value: 'encode', label: '图片转 Base64' }, { value: 'decode', label: 'Base64 转图片' }]" @update:model-value="model.mode = $event as 'encode' | 'decode'" />
         <SegmentedControl v-if="model.mode === 'encode'" :model-value="model.outputFormat" label="图片 Base64 输出格式" :options="[{ value: 'base64', label: 'Base64' }, { value: 'data-url', label: 'Data URL' }]" @update:model-value="model.outputFormat = $event as 'base64' | 'data-url'" />
-        <input ref="picker" class="visually-hidden" type="file" accept="image/*" @change="selectFile" />
-        <IconButton v-if="model.mode === 'encode'" :icon="ImageUp" label="选择或粘贴图片" @click="picker?.click()" />
         <IconButton :icon="Copy" label="复制 Base64" :disabled="!activeValue || !!activeError" @click="copy" />
         <IconButton v-if="model.mode === 'decode'" :icon="Download" label="下载图片" :disabled="!decoded.data" @click="download" />
         <IconButton :icon="Trash2" label="清空当前内容" :disabled="!activeValue" @click="clear" />
@@ -148,8 +118,8 @@ onBeforeUnmount(() => window.removeEventListener('paste', onPaste))
       <template #left>
         <div v-if="model.mode === 'encode'" class="media-preview" :class="{ invalid: source.error }">
           <div class="panel-label">图片输入</div>
-          <img v-if="source.data" :src="model.sourceDataUrl" alt="待编码图片预览" />
-          <div v-else class="empty-state"><ImageUp :size="28" /><span>选择图片，或在此页面直接粘贴图片文件</span></div>
+          <template v-if="source.data"><img :src="model.sourceDataUrl" alt="待编码图片预览" /><button class="file-replace-action" type="button" @click="clear"><ImageUp :size="15" />清除并重新选择图片</button></template>
+          <FileDropzone v-else accept="image/*" label="Base64 图片文件输入" prompt="拖入或粘贴图片文件" detail="点击选择，或聚焦后按 Ctrl+V" @file="importImage" />
         </div>
         <div v-else class="editor-panel" :class="{ invalid: decoded.error }">
           <div class="panel-label">Base64 或 Data URL</div>

@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { Copy, Download, FileUp, Trash2 } from '@lucide/vue'
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 
 import CodeEditor from '@/components/CodeEditor.vue'
+import FileDropzone from '@/components/FileDropzone.vue'
 import IconButton from '@/components/IconButton.vue'
 import ResizableSplit from '@/components/ResizableSplit.vue'
 import SegmentedControl from '@/components/SegmentedControl.vue'
@@ -16,7 +17,6 @@ type FileParseResult = { bytes: Uint8Array | null; error: string }
 const props = defineProps<{ state: Record<string, unknown> }>()
 const emit = defineEmits<{ 'update:state': [state: Record<string, unknown>] }>()
 const toast = useToastStore()
-const picker = ref<HTMLInputElement | null>(null)
 // Before the directional UI, the single `base64` field represented a ready-to-download payload.
 const hasLegacyPayload = !('mode' in props.state) && !('sourceBase64' in props.state)
   && typeof props.state.base64 === 'string' && props.state.base64.trim().length > 0
@@ -57,10 +57,7 @@ const status = computed(() => {
   return model.mode === 'encode' ? '选择任意文件，生成 Base64' : '粘贴 Base64，下载还原文件'
 })
 
-async function selectFile(event: Event): Promise<void> {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
+async function importFile(file: File): Promise<void> {
   if (!file) return
   model.fileName = file.name
   model.mimeType = file.type || 'application/octet-stream'
@@ -97,8 +94,6 @@ function clear(): void {
       </div>
       <div class="toolbar">
         <SegmentedControl :model-value="model.mode" label="转换方向" :options="[{ value: 'encode', label: '文件转 Base64' }, { value: 'decode', label: 'Base64 转文件' }]" @update:model-value="model.mode = $event as 'encode' | 'decode'" />
-        <input ref="picker" class="visually-hidden" type="file" @change="selectFile" />
-        <IconButton v-if="model.mode === 'encode'" :icon="FileUp" label="选择文件" @click="picker?.click()" />
         <IconButton :icon="Copy" label="复制 Base64" :disabled="!activeValue || !!activeResult.error" @click="copy" />
         <IconButton v-if="model.mode === 'decode'" :icon="Download" label="下载还原文件" :disabled="!decoded.bytes" @click="download" />
         <IconButton :icon="Trash2" label="清空当前内容" :disabled="!activeValue" @click="clear" />
@@ -112,8 +107,8 @@ function clear(): void {
       <template #left>
         <div v-if="model.mode === 'encode'" class="file-transfer-panel">
           <div class="panel-label">待编码文件</div>
-          <div v-if="source.bytes" class="file-transfer-body"><FileUp :size="30" /><strong>{{ model.fileName || '未命名文件' }}</strong><span>{{ model.mimeType }} · {{ source.bytes.length.toLocaleString() }} 字节</span></div>
-          <div v-else class="empty-state"><FileUp :size="28" /><span>选择任意文件后生成 Base64</span></div>
+          <div v-if="source.bytes" class="file-transfer-body"><FileUp :size="30" /><strong>{{ model.fileName || '未命名文件' }}</strong><span>{{ model.mimeType }} · {{ source.bytes.length.toLocaleString() }} 字节</span><button class="file-replace-action" type="button" @click="clear"><FileUp :size="15" />清除并重新选择文件</button></div>
+          <FileDropzone v-else label="Base64 文件输入" prompt="拖入或粘贴任意文件" detail="点击选择，或聚焦后按 Ctrl+V" @file="importFile" />
         </div>
         <div v-else class="editor-panel" :class="{ invalid: decoded.error }">
           <div class="panel-label">Base64 内容</div>

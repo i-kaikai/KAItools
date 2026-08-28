@@ -37,6 +37,7 @@ const DESKTOP_ONLY_METHODS = new Set([
   'delete_clipboard_history_item',
   'set_clipboard_monitoring',
   'copy_text',
+  'copy_png',
 ])
 const SYSTEM_STATUS_REFRESH_MIGRATION_VERSION = 1
 const BROWSER_DIAGNOSTICS_CACHE_MS = 30_000
@@ -426,6 +427,7 @@ export const desktopApi = {
   deleteClipboardHistoryItem: (id: string) => invoke<{ removed: boolean }>('delete_clipboard_history_item', id),
   setClipboardMonitoring: (enabled: boolean) => invoke<{ enabled: boolean }>('set_clipboard_monitoring', enabled),
   copyText: (text: string) => invoke<void>('copy_text', text),
+  copyPng: (dataUrl: string) => invoke<void>('copy_png', dataUrl),
   getSystemStatus: () => invoke<SystemStatusSnapshot>('get_system_status'),
   setBrowserSystemStatusMonitoring: (active: boolean) => setBrowserCpuPressureMonitoring(active),
 }

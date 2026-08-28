@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from pathlib import Path
 
 import devtoolkit.api as api_module
@@ -273,3 +274,20 @@ def test_api_uses_only_bound_clipboard_service(tmp_path: Path) -> None:
     assert clipboard.cleared == 1
     assert desktop_api.set_clipboard_monitoring(False) == {"ok": True, "data": {"enabled": False}}
     assert clipboard.enabled is False
+
+
+def test_api_copies_only_valid_bounded_png_data_urls(tmp_path: Path, monkeypatch) -> None:
+    paths = app_paths(tmp_path)
+    storage = AppStorage(paths)
+    storage.ensure_directories()
+    copied: list[bytes] = []
+    monkeypatch.setattr(api_module, "write_clipboard_png", lambda value: copied.append(value) or True)
+    api = DesktopApi(paths, storage)
+    png = b"\x89PNG\r\n\x1a\nminimal"
+    payload = "data:image/png;base64," + base64.b64encode(png).decode("ascii")
+
+    assert api.copy_png(payload) == {"ok": True, "data": None}
+    assert copied == [png]
+    assert api.copy_png("data:image/jpeg;base64," + base64.b64encode(png).decode("ascii"))["error"]["code"] == "CLIPBOARD_PNG_INVALID"
+    assert api.copy_png("data:image/png;base64,not-base64")["error"]["code"] == "CLIPBOARD_PNG_INVALID"
+    assert api.copy_png("data:image/png;base64," + base64.b64encode(b"not a png").decode("ascii"))["error"]["code"] == "CLIPBOARD_PNG_INVALID"

@@ -108,6 +108,15 @@ async function openWorkspaceTool(page: Page, name: string): Promise<void> {
   await expect(dialog).toBeHidden()
 }
 
+async function dropFile(page: Page, label: string, name: string, mimeType: string, base64: string): Promise<void> {
+  await page.getByRole('button', { name: label }).evaluate((target, value: { name: string; mimeType: string; base64: string }) => {
+    const bytes = Uint8Array.from(atob(value.base64), (character) => character.charCodeAt(0))
+    const transfer = new DataTransfer()
+    transfer.items.add(new File([bytes], value.name, { type: value.mimeType }))
+    target.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }))
+  }, { name, mimeType, base64 })
+}
+
 test('sidebar active tool uses a restrained dark selection in both themes', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto('/')
@@ -1440,6 +1449,7 @@ test('binary Base64 tools and hash digest support both directions', async ({ pag
   await openWorkspaceTool(page, 'Base64 图片')
   const imageEncodedOutput = page.getByLabel('图片 Base64 编码结果')
   await expect(imageEncodedOutput).toBeVisible()
+  await page.getByRole('button', { name: 'Base64 图片文件输入' }).focus()
   await page.evaluate(() => {
     const image = new File(
       [Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9J1bQAAAAASUVORK5CYII='), (value) => value.charCodeAt(0))],
@@ -1449,14 +1459,18 @@ test('binary Base64 tools and hash digest support both directions', async ({ pag
     clipboard.items.add(image)
     const paste = new Event('paste', { bubbles: true, cancelable: true })
     Object.defineProperty(paste, 'clipboardData', { value: clipboard })
-    window.dispatchEvent(paste)
+    document.activeElement?.dispatchEvent(paste)
   })
   await expect(imageEncodedOutput).toContainText('iVBORw0KGgo')
+  await page.getByRole('button', { name: '清除并重新选择图片' }).click()
+  await expect(page.getByRole('button', { name: 'Base64 图片文件输入' })).toBeVisible()
   await page.getByRole('radio', { name: 'Base64 转图片' }).click()
   await page.getByLabel('图片 Base64 输入').fill('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9J1bQAAAAASUVORK5CYII=')
   await expect(page.getByAltText('Base64 解码预览')).toBeVisible()
 
   await openWorkspaceTool(page, 'Base64 文件')
+  await dropFile(page, 'Base64 文件输入', 'hello.txt', 'text/plain', 'aGVsbG8=')
+  await expect(page.getByLabel('文件 Base64 编码结果')).toContainText('aGVsbG8=')
   await page.getByRole('radio', { name: 'Base64 转文件' }).click()
   await page.getByLabel('文件 Base64 输入').fill('aGVsbG8=')
   await expect(page.getByText('5 字节，可下载还原')).toBeVisible()
@@ -1464,14 +1478,24 @@ test('binary Base64 tools and hash digest support both directions', async ({ pag
   await openWorkspaceTool(page, '哈希摘要')
   await page.getByLabel('哈希算法').selectOption('sha256')
   await page.getByLabel('哈希文本输入').fill('abc')
-  await expect(page.getByText('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad', { exact: true })).toBeVisible()
+  const digestOutput = page.getByLabel('哈希摘要结果')
+  await expect(digestOutput).toContainText('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad')
+  await digestOutput.fill('手动调整后的摘要')
+  await expect(digestOutput).toContainText('手动调整后的摘要')
+  await page.waitForTimeout(120)
+  await expect(digestOutput).toContainText('手动调整后的摘要')
+  await page.getByLabel('哈希算法').selectOption('sha1')
+  await expect(digestOutput).toContainText('a9993e364706816aba3e25717850c26c9cd0d89d')
+  const hashSeparator = page.getByRole('separator', { name: '调整左右编辑区域大小' }).last()
+  const splitBefore = await hashSeparator.getAttribute('aria-valuenow')
+  await hashSeparator.press('ArrowRight')
+  await expect(hashSeparator).not.toHaveAttribute('aria-valuenow', splitBefore ?? '')
   await assertViewportIntegrity(page)
 
   await page.setViewportSize({ width: 390, height: 844 })
   await openWorkspaceTool(page, 'Base64 图片')
   await page.getByRole('radio', { name: '图片转 Base64' }).click()
-  await page.getByRole('button', { name: '清空当前内容' }).click()
-  await expect(page.getByText('选择或直接粘贴图片，生成 Base64')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Base64 图片文件输入' })).toBeVisible()
   await assertViewportIntegrity(page)
 })
 
@@ -1481,18 +1505,36 @@ test('QR, image, naming, and identifier tools process data locally', async ({ pa
 
   await openWorkspaceTool(page, '二维码工具')
   await expect(page.getByAltText('二维码预览')).toBeVisible()
+  await page.evaluate(() => {
+    const copied: string[] = []
+    Object.defineProperty(window, 'ClipboardItem', { configurable: true, value: class { constructor(readonly values: Record<string, Blob>) {} } })
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { write: async (items: Array<{ values: Record<string, Blob> }>) => copied.push(...Object.keys(items[0]?.values ?? {})) } })
+    ;(window as Window & { copiedQrFormats?: string[] }).copiedQrFormats = copied
+  })
+  await page.getByRole('button', { name: '复制二维码图片' }).click()
+  await expect.poll(() => page.evaluate(() => (window as Window & { copiedQrFormats?: string[] }).copiedQrFormats ?? [])).toContain('image/png')
   const qrDataUrl = await QRCodeGenerator.toDataURL('KAITools QR decode')
   await page.getByRole('radio', { name: '图片解码' }).click()
-  await page.getByLabel('二维码图片选择').setInputFiles({
+  await page.getByRole('button', { name: '二维码图片输入' }).locator('input[type=file]').setInputFiles({
     name: 'kaitools-qr.png',
     mimeType: 'image/png',
     buffer: Buffer.from(qrDataUrl.split(',')[1] ?? '', 'base64'),
   })
   await expect(page.getByLabel('二维码识别结果')).toContainText('KAITools QR decode')
+  await page.getByRole('button', { name: '清除并重新选择图片' }).click()
+  await expect(page.getByRole('button', { name: '二维码图片输入' })).toBeVisible()
 
   await openWorkspaceTool(page, '图片工作台')
-  await page.getByLabel('图片工作台文件选择').setInputFiles({
+  await page.getByRole('button', { name: '图片工作台文件输入' }).locator('input[type=file]').setInputFiles({
     name: 'source.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9J1bQAAAAASUVORK5CYII=', 'base64'),
+  })
+  await expect(page.getByAltText('原始图片预览')).toBeVisible()
+  await page.getByRole('button', { name: '清除并重新选择图片' }).click()
+  await expect(page.getByRole('button', { name: '图片工作台文件输入' })).toBeVisible()
+  await page.getByRole('button', { name: '图片工作台文件输入' }).locator('input[type=file]').setInputFiles({
+    name: 'replacement.png',
     mimeType: 'image/png',
     buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9J1bQAAAAASUVORK5CYII=', 'base64'),
   })
@@ -1503,8 +1545,13 @@ test('QR, image, naming, and identifier tools process data locally', async ({ pa
   await expect(page.getByAltText('图片处理结果预览')).toBeVisible()
 
   await openWorkspaceTool(page, '命名转换')
-  await page.getByLabel('命名转换输入').fill('HTTPServer response_code')
-  await expect(page.getByLabel('命名转换结果')).toContainText('camelCase: httpServerResponseCode')
+  await page.getByLabel('命名转换输入').fill('HTTPServer\n\nresponse_code')
+  await page.getByLabel('目标命名格式').selectOption('snake')
+  const namingOutput = page.getByLabel('命名转换结果')
+  await expect(namingOutput.locator('.cm-line')).toHaveCount(3)
+  await expect(namingOutput.locator('.cm-line').nth(0)).toHaveText('http_server')
+  await expect(namingOutput.locator('.cm-line').nth(1)).toHaveText('')
+  await expect(namingOutput.locator('.cm-line').nth(2)).toHaveText('response_code')
 
   await openWorkspaceTool(page, 'UUID / ULID')
   await page.getByRole('radio', { name: 'ULID' }).click()
@@ -1526,7 +1573,7 @@ test('video audio tool extracts a local media fixture', async ({ page }) => {
   await page.goto('/')
   expect(await page.evaluate(() => typeof (document.createElement('video') as HTMLVideoElement & { captureStream?: unknown }).captureStream)).toBe('function')
   await openWorkspaceTool(page, '视频转音频')
-  await page.getByLabel('视频文件选择').setInputFiles(process.env.KAITOOLS_VIDEO_FIXTURE!)
+  await page.getByRole('button', { name: '视频文件输入' }).locator('input[type=file]').setInputFiles(process.env.KAITOOLS_VIDEO_FIXTURE!)
   await expect.poll(() => page.locator('video').evaluate((element: HTMLVideoElement) => element.readyState)).toBeGreaterThanOrEqual(1)
   await expect(page.getByRole('button', { name: '提取音频' })).toBeEnabled()
   await page.getByRole('button', { name: '提取音频' }).click()

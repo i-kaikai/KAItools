@@ -44,3 +44,7 @@ export function nameVariants(value: string): NameVariants {
 export function convertIdentifier(value: string, style: NamingStyle): string {
   return nameVariants(value)[style]
 }
+
+export function convertIdentifierLines(value: string, style: NamingStyle): string {
+  return value.split('\n').map((line) => line.trim() ? convertIdentifier(line, style) : '').join('\n')
+}

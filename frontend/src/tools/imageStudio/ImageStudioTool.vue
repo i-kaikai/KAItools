@@ -3,9 +3,11 @@ import { Crop, Download, ImageUp, RefreshCw, Trash2 } from '@lucide/vue'
 import { computed, onBeforeUnmount, ref } from 'vue'
 
 import IconButton from '@/components/IconButton.vue'
+import FileDropzone from '@/components/FileDropzone.vue'
 import ResizableSplit from '@/components/ResizableSplit.vue'
 import { useToolState } from '@/composables/useToolState'
 import { useToastStore } from '@/stores/toast'
+import { imageMimeType } from '@/utils/mediaFiles'
 
 type OutputFormat = 'source' | 'image/png' | 'image/jpeg' | 'image/webp'
 
@@ -20,7 +22,6 @@ interface ImageInfo {
 const props = defineProps<{ state: Record<string, unknown> }>()
 const emit = defineEmits<{ 'update:state': [state: Record<string, unknown>] }>()
 const toast = useToastStore()
-const picker = ref<HTMLInputElement | null>(null)
 const sourcePreview = ref('')
 const outputPreview = ref('')
 const sourceInfo = ref<ImageInfo | null>(null)
@@ -91,12 +92,9 @@ function canvasToBlob(canvas: HTMLCanvasElement, mimeType: string, quality?: num
   return new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('图片编码失败')), mimeType, quality))
 }
 
-async function selectFile(event: Event): Promise<void> {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file) return
-  if (!file.type.startsWith('image/')) {
+async function importImage(file: File): Promise<void> {
+  const mimeType = imageMimeType(file)
+  if (!mimeType) {
     toast.show('请选择图片文件', 'error')
     return
   }
@@ -115,7 +113,7 @@ async function selectFile(event: Event): Promise<void> {
     const height = sourceImage.naturalHeight
     if (!width || !height || width * height > 67_108_864) throw new Error('图片过大，请选择 6700 万像素以内的文件')
     sourcePreview.value = sourceUrl
-    sourceInfo.value = { name: file.name, mimeType: file.type, width, height, size: file.size }
+    sourceInfo.value = { name: file.name, mimeType, width, height, size: file.size }
     model.sourceName = file.name
     model.cropX = 0
     model.cropY = 0
@@ -222,8 +220,6 @@ onBeforeUnmount(() => {
     <header class="tool-header">
       <div><h1>图片工作台</h1><p :class="{ error }">{{ status }}</p></div>
       <div class="toolbar">
-        <input ref="picker" class="visually-hidden" type="file" accept="image/*" aria-label="图片工作台文件选择" @change="selectFile" />
-        <IconButton :icon="ImageUp" label="选择图片" @click="picker?.click()" />
         <IconButton :icon="RefreshCw" label="应用图片处理" :disabled="!canProcess || processing" @click="processImage" />
         <IconButton :icon="Download" label="下载处理结果" :disabled="!outputPreview" @click="download" />
         <IconButton :icon="Trash2" label="清空图片" :disabled="!sourcePreview" @click="clear" />
@@ -243,7 +239,7 @@ onBeforeUnmount(() => {
     </div>
     <ResizableSplit v-model="model.split">
       <template #left>
-        <div class="image-studio-preview"><div class="panel-label">原图{{ sourceDimensions ? ` · ${sourceDimensions}` : '' }}</div><img v-if="sourcePreview" :src="sourcePreview" alt="原始图片预览" /><div v-else class="empty-state"><ImageUp :size="30" /><span>选择图片开始处理</span></div><footer v-if="sourceInfo">{{ sourceInfo.name }} · {{ sourceInfo.size.toLocaleString() }} 字节</footer></div>
+        <div class="image-studio-preview"><div class="panel-label">原图{{ sourceDimensions ? ` · ${sourceDimensions}` : '' }}</div><template v-if="sourcePreview"><img :src="sourcePreview" alt="原始图片预览" /><button class="file-replace-action" type="button" @click="clear"><ImageUp :size="15" />清除并重新选择图片</button></template><FileDropzone v-else accept="image/*" label="图片工作台文件输入" prompt="拖入或粘贴图片文件" detail="点击选择，或聚焦后按 Ctrl+V" @file="importImage" /><footer v-if="sourceInfo">{{ sourceInfo.name }} · {{ sourceInfo.size.toLocaleString() }} 字节</footer></div>
       </template>
       <template #right>
         <div class="image-studio-preview"><div class="panel-label">处理结果{{ outputDimensions ? ` · ${outputDimensions}` : '' }}</div><img v-if="outputPreview" :src="outputPreview" alt="图片处理结果预览" /><div v-else class="empty-state"><Crop :size="30" /><span>调整参数后应用处理</span></div><footer v-if="outputInfo">{{ outputInfo.name }} · {{ outputInfo.size.toLocaleString() }} 字节</footer></div>
