@@ -24,6 +24,9 @@ const legacySearchNames: Record<string, string> = {
   'base64-text': 'Base64 文本转换',
   'base64-image': 'Base64 图片转换',
   'base64-file': 'Base64 文件转换',
+  qrcode: '二维码生成与图片解码',
+  'image-studio': '图片裁剪压缩与格式转换',
+  'video-audio': '视频转音频',
   cron: '定时任务表达式',
   sql: 'SQL 语句格式化',
   yaml: 'YAML 配置格式化',
@@ -35,6 +38,8 @@ const legacySearchNames: Record<string, string> = {
   calculator: '超级计算器',
   'clipboard-history': '剪切板历史',
   md5: '哈希摘要',
+  naming: '变量与代码命名转换',
+  identifiers: 'UUID 与 ULID 生成解析',
 }
 const categoryNames = computed(() => Object.fromEntries(toolCategories.map((category) => [category.id, category.name])))
 const results = computed(() => {

@@ -55,6 +55,9 @@ const toolColors: Record<string, string> = {
   'base64-text': '#dcad49',
   'base64-image': '#db7ca9',
   'base64-file': '#b79ae8',
+  qrcode: '#62c5aa',
+  'image-studio': '#df8b5b',
+  'video-audio': '#7d9ee8',
   cron: '#6eb9ff',
   sql: '#4cc7c9',
   yaml: '#9dbb55',
@@ -64,6 +67,8 @@ const toolColors: Record<string, string> = {
   regex: '#bb78a3',
   hosts: '#38bdd8',
   md5: '#f0b54d',
+  naming: '#c886de',
+  identifiers: '#6bb9d0',
   notes: '#a58df0',
 }
 

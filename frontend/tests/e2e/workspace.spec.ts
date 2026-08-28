@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { mkdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import QRCodeGenerator from 'qrcode'
 
 const qaDir = resolve(import.meta.dirname, '../../../build/qa')
 const appVersion = readFileSync(resolve(import.meta.dirname, '../../../VERSION'), 'utf8').trim()
@@ -103,7 +104,7 @@ async function openWorkspaceTool(page: Page, name: string): Promise<void> {
   const input = page.getByLabel('输入工具名称、用途或关键词')
   await expect(dialog).toBeVisible()
   await input.fill(name)
-  await input.press('Enter')
+  await dialog.getByRole('option').filter({ hasText: name }).first().click()
   await expect(dialog).toBeHidden()
 }
 
@@ -816,7 +817,7 @@ test('clipboard history remains discoverable but desktop-only in the web build',
 })
 
 test('ring geometry stays compact across card counts and viewports', async ({ page }) => {
-  const toolIds = ['json', 'java', 'timestamp', 'base64-text', 'cron', 'notes', 'json-diff', 'json-java', 'base64-image', 'base64-file', 'sql', 'yaml', 'xml', 'text-diff', 'text-stats', 'regex', 'hosts', 'md5']
+  const toolIds = ['json', 'java', 'timestamp', 'base64-text', 'cron', 'notes', 'json-diff', 'json-java', 'base64-image', 'base64-file', 'qrcode', 'image-studio', 'video-audio', 'sql', 'yaml', 'xml', 'text-diff', 'text-stats', 'regex', 'hosts', 'md5', 'naming', 'identifiers']
   const scenarios = [
     { count: 1, viewport: { width: 960, height: 640 } },
     { count: 2, viewport: { width: 1280, height: 800 } },
@@ -954,7 +955,7 @@ test('new conversion, formatting and analysis tools produce results', async ({ p
 test('all tools render and remain usable', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto('/')
-  for (const tool of ['JSON / JavaBean', 'Java 转义', '日期转换', 'Base64 图片', 'Base64 文件', 'Crontab 生成器', 'YAML 美化', 'XML 格式化', '文本比较', 'Hosts', '哈希摘要']) {
+  for (const tool of ['JSON / JavaBean', 'Java 转义', '日期转换', 'Base64 图片', 'Base64 文件', '二维码工具', '图片工作台', '视频转音频', 'Crontab 生成器', 'YAML 美化', 'XML 格式化', '文本比较', 'Hosts', '哈希摘要', '命名转换', 'UUID / ULID']) {
     await openWorkspaceTool(page, tool)
     await expect(page.getByRole('heading', { name: tool, exact: true })).toBeVisible()
     if (tool === '日期转换') {
@@ -1471,6 +1472,65 @@ test('binary Base64 tools and hash digest support both directions', async ({ pag
   await page.getByRole('radio', { name: '图片转 Base64' }).click()
   await page.getByRole('button', { name: '清空当前内容' }).click()
   await expect(page.getByText('选择或直接粘贴图片，生成 Base64')).toBeVisible()
+  await assertViewportIntegrity(page)
+})
+
+test('QR, image, naming, and identifier tools process data locally', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+
+  await openWorkspaceTool(page, '二维码工具')
+  await expect(page.getByAltText('二维码预览')).toBeVisible()
+  const qrDataUrl = await QRCodeGenerator.toDataURL('KAITools QR decode')
+  await page.getByRole('radio', { name: '图片解码' }).click()
+  await page.getByLabel('二维码图片选择').setInputFiles({
+    name: 'kaitools-qr.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(qrDataUrl.split(',')[1] ?? '', 'base64'),
+  })
+  await expect(page.getByLabel('二维码识别结果')).toContainText('KAITools QR decode')
+
+  await openWorkspaceTool(page, '图片工作台')
+  await page.getByLabel('图片工作台文件选择').setInputFiles({
+    name: 'source.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9J1bQAAAAASUVORK5CYII=', 'base64'),
+  })
+  await expect(page.getByAltText('原始图片预览')).toBeVisible()
+  await page.getByLabel('输出图片格式').selectOption('image/jpeg')
+  await page.getByLabel('图片压缩质量').fill('80')
+  await page.getByRole('button', { name: '应用图片处理' }).click()
+  await expect(page.getByAltText('图片处理结果预览')).toBeVisible()
+
+  await openWorkspaceTool(page, '命名转换')
+  await page.getByLabel('命名转换输入').fill('HTTPServer response_code')
+  await expect(page.getByLabel('命名转换结果')).toContainText('camelCase: httpServerResponseCode')
+
+  await openWorkspaceTool(page, 'UUID / ULID')
+  await page.getByRole('radio', { name: 'ULID' }).click()
+  await page.getByRole('button', { name: '生成标识符' }).click()
+  await expect(page.getByLabel('生成的 UUID 或 ULID')).toContainText(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/)
+  await assertViewportIntegrity(page)
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  for (const tool of ['二维码工具', '图片工作台', '视频转音频', '命名转换', 'UUID / ULID']) {
+    await openWorkspaceTool(page, tool)
+    await expect(page.getByRole('heading', { name: tool, exact: true })).toBeVisible()
+    await assertViewportIntegrity(page)
+  }
+})
+
+test('video audio tool extracts a local media fixture', async ({ page }) => {
+  test.skip(!process.env.KAITOOLS_VIDEO_FIXTURE, 'Set KAITOOLS_VIDEO_FIXTURE to a local video with an audio track for media integration coverage.')
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  expect(await page.evaluate(() => typeof (document.createElement('video') as HTMLVideoElement & { captureStream?: unknown }).captureStream)).toBe('function')
+  await openWorkspaceTool(page, '视频转音频')
+  await page.getByLabel('视频文件选择').setInputFiles(process.env.KAITOOLS_VIDEO_FIXTURE!)
+  await expect.poll(() => page.locator('video').evaluate((element: HTMLVideoElement) => element.readyState)).toBeGreaterThanOrEqual(1)
+  await expect(page.getByRole('button', { name: '提取音频' })).toBeEnabled()
+  await page.getByRole('button', { name: '提取音频' }).click()
+  await expect(page.locator('audio')).toHaveAttribute('src', /^blob:/, { timeout: 20_000 })
   await assertViewportIntegrity(page)
 })
 

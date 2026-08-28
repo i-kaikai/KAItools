@@ -32,6 +32,11 @@ KAITools 是面向开发者的本地工具箱，同时提供纯静态 Web 版和
 - **Base64 图片**：图片文件、剪贴板图片、纯 Base64 与 Data URL 双向转换、预览和下载。
 - **Base64 文件**：任意文件与 Base64 双向转换、复制和下载还原。
 - **哈希摘要**：计算 UTF-8 文本的 MD5、SHA-1、SHA-256、SHA-384、SHA-512 摘要，支持大小写输出。
+- **二维码工具**：本地生成带纠错级别的二维码，并从图片识别二维码内容。
+- **图片工作台**：在本地裁剪、缩放、压缩图片，转换 PNG、JPEG、WebP；可保持原文件字节无损复制。
+- **视频转音频**：本地提取视频音轨，输出浏览器支持的 WebM/Opus 或 Ogg/Opus 音频。
+- **命名转换**：转换 camelCase、PascalCase、snake_case、kebab-case 等代码命名。
+- **UUID / ULID**：生成 UUID v4、UUID v7、ULID，并解析 UUID v7 和 ULID 的时间。
 
 ### 开发辅助
 

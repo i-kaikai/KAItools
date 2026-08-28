@@ -90,6 +90,9 @@ kbd { padding: 2px 4px; border: 1px solid #3a3e44; border-bottom-width: 2px; bor
 .workspace-tab[data-tool='base64-text'] { --tool-accent: #b07d20; }
 .workspace-tab[data-tool='base64-image'] { --tool-accent: #bb5f88; }
 .workspace-tab[data-tool='base64-file'] { --tool-accent: #8066b7; }
+.workspace-tab[data-tool='qrcode'] { --tool-accent: #278c75; }
+.workspace-tab[data-tool='image-studio'] { --tool-accent: #c76d43; }
+.workspace-tab[data-tool='video-audio'] { --tool-accent: #587dcc; }
 .workspace-tab[data-tool='cron'] { --tool-accent: #367fc0; }
 .workspace-tab[data-tool='sql'] { --tool-accent: #178a8c; }
 .workspace-tab[data-tool='yaml'] { --tool-accent: #718d2f; }
@@ -100,6 +103,8 @@ kbd { padding: 2px 4px; border: 1px solid #3a3e44; border-bottom-width: 2px; bor
 .workspace-tab[data-tool='notes'] { --tool-accent: #8770d8; }
 .workspace-tab[data-tool='hosts'] { --tool-accent: #1485a3; }
 .workspace-tab[data-tool='md5'] { --tool-accent: #c6831b; }
+.workspace-tab[data-tool='naming'] { --tool-accent: #a35ec2; }
+.workspace-tab[data-tool='identifiers'] { --tool-accent: #2c90a8; }
 .workspace-tab[data-tool='home'] { --tool-accent: #30343a; }
 .language-menu-wrap { position: relative; display: flex; min-width: 0; }
 .language-menu-trigger { display: inline-flex; width: 116px; min-width: 0; align-items: center; gap: 7px; padding: 0 11px; border: 0; border-left: 1px solid var(--border); color: var(--text-secondary); background: var(--surface-subtle); cursor: pointer; font-size: 11px; text-align: left; transition: transform 140ms var(--ease-out), color 140ms ease, background-color 140ms ease; }
@@ -151,6 +156,9 @@ kbd { padding: 2px 4px; border: 1px solid #3a3e44; border-bottom-width: 2px; bor
 .tool-base64-text { --tool-accent: #d49a32; }
 .tool-base64-image { --tool-accent: #cc6f9a; }
 .tool-base64-file { --tool-accent: #9a7bcf; }
+.tool-qrcode { --tool-accent: #39ad92; }
+.tool-image-studio { --tool-accent: #d97d4d; }
+.tool-video-audio { --tool-accent: #7098eb; }
 .tool-cron { --tool-accent: #4d98d8; }
 .tool-sql { --tool-accent: #28a7a9; }
 .tool-yaml { --tool-accent: #89a843; }
@@ -160,6 +168,8 @@ kbd { padding: 2px 4px; border: 1px solid #3a3e44; border-bottom-width: 2px; bor
 .tool-notes { --tool-accent: #9a7be0; }
 .tool-hosts { --tool-accent: #33a0b8; }
 .tool-md5 { --tool-accent: #dda13c; }
+.tool-naming { --tool-accent: #bd76d2; }
+.tool-identifiers { --tool-accent: #48acc3; }
 
 .home-page { --home-border: rgb(255 255 255 / 14%); --home-muted: #8c96a4; --scrollbar-track: #090c10; --scrollbar-thumb: #3f4852; --scrollbar-thumb-hover: #626e7a; position: relative; isolation: isolate; flex: 1; min-width: 0; min-height: 0; color: #f4f6f8; background: #05070a; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .particle-field { position: fixed; z-index: 0; inset: 48px 0 0 228px; pointer-events: none; overflow: hidden; }
