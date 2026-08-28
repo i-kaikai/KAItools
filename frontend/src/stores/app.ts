@@ -48,7 +48,8 @@ function defaultAppSettings(): AppSettings {
     editorFontSize: 13,
     editorLineWrapping: true,
     clipboardMonitoringEnabled: true,
-    systemStatusRefreshSeconds: 0,
+    systemStatusRefreshSeconds: 1,
+    systemStatusRefreshMigrationVersion: 1,
     developerModeEnabled: false,
     activationHotkey: 'Ctrl+Alt+K',
   }
@@ -76,9 +77,12 @@ function normalizeAppSettings(value: Partial<AppSettings> | undefined): AppSetti
     clipboardMonitoringEnabled: typeof value?.clipboardMonitoringEnabled === 'boolean'
       ? value.clipboardMonitoringEnabled
       : defaults.clipboardMonitoringEnabled,
-    systemStatusRefreshSeconds: value?.systemStatusRefreshSeconds === 30 || value?.systemStatusRefreshSeconds === 60 || value?.systemStatusRefreshSeconds === 300
-      ? value.systemStatusRefreshSeconds
-      : 0,
+    systemStatusRefreshSeconds: value?.systemStatusRefreshMigrationVersion !== 1 && value?.systemStatusRefreshSeconds === 0
+      ? defaults.systemStatusRefreshSeconds
+      : value?.systemStatusRefreshSeconds === 0 || value?.systemStatusRefreshSeconds === 1 || value?.systemStatusRefreshSeconds === 30 || value?.systemStatusRefreshSeconds === 60 || value?.systemStatusRefreshSeconds === 300
+        ? value.systemStatusRefreshSeconds
+        : defaults.systemStatusRefreshSeconds,
+    systemStatusRefreshMigrationVersion: 1,
     developerModeEnabled: value?.developerModeEnabled === true,
     activationHotkey: typeof value?.activationHotkey === 'string' ? value.activationHotkey : defaults.activationHotkey,
   }

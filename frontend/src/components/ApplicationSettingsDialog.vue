@@ -19,7 +19,7 @@ const capturing = ref(false)
 const saving = ref(false)
 const message = ref(t('settings.hotkey.initial'))
 
-const localeOptions = computed(() => availableLocales.map((option) => ({ value: option.value, label: t(option.labelKey) })))
+const localeOptions = computed(() => availableLocales.map((option) => ({ value: option.value, label: option.nativeLabel })))
 const themeOptions = computed<Array<{ value: ThemeMode; label: string }>>(() => [
   { value: 'system', label: t('settings.theme.system') }, { value: 'light', label: t('settings.theme.light') }, { value: 'dark', label: t('settings.theme.dark') },
 ])
@@ -124,7 +124,7 @@ function restoreHotkeyDefault(): void {
         <section class="application-settings-section">
           <div class="application-settings-heading"><Clipboard :size="17" /><span><strong>{{ t('settings.desktop.title') }}</strong><small>{{ t('settings.desktop.description') }}</small></span></div>
           <label class="application-settings-switch" :class="{ disabled: isWebRuntime }"><span><strong>{{ t('settings.clipboard.title') }}</strong><small>{{ isWebRuntime ? t('settings.clipboard.web') : t('settings.clipboard.desktop') }}</small></span><input :checked="app.settings.clipboardMonitoringEnabled" type="checkbox" :aria-label="t('settings.clipboard.title')" :disabled="isWebRuntime" @change="app.setClipboardMonitoringEnabled(($event.target as HTMLInputElement).checked)" /></label>
-          <label class="application-settings-option"><span><strong>{{ t('settings.refresh.title') }}</strong><small>{{ t('settings.refresh.description') }}</small></span><select :value="app.settings.systemStatusRefreshSeconds" :aria-label="t('settings.refresh.title')" @change="app.setSystemStatusRefreshSeconds(Number(($event.target as HTMLSelectElement).value) as 0 | 30 | 60 | 300)"><option :value="0">{{ t('settings.refresh.manual') }}</option><option :value="30">{{ t('settings.refresh.seconds', { count: 30 }) }}</option><option :value="60">{{ t('settings.refresh.seconds', { count: 60 }) }}</option><option :value="300">{{ t('settings.refresh.minutes', { count: 5 }) }}</option></select></label>
+          <label class="application-settings-option"><span><strong>{{ t('settings.refresh.title') }}</strong><small>{{ t('settings.refresh.description') }}</small></span><select :value="app.settings.systemStatusRefreshSeconds" :aria-label="t('settings.refresh.title')" @change="app.setSystemStatusRefreshSeconds(Number(($event.target as HTMLSelectElement).value) as 0 | 1 | 30 | 60 | 300)"><option :value="0">{{ t('settings.refresh.manual') }}</option><option :value="1">{{ t('settings.refresh.seconds', { count: 1 }) }}</option><option :value="30">{{ t('settings.refresh.seconds', { count: 30 }) }}</option><option :value="60">{{ t('settings.refresh.seconds', { count: 60 }) }}</option><option :value="300">{{ t('settings.refresh.minutes', { count: 5 }) }}</option></select></label>
         </section>
 
         <section class="application-settings-section">

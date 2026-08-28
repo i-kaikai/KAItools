@@ -56,7 +56,9 @@ export interface AppSettings {
   editorFontSize: number
   editorLineWrapping: boolean
   clipboardMonitoringEnabled: boolean
-  systemStatusRefreshSeconds: 0 | 30 | 60 | 300
+  systemStatusRefreshSeconds: 0 | 1 | 30 | 60 | 300
+  /** One-time local migration marker; it prevents later manual refresh choices from being overwritten. */
+  systemStatusRefreshMigrationVersion: number
   developerModeEnabled: boolean
   /** Windows desktop global shortcut that restores KAITools to the foreground. */
   activationHotkey: string

@@ -4,17 +4,15 @@ import type { AppLocale } from '@/types'
 
 export const DEFAULT_LOCALE: AppLocale = 'zh-CN'
 
-export const localeOptions: ReadonlyArray<{ value: AppLocale; labelKey: string }> = [
-  { value: 'zh-CN', labelKey: 'language.zhCN' },
-  { value: 'en-US', labelKey: 'language.enUS' },
+export const localeOptions: ReadonlyArray<{ value: AppLocale; nativeLabel: string }> = [
+  { value: 'zh-CN', nativeLabel: '简体中文' },
+  { value: 'en-US', nativeLabel: 'English' },
 ]
 
 type MessageCatalog = Record<string, string>
 
 const messages: Record<AppLocale, MessageCatalog> = {
   'zh-CN': {
-    'language.zhCN': '简体中文',
-    'language.enUS': 'English',
     'settings.title': '应用设置',
     'settings.description': '偏好仅保存在当前设备，调整后立即生效。',
     'settings.close': '关闭应用设置',
@@ -41,7 +39,7 @@ const messages: Record<AppLocale, MessageCatalog> = {
     'settings.clipboard.desktop': '默认记录纯文本，隐藏到托盘后继续运行，退出应用自动清空。',
     'settings.clipboard.web': '浏览器无法持续监听系统剪切板，请使用 Windows 桌面版。',
     'settings.refresh.title': '系统状态自动刷新',
-    'settings.refresh.description': '手动刷新可随时使用；自动刷新只在首页停留时运行',
+    'settings.refresh.description': '本地指标按所选频率刷新；同步服务每 30 秒检测一次，仅在首页可见时运行',
     'settings.refresh.manual': '仅手动',
     'settings.refresh.seconds': '{count} 秒',
     'settings.refresh.minutes': '{count} 分钟',
@@ -98,6 +96,7 @@ const messages: Record<AppLocale, MessageCatalog> = {
     'shell.manageShortcuts': '管理快捷方式',
     'shell.applicationSettings': '应用设置',
     'shell.accountAndSync': '账户与同步',
+    'shell.selectLanguage': '选择界面语言',
     'shell.workspaceTabs': '工作标签',
     'shell.unpinTab': '取消固定',
     'shell.pinTab': '固定标签',
@@ -202,13 +201,13 @@ const messages: Record<AppLocale, MessageCatalog> = {
     'status.connected': '已连接', 'status.checking': '检测中', 'status.localMode': '本地模式', 'status.battery': '电池供电', 'status.externalPower': '外接电源',
     'status.charging': '正在充电', 'status.onBattery': '使用电池', 'status.noBattery': '未检测到电池', 'status.powerUnavailable': '电源信息不可用',
     'status.cpu': 'CPU', 'status.memory': '内存', 'status.power': '电量', 'status.workspaceData': '工作区数据', 'status.processor': '当前设备处理器', 'status.memoryTotal': '总计 {value}',
-    'status.managedDirectory': '受控本地目录', 'status.browserCpu': '浏览器无法读取处理器型号', 'status.browserMemory': '浏览器可提供的设备内存', 'status.browserPower': '浏览器不读取电源状态', 'status.quota': '配额 {value}',
+    'status.cpuUsage': 'CPU 利用率', 'status.memoryUsage': '内存占用', 'status.memoryUsed': '已用 {used} / 总计 {total}', 'status.browserCpuPressure': '浏览器 CPU 压力', 'status.browserCpuCores': '{count} 个可用逻辑核心', 'status.browserCpuUnavailable': '浏览器未提供 CPU 压力状态',
+    'status.cpuPressureNominal': '低', 'status.cpuPressureFair': '适中', 'status.cpuPressureSerious': '较高', 'status.cpuPressureCritical': '高', 'status.browserJsHeap': '浏览器内存（JS 堆）', 'status.browserJsHeapUsage': 'JS 堆 {used} / 上限 {limit}', 'status.browserJsHeapUnavailable': '浏览器未提供 JS 堆数据',
+    'status.managedDirectory': '受控本地目录', 'status.browserCpu': '浏览器无法读取处理器型号', 'status.browserMemory': '浏览器可提供的设备内存', 'status.browserPower': '浏览器不读取电源状态', 'status.quota': '配额 {value}', 'status.storageUsed': '已用 {used} / 配额 {quota}',
     'status.system': '系统', 'status.syncService': '同步服务', 'status.tray': '托盘', 'status.hidden': '已隐藏', 'status.running': '运行中', 'status.browser': '浏览器', 'status.localStorage': '本地存储',
     'status.title': '系统状态', 'status.updated': '{time} 更新', 'status.refresh': '刷新系统状态', 'status.readingRuntime': '正在读取运行环境',
   },
   'en-US': {
-    'language.zhCN': 'Simplified Chinese',
-    'language.enUS': 'English',
     'settings.title': 'Application settings',
     'settings.description': 'Preferences stay on this device and take effect immediately.',
     'settings.close': 'Close application settings',
@@ -226,7 +225,7 @@ const messages: Record<AppLocale, MessageCatalog> = {
     'settings.clipboard.title': 'Record clipboard history',
     'settings.clipboard.desktop': 'Records plain text by default, continues in the tray, and clears when the app exits.',
     'settings.clipboard.web': 'Browsers cannot continuously monitor the system clipboard. Use the Windows desktop app.',
-    'settings.refresh.title': 'Auto-refresh system status', 'settings.refresh.description': 'Manual refresh is always available; auto-refresh runs only while Home is open',
+    'settings.refresh.title': 'Auto-refresh system status', 'settings.refresh.description': 'Local metrics use the selected interval; sync service checks every 30 sec while Home is visible',
     'settings.refresh.manual': 'Manual only', 'settings.refresh.seconds': '{count} sec', 'settings.refresh.minutes': '{count} min',
     'settings.workspace.title': 'Workspace', 'settings.workspace.description': 'Sidebar and tab restoration',
     'settings.sidebar.title': 'Sidebar at startup', 'settings.sidebar.description': 'The selection applies the next time the app starts',
@@ -247,7 +246,7 @@ const messages: Record<AppLocale, MessageCatalog> = {
     'shell.home': 'Home', 'shell.goHome': 'Go to Home', 'shell.expandSidebar': 'Expand sidebar', 'shell.collapseSidebar': 'Collapse sidebar',
     'shell.browserStorage': 'Browser · local storage', 'shell.detecting': 'Detecting', 'shell.searchTools': 'Search tools', 'shell.filterTools': 'Filter tools', 'shell.openSearch': 'Open global search',
     'shell.toolNav': 'Developer tools', 'shell.shortcuts': 'Shortcuts', 'shell.newTab': 'New {tool} tab', 'shell.noTools': 'No matching tools', 'shell.manageShortcuts': 'Manage shortcuts',
-    'shell.applicationSettings': 'Application settings', 'shell.accountAndSync': 'Account and sync', 'shell.workspaceTabs': 'Workspace tabs', 'shell.unpinTab': 'Unpin tab', 'shell.pinTab': 'Pin tab',
+    'shell.applicationSettings': 'Application settings', 'shell.accountAndSync': 'Account and sync', 'shell.selectLanguage': 'Select interface language', 'shell.workspaceTabs': 'Workspace tabs', 'shell.unpinTab': 'Unpin tab', 'shell.pinTab': 'Pin tab',
     'shell.closeTab': 'Close tab', 'shell.tabActions': 'Tab actions', 'shell.closeCurrent': 'Close current', 'shell.closeOthers': 'Close others', 'shell.closeRight': 'Close to the right', 'shell.closeAll': 'Close all',
     'shell.loadFailed': 'Could not load KAITools', 'shell.starting': 'Starting', 'shell.localMode': 'Local mode', 'shell.signedInLocal': 'Signed in · local development service', 'shell.signedInSync': 'Signed in · sync enabled',
     'shell.developerUnlock': 'Click one more time to enable developer mode', 'shell.developerEnabled': 'Developer mode enabled',
@@ -308,7 +307,9 @@ const messages: Record<AppLocale, MessageCatalog> = {
     'status.connected': 'Connected', 'status.checking': 'Checking', 'status.localMode': 'Local mode', 'status.battery': 'On battery', 'status.externalPower': 'External power',
     'status.charging': 'Charging', 'status.onBattery': 'Using battery', 'status.noBattery': 'No battery detected', 'status.powerUnavailable': 'Power information unavailable',
     'status.cpu': 'CPU', 'status.memory': 'Memory', 'status.power': 'Power', 'status.workspaceData': 'Workspace data', 'status.processor': 'Current device processor', 'status.memoryTotal': 'Total {value}',
-    'status.managedDirectory': 'Managed local directory', 'status.browserCpu': 'Browsers cannot read the processor model', 'status.browserMemory': 'Device memory available to the browser', 'status.browserPower': 'Browsers do not read power status', 'status.quota': 'Quota {value}',
+    'status.cpuUsage': 'CPU usage', 'status.memoryUsage': 'Memory usage', 'status.memoryUsed': 'Used {used} / total {total}', 'status.browserCpuPressure': 'Browser CPU pressure', 'status.browserCpuCores': '{count} available logical cores', 'status.browserCpuUnavailable': 'Browser CPU pressure is unavailable',
+    'status.cpuPressureNominal': 'Low', 'status.cpuPressureFair': 'Moderate', 'status.cpuPressureSerious': 'Elevated', 'status.cpuPressureCritical': 'High', 'status.browserJsHeap': 'Browser memory (JS heap)', 'status.browserJsHeapUsage': 'JS heap {used} / limit {limit}', 'status.browserJsHeapUnavailable': 'Browser JS heap data is unavailable',
+    'status.managedDirectory': 'Managed local directory', 'status.browserCpu': 'Browsers cannot read the processor model', 'status.browserMemory': 'Device memory available to the browser', 'status.browserPower': 'Browsers do not read power status', 'status.quota': 'Quota {value}', 'status.storageUsed': 'Used {used} / quota {quota}',
     'status.system': 'System', 'status.syncService': 'Sync service', 'status.tray': 'Tray', 'status.hidden': 'Hidden', 'status.running': 'Running', 'status.browser': 'Browser', 'status.localStorage': 'Local storage',
     'status.title': 'System status', 'status.updated': 'Updated {time}', 'status.refresh': 'Refresh system status', 'status.readingRuntime': 'Reading runtime environment',
   },

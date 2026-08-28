@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import {
+  Check,
   ChevronDown,
   CircleUserRound,
+  Globe2,
   Monitor,
   Moon,
   PanelLeftClose,
@@ -29,11 +31,11 @@ import { isWebRuntime } from '@/runtime'
 import ToastViewport from '@/components/ToastViewport.vue'
 import giteeLogo from '@/assets/gitee-g-red.svg'
 import githubLogo from '@/assets/github-invertocat-white.svg'
-import { t } from '@/i18n'
+import { localeOptions, t } from '@/i18n'
 import kaitoolsMarkWhite from '@/assets/kaitools-mark-white.svg'
 import { useAppStore } from '@/stores/app'
 import { useToastStore } from '@/stores/toast'
-import type { ThemeMode, ToolTab } from '@/types'
+import type { AppLocale, ThemeMode, ToolTab } from '@/types'
 import { homeTool, toolsById, workspaceTools } from '@/tools/registry'
 import { APP_VERSION } from '@/version'
 
@@ -43,6 +45,7 @@ const sidebarSearch = ref('')
 const searchOpen = ref(false)
 const shortcutManagerOpen = ref(false)
 const accountSyncOpen = ref(false)
+const languageMenuOpen = ref(false)
 const developerPanelOpen = ref(false)
 const applicationSettingsOpen = ref(false)
 let developerUnlockClicks = 0
@@ -61,6 +64,8 @@ const themeIcon = computed(() => ({ system: Monitor, light: Sun, dark: Moon })[a
 const themeLabel = computed(() => ({ system: t('settings.theme.system'), light: t('settings.theme.light'), dark: t('settings.theme.dark') })[app.settings.theme])
 const accountTitle = computed(() => app.account?.displayName || app.account?.email || t('shell.localMode'))
 const accountSubtitle = computed(() => app.account ? (app.usingLocalDeveloperService ? t('shell.signedInLocal') : t('shell.signedInSync')) : t('shell.accountAndSync'))
+const activeLocaleOption = computed(() => localeOptions.find((option) => option.value === app.settings.locale) ?? localeOptions[0]!)
+const activeLocaleLabel = computed(() => activeLocaleOption.value.nativeLabel)
 const developerModeActive = computed(() => import.meta.env.DEV || app.settings.developerModeEnabled)
 
 async function signOut(): Promise<void> {
@@ -130,6 +135,12 @@ function openTabMenu(event: MouseEvent, tab: ToolTab): void {
 
 function closeTabMenu(): void {
   tabMenu.value.visible = false
+  languageMenuOpen.value = false
+}
+
+function selectLocale(locale: AppLocale): void {
+  app.setLocale(locale)
+  languageMenuOpen.value = false
 }
 
 function tabsForMenu(mode: 'current' | 'others' | 'right' | 'all'): string[] {
@@ -172,6 +183,10 @@ function onKeydown(event: KeyboardEvent): void {
   }
   if (event.key === 'Escape' && tabMenu.value.visible) {
     closeTabMenu()
+    return
+  }
+  if (event.key === 'Escape' && languageMenuOpen.value) {
+    languageMenuOpen.value = false
     return
   }
   if (event.key === 'Escape' && applicationSettingsOpen.value) {
@@ -351,6 +366,12 @@ onBeforeUnmount(() => {
             size="small"
             @click="openTool(activeTool.id, true)"
           />
+        </div>
+        <div class="language-menu-wrap" @pointerdown.stop>
+          <button class="language-menu-trigger" type="button" :aria-expanded="languageMenuOpen" aria-haspopup="menu" :aria-label="t('shell.selectLanguage')" @click="languageMenuOpen = !languageMenuOpen"><Globe2 :size="16" aria-hidden="true" /><span>{{ activeLocaleLabel }}</span><ChevronDown :size="13" aria-hidden="true" /></button>
+          <div v-if="languageMenuOpen" class="language-menu" role="menu" :aria-label="t('shell.selectLanguage')">
+            <button v-for="option in localeOptions" :key="option.value" type="button" role="menuitemradio" :aria-checked="option.value === app.settings.locale" @click="selectLocale(option.value)"><span>{{ option.nativeLabel }}</span><Check v-if="option.value === app.settings.locale" :size="15" aria-hidden="true" /></button>
+          </div>
         </div>
         <button class="account-entry" type="button" :aria-expanded="accountSyncOpen" aria-haspopup="dialog" @click="accountSyncOpen = !accountSyncOpen">
           <span class="account-entry-avatar" :class="{ connected: app.account }"><CircleUserRound :size="17" aria-hidden="true" /></span>

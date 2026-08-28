@@ -38,6 +38,60 @@ const DESKTOP_ONLY_METHODS = new Set([
   'set_clipboard_monitoring',
   'copy_text',
 ])
+const SYSTEM_STATUS_REFRESH_MIGRATION_VERSION = 1
+const BROWSER_DIAGNOSTICS_CACHE_MS = 30_000
+
+type BrowserCpuPressure = 'nominal' | 'fair' | 'serious' | 'critical'
+
+interface BatteryManagerLike {
+  charging: boolean
+  level: number
+}
+
+interface PressureRecordLike {
+  state: string
+}
+
+interface PressureObserverLike {
+  observe(source: 'cpu', options?: { sampleInterval?: number }): void
+  disconnect(): void
+}
+
+interface PressureObserverConstructor {
+  new (callback: (records: PressureRecordLike[]) => void): PressureObserverLike
+}
+
+let browserCpuPressure: BrowserCpuPressure | null = null
+let browserPressureObserver: PressureObserverLike | null = null
+let browserStorageEstimate: StorageEstimate | undefined
+let browserStorageEstimateAt = Number.NEGATIVE_INFINITY
+
+function normalizeBrowserCpuPressure(value: string): BrowserCpuPressure | null {
+  return value === 'nominal' || value === 'fair' || value === 'serious' || value === 'critical' ? value : null
+}
+
+function setBrowserCpuPressureMonitoring(active: boolean): void {
+  if (!isWebRuntime) return
+  if (!active) {
+    browserPressureObserver?.disconnect()
+    browserPressureObserver = null
+    browserCpuPressure = null
+    return
+  }
+  if (browserPressureObserver) return
+  const PressureObserver = (window as Window & { PressureObserver?: PressureObserverConstructor }).PressureObserver
+  if (!PressureObserver) return
+  try {
+    const observer = new PressureObserver((records) => {
+      const latest = records[records.length - 1]
+      browserCpuPressure = latest ? normalizeBrowserCpuPressure(latest.state) : null
+    })
+    observer.observe('cpu', { sampleInterval: 1000 })
+    browserPressureObserver = observer
+  } catch {
+    browserCpuPressure = null
+  }
+}
 
 function defaultBrowserState(): BootstrapState {
   return {
@@ -53,7 +107,8 @@ function defaultBrowserState(): BootstrapState {
       editorFontSize: 13,
       editorLineWrapping: true,
       clipboardMonitoringEnabled: true,
-      systemStatusRefreshSeconds: 0,
+      systemStatusRefreshSeconds: 1,
+      systemStatusRefreshMigrationVersion: SYSTEM_STATUS_REFRESH_MIGRATION_VERSION,
       developerModeEnabled: false,
       activationHotkey: 'Ctrl+Alt+K',
     },
@@ -96,7 +151,7 @@ function browserState(): BootstrapState {
     const stored = JSON.parse(value) as Partial<BootstrapState>
     const defaults = defaultBrowserState()
     const settings = normalizeBrowserSettings(stored.settings)
-    return {
+    const state: BootstrapState = {
       settings,
       backendConnection: normalizeBrowserBackendConnection(stored.backendConnection, settings.developerModeEnabled),
       sidebarShortcuts: {
@@ -132,6 +187,8 @@ function browserState(): BootstrapState {
       hostsProfiles: Array.isArray(stored.hostsProfiles?.groups) ? stored.hostsProfiles : defaults.hostsProfiles,
       runtime: defaults.runtime,
     }
+    if (stored.settings?.systemStatusRefreshMigrationVersion !== SYSTEM_STATUS_REFRESH_MIGRATION_VERSION) saveBrowserState(state)
+    return state
   } catch {
     return defaultBrowserState()
   }
@@ -370,6 +427,7 @@ export const desktopApi = {
   setClipboardMonitoring: (enabled: boolean) => invoke<{ enabled: boolean }>('set_clipboard_monitoring', enabled),
   copyText: (text: string) => invoke<void>('copy_text', text),
   getSystemStatus: () => invoke<SystemStatusSnapshot>('get_system_status'),
+  setBrowserSystemStatusMonitoring: (active: boolean) => setBrowserCpuPressureMonitoring(active),
 }
 
 function normalizeBrowserBackendConnection(value: Partial<BackendConnection> | undefined, developerModeEnabled: boolean): BackendConnection {
@@ -407,9 +465,12 @@ function normalizeBrowserSettings(value: Partial<AppSettings> | undefined): AppS
     clipboardMonitoringEnabled: typeof value?.clipboardMonitoringEnabled === 'boolean'
       ? value.clipboardMonitoringEnabled
       : defaults.clipboardMonitoringEnabled,
-    systemStatusRefreshSeconds: value?.systemStatusRefreshSeconds === 30 || value?.systemStatusRefreshSeconds === 60 || value?.systemStatusRefreshSeconds === 300
-      ? value.systemStatusRefreshSeconds
-      : 0,
+    systemStatusRefreshSeconds: value?.systemStatusRefreshMigrationVersion !== SYSTEM_STATUS_REFRESH_MIGRATION_VERSION && value?.systemStatusRefreshSeconds === 0
+      ? defaults.systemStatusRefreshSeconds
+      : value?.systemStatusRefreshSeconds === 0 || value?.systemStatusRefreshSeconds === 1 || value?.systemStatusRefreshSeconds === 30 || value?.systemStatusRefreshSeconds === 60 || value?.systemStatusRefreshSeconds === 300
+        ? value.systemStatusRefreshSeconds
+        : defaults.systemStatusRefreshSeconds,
+    systemStatusRefreshMigrationVersion: SYSTEM_STATUS_REFRESH_MIGRATION_VERSION,
     developerModeEnabled: value?.developerModeEnabled === true,
     activationHotkey: typeof value?.activationHotkey === 'string' ? value.activationHotkey : defaults.activationHotkey,
   }
@@ -420,8 +481,28 @@ async function getBrowserSystemStatus(): Promise<SystemStatusSnapshot> {
     deviceMemory?: number
     connection?: { effectiveType?: string; type?: string; downlink?: number }
     userAgentData?: { brands?: Array<{ brand: string; version: string }>; platform?: string }
+    getBattery?: () => Promise<BatteryManagerLike>
   }
-  const storageEstimate = await navigator.storage?.estimate?.().catch(() => undefined)
+  const performanceWithMemory = performance as Performance & {
+    memory?: { usedJSHeapSize?: number; jsHeapSizeLimit?: number }
+  }
+  if (Date.now() - browserStorageEstimateAt >= BROWSER_DIAGNOSTICS_CACHE_MS) {
+    browserStorageEstimate = await navigator.storage?.estimate?.().catch(() => undefined)
+    browserStorageEstimateAt = Date.now()
+  }
+  const battery = await navigatorWithDetails.getBattery?.().catch(() => undefined)
+  const batteryLevel = typeof battery?.level === 'number' && Number.isFinite(battery.level)
+    ? Math.round(Math.max(0, Math.min(1, battery.level)) * 100)
+    : null
+  const jsHeapUsedBytes = typeof performanceWithMemory.memory?.usedJSHeapSize === 'number'
+    ? performanceWithMemory.memory.usedJSHeapSize
+    : null
+  const jsHeapLimitBytes = typeof performanceWithMemory.memory?.jsHeapSizeLimit === 'number'
+    ? performanceWithMemory.memory.jsHeapSizeLimit
+    : null
+  const jsHeapUsagePercent = jsHeapUsedBytes !== null && jsHeapLimitBytes !== null && jsHeapLimitBytes > 0
+    ? Math.round(Math.max(0, Math.min(100, jsHeapUsedBytes / jsHeapLimitBytes * 100)) * 10) / 10
+    : null
   let localStorageAvailable = true
   try {
     void localStorage.length
@@ -446,9 +527,13 @@ async function getBrowserSystemStatus(): Promise<SystemStatusSnapshot> {
       logicalCores: navigator.hardwareConcurrency ?? null,
       deviceMemoryGiB: navigatorWithDetails.deviceMemory ?? null,
       cpuName: null,
-      powerSource: 'unavailable',
-      powerPercent: null,
-      powerCharging: null,
+      cpuPressure: browserCpuPressure,
+      jsHeapUsedBytes,
+      jsHeapLimitBytes,
+      jsHeapUsagePercent,
+      powerSource: battery ? 'battery' : 'unavailable',
+      powerPercent: batteryLevel,
+      powerCharging: battery?.charging ?? null,
       online: navigator.onLine,
       network: navigatorWithDetails.connection?.effectiveType || navigatorWithDetails.connection?.type || null,
       downlinkMbps: navigatorWithDetails.connection?.downlink ?? null,
@@ -459,8 +544,8 @@ async function getBrowserSystemStatus(): Promise<SystemStatusSnapshot> {
     application: {
       localStorageAvailable,
       indexedDbAvailable: typeof indexedDB !== 'undefined',
-      storageQuotaBytes: storageEstimate?.quota ?? null,
-      storageUsageBytes: storageEstimate?.usage ?? null,
+      storageQuotaBytes: browserStorageEstimate?.quota ?? null,
+      storageUsageBytes: browserStorageEstimate?.usage ?? null,
       trayHidden: null,
       clipboard: null,
     },

@@ -37,7 +37,8 @@ describe('browser API storage', () => {
       editorFontSize: 13,
       editorLineWrapping: true,
       clipboardMonitoringEnabled: true,
-      systemStatusRefreshSeconds: 0,
+      systemStatusRefreshSeconds: 1,
+      systemStatusRefreshMigrationVersion: 1,
     })
     expect(initial.data.workspace.tabs).toEqual([])
 
@@ -112,6 +113,24 @@ describe('browser API storage', () => {
     })
   })
 
+  it('migrates the legacy manual refresh default once and preserves later manual choices', async () => {
+    localStorage.setItem('devtoolkit.browser.state.v1', JSON.stringify({
+      settings: { schemaVersion: 1, systemStatusRefreshSeconds: 0 },
+    }))
+
+    const migrated = await desktopApi.loadState()
+    expect(migrated.ok).toBe(true)
+    if (!migrated.ok) return
+    expect(migrated.data.settings).toMatchObject({ systemStatusRefreshSeconds: 1, systemStatusRefreshMigrationVersion: 1 })
+    expect(JSON.parse(localStorage.getItem('devtoolkit.browser.state.v1') ?? '{}').settings).toMatchObject({ systemStatusRefreshSeconds: 1, systemStatusRefreshMigrationVersion: 1 })
+
+    await desktopApi.saveSettings({ settings: { ...migrated.data.settings, systemStatusRefreshSeconds: 0 } })
+    const manual = await desktopApi.loadState()
+    expect(manual.ok).toBe(true)
+    if (!manual.ok) return
+    expect(manual.data.settings.systemStatusRefreshSeconds).toBe(0)
+  })
+
   it('does not pretend that the browser can register a Windows global hotkey', async () => {
     const result = await desktopApi.setActivationHotkey('Ctrl+Alt+F8')
 
@@ -127,6 +146,25 @@ describe('browser API storage', () => {
     expect(result.data.system).toHaveProperty('viewport')
     expect(result.data.system).toMatchObject({ cpuName: null, powerSource: 'unavailable', powerPercent: null })
     expect(result.data.application).toHaveProperty('indexedDbAvailable')
+  })
+
+  it('uses browser battery and JS heap data when the runtime exposes them', async () => {
+    const batteryDescriptor = Object.getOwnPropertyDescriptor(navigator, 'getBattery')
+    const memoryDescriptor = Object.getOwnPropertyDescriptor(performance, 'memory')
+    Object.defineProperty(navigator, 'getBattery', { configurable: true, value: async () => ({ charging: true, level: 0.62 }) })
+    Object.defineProperty(performance, 'memory', { configurable: true, value: { usedJSHeapSize: 128, jsHeapSizeLimit: 512 } })
+
+    try {
+      const result = await desktopApi.getSystemStatus()
+      expect(result.ok).toBe(true)
+      if (!result.ok) return
+      expect(result.data.system).toMatchObject({ powerSource: 'battery', powerPercent: 62, powerCharging: true, jsHeapUsedBytes: 128, jsHeapLimitBytes: 512, jsHeapUsagePercent: 25 })
+    } finally {
+      if (batteryDescriptor) Object.defineProperty(navigator, 'getBattery', batteryDescriptor)
+      else delete (navigator as Navigator & { getBattery?: unknown }).getBattery
+      if (memoryDescriptor) Object.defineProperty(performance, 'memory', memoryDescriptor)
+      else delete (performance as Performance & { memory?: unknown }).memory
+    }
   })
 
 })

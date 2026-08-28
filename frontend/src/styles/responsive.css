@@ -37,6 +37,9 @@
   .workspace { width: 100%; height: 100%; }
   .particle-field, .app-shell.sidebar-collapsed .particle-field { inset: 48px 0 58px; }
   .tab-strip { padding-inline: 8px; }
+  .language-menu-trigger { width: 42px; justify-content: center; padding: 0; }.language-menu-trigger > span, .language-menu-trigger > svg:last-child { display: none; }
+  .language-menu { right: 0; min-width: 176px; }
+  .account-entry { width: 48px; justify-content: center; padding: 0; }.account-entry-copy, .account-entry-chevron { display: none; }
   .home-orbit { padding: 18px 16px 22px; }
   .home-orbit-telemetry { top: 18px; font-size: 8px; }
   .home-orbit-telemetry-left { left: 16px; }

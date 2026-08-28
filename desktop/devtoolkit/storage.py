@@ -19,6 +19,8 @@ PARTICLE_QUALITIES = {"high", "balanced", "off"}
 MOTION_MODES = {"system", "reduced"}
 SIDEBAR_STARTUP_MODES = {"remember", "collapsed", "expanded"}
 APP_LOCALES = {"zh-CN", "en-US"}
+SYSTEM_STATUS_REFRESH_INTERVALS = {0, 1, 30, 60, 300}
+SYSTEM_STATUS_REFRESH_MIGRATION_VERSION = 1
 TOOL_IDS = {
     "json",
     "json-diff",
@@ -54,7 +56,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "editorFontSize": 13,
     "editorLineWrapping": True,
     "clipboardMonitoringEnabled": True,
-    "systemStatusRefreshSeconds": 0,
+    "systemStatusRefreshSeconds": 1,
+    "systemStatusRefreshMigrationVersion": SYSTEM_STATUS_REFRESH_MIGRATION_VERSION,
     "developerModeEnabled": False,
     "activationHotkey": DEFAULT_ACTIVATION_HOTKEY,
 }
@@ -192,6 +195,7 @@ def _read_settings(path: Path) -> dict[str, Any]:
 
     settings = _read_json(path, DEFAULT_SETTINGS)
     changed = False
+    needs_status_refresh_migration = settings.get("systemStatusRefreshMigrationVersion") != SYSTEM_STATUS_REFRESH_MIGRATION_VERSION
     for key, default in DEFAULT_SETTINGS.items():
         if key == "schemaVersion" or key in settings:
             continue
@@ -227,8 +231,13 @@ def _read_settings(path: Path) -> dict[str, Any]:
     if not isinstance(settings.get("clipboardMonitoringEnabled"), bool):
         settings["clipboardMonitoringEnabled"] = DEFAULT_SETTINGS["clipboardMonitoringEnabled"]
         changed = True
-    if not isinstance(settings.get("systemStatusRefreshSeconds"), int) or settings["systemStatusRefreshSeconds"] not in {0, 30, 60, 300}:
+    if not isinstance(settings.get("systemStatusRefreshSeconds"), int) or settings["systemStatusRefreshSeconds"] not in SYSTEM_STATUS_REFRESH_INTERVALS:
         settings["systemStatusRefreshSeconds"] = DEFAULT_SETTINGS["systemStatusRefreshSeconds"]
+        changed = True
+    if needs_status_refresh_migration:
+        if settings["systemStatusRefreshSeconds"] == 0:
+            settings["systemStatusRefreshSeconds"] = DEFAULT_SETTINGS["systemStatusRefreshSeconds"]
+        settings["systemStatusRefreshMigrationVersion"] = SYSTEM_STATUS_REFRESH_MIGRATION_VERSION
         changed = True
     if not isinstance(settings.get("developerModeEnabled"), bool):
         settings["developerModeEnabled"] = DEFAULT_SETTINGS["developerModeEnabled"]
@@ -367,12 +376,12 @@ class AppStorage:
             settings = payload["settings"]
             if not isinstance(settings, dict):
                 raise StorageError("设置格式无效")
-            if set(settings) - {"schemaVersion", "locale", "theme", "sidebarCollapsed", "particleQuality", "motionMode", "sidebarStartup", "restorePinnedTabsOnLaunch", "editorFontSize", "editorLineWrapping", "clipboardMonitoringEnabled", "systemStatusRefreshSeconds", "developerModeEnabled", "activationHotkey"}:
+            if set(settings) - {"schemaVersion", "locale", "theme", "sidebarCollapsed", "particleQuality", "motionMode", "sidebarStartup", "restorePinnedTabsOnLaunch", "editorFontSize", "editorLineWrapping", "clipboardMonitoringEnabled", "systemStatusRefreshSeconds", "systemStatusRefreshMigrationVersion", "developerModeEnabled", "activationHotkey"}:
                 raise StorageError("设置中包含不支持的字段")
             if settings.get("schemaVersion", SCHEMA_VERSION) != SCHEMA_VERSION:
                 raise StorageError("设置版本无效")
             current = _read_settings(self.paths.settings_file)
-            update = {key: settings[key] for key in ("locale", "theme", "sidebarCollapsed", "particleQuality", "motionMode", "sidebarStartup", "restorePinnedTabsOnLaunch", "editorFontSize", "editorLineWrapping", "clipboardMonitoringEnabled", "systemStatusRefreshSeconds", "developerModeEnabled", "activationHotkey") if key in settings}
+            update = {key: settings[key] for key in ("locale", "theme", "sidebarCollapsed", "particleQuality", "motionMode", "sidebarStartup", "restorePinnedTabsOnLaunch", "editorFontSize", "editorLineWrapping", "clipboardMonitoringEnabled", "systemStatusRefreshSeconds", "systemStatusRefreshMigrationVersion", "developerModeEnabled", "activationHotkey") if key in settings}
             if "locale" in update and update["locale"] not in APP_LOCALES:
                 raise StorageError("语言设置无效")
             if "theme" in update and update["theme"] not in THEMES:
@@ -403,8 +412,10 @@ class AppStorage:
                 update["clipboardMonitoringEnabled"], bool
             ):
                 raise StorageError("剪切板监控设置无效")
-            if "systemStatusRefreshSeconds" in update and update["systemStatusRefreshSeconds"] not in {0, 30, 60, 300}:
+            if "systemStatusRefreshSeconds" in update and update["systemStatusRefreshSeconds"] not in SYSTEM_STATUS_REFRESH_INTERVALS:
                 raise StorageError("系统状态刷新设置无效")
+            if "systemStatusRefreshMigrationVersion" in update and update["systemStatusRefreshMigrationVersion"] != SYSTEM_STATUS_REFRESH_MIGRATION_VERSION:
+                raise StorageError("系统状态刷新设置版本无效")
             if "developerModeEnabled" in update and not isinstance(
                 update["developerModeEnabled"], bool
             ):

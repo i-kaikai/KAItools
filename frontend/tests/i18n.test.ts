@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
-import { messageKeys, setActiveLocale, t, translateForLocale } from '@/i18n'
+import { localeOptions, messageKeys, setActiveLocale, t, translateForLocale } from '@/i18n'
 import { useAppStore } from '@/stores/app'
 import { defaultDashboardCards, localizeSystemDashboardCards } from '@/tools/home/dashboardCards'
 
@@ -19,6 +19,13 @@ describe('application localization', () => {
     expect(document.documentElement.lang).toBe('en-US')
     expect(t('settings.title')).toBe('Application settings')
     expect(translateForLocale('zh-CN', 'home.openedTools', { count: 2 })).toBe('已打开 2 个工具')
+  })
+
+  it('keeps locale choices in each language\'s own writing system', () => {
+    for (const locale of ['zh-CN', 'en-US'] as const) {
+      setActiveLocale(locale)
+      expect(localeOptions.map((option) => option.nativeLabel)).toEqual(['简体中文', 'English'])
+    }
   })
 
   it('updates stock Home cards while preserving custom card copy', () => {

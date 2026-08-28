@@ -24,7 +24,7 @@ from .paths import AppPaths
 from .runtime import open_desktop_download, open_developer_tools, open_github_repository, open_project_repository, open_webview2_download, webview2_version
 from .storage import AppStorage, StorageError
 from .tray import TrayController, TrayError
-from .system_status import collect_system_status
+from .system_status import SystemStatusCollector
 from .version import APP_VERSION
 
 LOGGER = logging.getLogger(__name__)
@@ -55,6 +55,7 @@ class DesktopApi:
         self._tray = tray
         self._clipboard = clipboard
         self._window: object | None = None
+        self._system_status = SystemStatusCollector()
 
     def bind_window(self, window: object) -> None:
         self._window = window
@@ -178,7 +179,7 @@ class DesktopApi:
 
     def get_system_status(self) -> dict[str, Any]:
         try:
-            return _success(collect_system_status(self._paths, self._clipboard, self._tray))
+            return _success(self._system_status.collect(self._paths, self._clipboard, self._tray))
         except Exception as exc:
             LOGGER.exception("system_status_read_failed")
             return _failure("SYSTEM_STATUS_FAILED", "无法读取系统状态", str(exc))

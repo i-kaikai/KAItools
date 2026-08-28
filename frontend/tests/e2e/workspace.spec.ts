@@ -249,7 +249,7 @@ for (const viewport of [
     await page.getByRole('button', { name: '首页', exact: true }).click()
     await expect(page.locator('.particle-field')).toHaveAttribute('data-stage', 'workbench')
     await page.getByRole('button', { name: '跟随系统' }).click()
-    await page.getByRole('button', { name: '浅色主题' }).click()
+    await page.getByRole('button', { name: '浅色' }).click()
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
     await page.mouse.move(viewport.width / 2, viewport.height / 2)
     await assertViewportIntegrity(page)
@@ -285,6 +285,78 @@ test('homepage surfaces local workspace overview, four system metrics, and an al
   expect(Math.max(...alignment)).toBeLessThanOrEqual(1)
   mkdirSync(qaDir, { recursive: true })
   await page.screenshot({ path: resolve(qaDir, 'home-workbench-density.png'), fullPage: true })
+})
+
+test('desktop system status renders percentage progress for CPU, memory, and battery', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name === 'web', 'The web build intentionally reports browser-scoped metrics.')
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await page.evaluate(() => {
+    window.pywebview = {
+      api: {
+        get_system_status: async () => ({
+          ok: true,
+          data: {
+            capturedAt: '2026-08-28T12:00:00Z',
+            runtime: 'desktop',
+            system: {
+              platform: 'Windows 11', logicalCores: 16, cpuName: 'Test CPU', cpuUsagePercent: 5.7,
+              memoryTotalBytes: 16 * 1024 ** 3, memoryAvailableBytes: 3.424 * 1024 ** 3, memoryUsagePercent: 78.6,
+              powerSource: 'battery', powerPercent: 100, powerCharging: true,
+            },
+            application: { webview2: 'Test WebView2', dataDirectory: 'C:\\KAITools\\data', dataDirectoryBytes: 1024, trayHidden: false, clipboard: { enabled: true, count: 0, maxEntries: 100 } },
+          },
+        }),
+      },
+    }
+  })
+
+  await page.getByRole('button', { name: '刷新系统状态' }).click()
+  const metrics = page.locator('.system-status-metrics')
+  await expect(metrics).toContainText('5.7%')
+  await expect(metrics).toContainText('78.6%')
+  await expect(metrics).toContainText('100%')
+  await expect(metrics.getByRole('progressbar')).toHaveCount(3)
+  await expect(metrics.getByRole('progressbar', { name: 'CPU' })).toHaveAttribute('aria-valuenow', '5.7')
+  await expect(metrics.getByRole('progressbar', { name: '内存' })).toHaveAttribute('aria-valuenow', '78.6')
+  mkdirSync(qaDir, { recursive: true })
+  await page.screenshot({ path: resolve(qaDir, 'system-status-percentages.png'), fullPage: true })
+})
+
+test('visible Home refreshes local metrics every second and service status every 30 seconds', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name === 'web', 'The desktop bridge supplies controlled local system samples.')
+  await page.clock.install({ time: new Date('2026-08-28T12:00:00Z') })
+  let healthChecks = 0
+  await page.route('**/api/health', (route) => {
+    healthChecks += 1
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, data: { status: 'ready' } }) })
+  })
+  await page.goto('/')
+  await page.evaluate(() => {
+    let samples = 0
+    window.pywebview = {
+      api: {
+        get_system_status: async () => {
+          samples += 1
+          document.documentElement.dataset.systemStatusSamples = String(samples)
+          return {
+            ok: true,
+            data: {
+              capturedAt: new Date().toISOString(), runtime: 'desktop',
+              system: { platform: 'Windows 11', logicalCores: 16, cpuName: 'Test CPU', cpuUsagePercent: 5, memoryTotalBytes: 16, memoryAvailableBytes: 8, memoryUsagePercent: 50, powerSource: 'battery', powerPercent: 90, powerCharging: false },
+              application: { webview2: 'Test WebView2', dataDirectory: 'C:\\KAITools\\data', dataDirectoryBytes: 0, trayHidden: false, clipboard: { enabled: true, count: 0, maxEntries: 100 } },
+            },
+          }
+        },
+      },
+    }
+  })
+  await expect.poll(() => healthChecks).toBeGreaterThanOrEqual(1)
+  const initialHealthChecks = healthChecks
+
+  await page.clock.fastForward(30_000)
+  await expect.poll(async () => Number(await page.locator('html').getAttribute('data-system-status-samples'))).toBeGreaterThanOrEqual(30)
+  expect(healthChecks - initialHealthChecks).toBe(1)
 })
 
 test('default desktop height keeps the calculator compact and homepage shows current session tools', async ({ page }) => {
@@ -529,6 +601,7 @@ test('application settings apply local performance, workspace and editor prefere
   await page.getByRole('button', { name: '应用设置' }).click()
   const dialog = page.getByRole('dialog', { name: '应用设置' })
   await expect(dialog).toBeVisible()
+  await expect(dialog.getByLabel('系统状态自动刷新')).toHaveValue('1')
   await expect(dialog.getByRole('radio', { name: '高质量', exact: true })).toHaveAttribute('aria-checked', 'true')
   await dialog.getByRole('radio', { name: '均衡', exact: true }).click()
   await expect(page.locator('.particle-field')).toHaveAttribute('data-quality', 'balanced')
@@ -539,9 +612,9 @@ test('application settings apply local performance, workspace and editor prefere
   await page.waitForTimeout(2_000)
   await expect(carousel).toHaveAttribute('data-active-index', indexBeforeReducedWait ?? '0')
   await dialog.getByLabel('编辑器字号').selectOption('16')
-  await dialog.getByLabel('编辑器自动换行').uncheck()
+  await dialog.getByLabel('自动换行').uncheck()
   await dialog.getByRole('radio', { name: '默认收起', exact: true }).click()
-  await dialog.getByLabel('启动时恢复固定标签').uncheck()
+  await dialog.getByLabel('恢复固定标签').uncheck()
   const capture = dialog.getByRole('button', { name: '录入全局唤起快捷键' })
   if (testInfo.project.name === 'web') {
     await expect(capture).toBeDisabled()
@@ -577,10 +650,55 @@ test('application settings remain usable at the compact desktop minimum', async 
   await page.getByRole('button', { name: '应用设置' }).click()
   const dialog = page.getByRole('dialog', { name: '应用设置' })
   await expect(dialog).toBeVisible()
-  await expect(dialog.getByRole('radiogroup', { name: '背景粒子质量' })).toBeVisible()
+  await expect(dialog.getByRole('radiogroup', { name: '背景粒子' })).toBeVisible()
   await expect(dialog.getByLabel('编辑器字号')).toBeVisible()
   await expect(dialog.getByRole('button', { name: '保存并启用' })).toBeVisible()
   await assertViewportIntegrity(page)
+})
+
+test('top-right language menu keeps locale names native and persists locally', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+
+  const languageTrigger = page.getByRole('button', { name: '选择界面语言' })
+  await expect(languageTrigger).toContainText('简体中文')
+  const placement = await page.locator('.workspace-topbar').evaluate((topbar) => {
+    const language = topbar.querySelector<HTMLElement>('.language-menu-trigger')?.getBoundingClientRect()
+    const account = topbar.querySelector<HTMLElement>('.account-entry')?.getBoundingClientRect()
+    return { language, account }
+  })
+  expect(placement.language).not.toBeNull()
+  expect(placement.account).not.toBeNull()
+  expect(placement.language!.right).toBeLessThanOrEqual(placement.account!.left + 1)
+
+  await languageTrigger.click()
+  const menu = page.getByRole('menu', { name: '选择界面语言' })
+  await expect(menu.getByRole('menuitemradio', { name: '简体中文' })).toHaveAttribute('aria-checked', 'true')
+  await expect(menu.getByRole('menuitemradio', { name: 'English' })).toHaveAttribute('aria-checked', 'false')
+  await page.locator('.tab-strip').click()
+  await expect(menu).toBeHidden()
+
+  await languageTrigger.click()
+  await menu.getByRole('menuitemradio', { name: 'English' }).click()
+
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en-US')
+  await expect(page.getByText('Choose a tool and continue your work.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Select interface language' })).toContainText('English')
+  await page.getByRole('button', { name: 'Select interface language' }).click()
+  const englishMenu = page.getByRole('menu', { name: 'Select interface language' })
+  await expect(englishMenu.getByRole('menuitemradio', { name: '简体中文' })).toHaveAttribute('aria-checked', 'false')
+  await expect(englishMenu.getByRole('menuitemradio', { name: 'English' })).toHaveAttribute('aria-checked', 'true')
+  await page.locator('.tab-strip').click()
+  await page.getByRole('button', { name: 'Application settings' }).click()
+  const settingsDialog = page.getByRole('dialog', { name: 'Application settings' })
+  await expect(settingsDialog.getByRole('radio', { name: '简体中文' })).toBeVisible()
+  await expect(settingsDialog.getByRole('radio', { name: 'English' })).toBeVisible()
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('devtoolkit.browser.state.v1')?.includes('en-US') ?? false)).toBe(true)
+
+  await page.reload()
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en-US')
+  await expect(page.getByText('Choose a tool and continue your work.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Select interface language' })).toContainText('English')
 })
 
 test('expanded sidebar shows complete application and WebView2 versions', async ({ page }, testInfo) => {
@@ -793,7 +911,7 @@ test('formatted JSON output remains editable and drives tree and graph views', a
   await assertViewportIntegrity(page)
   await page.screenshot({ path: resolve(qaDir, 'json-graph-desktop-light.png'), fullPage: true })
   await page.getByRole('button', { name: '跟随系统' }).click()
-  await page.getByRole('button', { name: '浅色主题' }).click()
+  await page.getByRole('button', { name: '浅色' }).click()
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
   await page.screenshot({ path: resolve(qaDir, 'json-graph-desktop-dark.png'), fullPage: true })
 })
@@ -1097,7 +1215,7 @@ test('tool search is localized, keyboard friendly and available while collapsed'
   await expect(dialog).toHaveCSS('transition-duration', '0s')
   await input.fill('定时')
   await expect(page.getByRole('option')).toHaveCount(1)
-  await expect(page.getByRole('option')).toContainText('定时任务表达式')
+  await expect(page.getByRole('option')).toContainText('生成并校验 Cron 表达式')
   await expect(page.getByRole('option')).toContainText('开发辅助')
   await page.screenshot({ path: resolve(qaDir, 'tool-search-desktop-light.png'), fullPage: true })
   await input.press('Enter')
@@ -1107,7 +1225,7 @@ test('tool search is localized, keyboard friendly and available while collapsed'
   await page.keyboard.press('Control+k')
   await input.fill('没有这个工具')
   await expect(page.getByText('没有找到匹配工具')).toBeVisible()
-  await expect(page.getByText('可以尝试“格式化”“日期”“编码”等中文关键词')).toBeVisible()
+  await expect(page.getByText('可以尝试“格式化”“日期”“编码”等关键词')).toBeVisible()
   await input.press('Escape')
   await expect(dialog).toBeHidden()
 

@@ -376,19 +376,24 @@
 .home-next .system-status-service { min-height: 27px; padding-inline: 8px; border-color: rgb(193 214 225 / 18%); color: #aebcc1; background: #172229; font-size: 10px; }
 .home-next .system-status-panel[data-service='ready'] .system-status-service { border-color: rgb(100 214 184 / 44%); color: #6ce0c1; background: #163a33; }
 .home-next .system-status-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 17px; border: 0; }
-.home-next .system-status-metrics > div { min-height: 84px; gap: 8px; padding: 13px; border: 0; border-radius: 7px; background: #1a252c; }
+.home-next .system-status-metrics > div { min-height: 104px; gap: 8px; padding: 13px; border: 0; border-radius: 7px; background: #1a252c; }
 .home-next .system-status-metrics > div > svg { margin-top: 1px; color: #70d8bd; }
 .home-next .system-status-metrics small { color: #a5b5bb; font-size: 10px; }
 .home-next .system-status-metrics strong { margin-top: 7px; color: #f1f9f7; font-size: 19px; }
 .home-next .system-status-metrics em { margin-top: 5px; color: #8fa0a8; font-size: 10px; }
+.home-next .system-status-progress { display: block; height: 4px; margin-top: 9px; overflow: hidden; border-radius: 2px; background: rgb(174 193 202 / 20%); }
+.home-next .system-status-progress > i { display: block; height: 100%; min-width: 0; border-radius: inherit; background: #63d5b6; transition: width 180ms var(--ease-out); }
+.home-next .system-status-metrics > div[data-tone='warning'] .system-status-progress > i { background: #ddb15d; }
+.home-next .system-status-metrics > div[data-tone='danger'] .system-status-progress > i { background: #e47d71; }
+.home-next .system-status-metrics > div[data-tone='neutral'] .system-status-progress > i { background: #8d9aa4; }
 .home-next .system-status-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; margin: 17px 0 0; border-top: 1px solid rgb(197 216 229 / 15%); }
 .home-next .system-status-details > div { min-height: 36px; border-bottom: 1px solid rgb(197 216 229 / 15%); }
 .home-next .system-status-details dt { color: #a5b5bb; font-size: 10px; }
 .home-next .system-status-details dd { color: #e1ece9; font-size: 10px; }
 .home-next .system-status-loading { min-height: 190px; color: #aab8bd; }
 
-/* Homepage follow-up: transparent system section, single expanded note body, and shared tool icons. */
-.home-next .home-system { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+/* Keep the ambient particle field behind the readable status surface. */
+.home-next .home-system { position: relative; z-index: 1; padding: 0; border: 0; border-radius: 0; background: #06090d; box-shadow: none; }
 .home-next .home-system .system-status-panel { padding-top: 4px; }
 .home-next .home-system-list { margin-top: 12px; }.home-next .home-system-list > div { min-height: 37px; }
 .home-pinned-note .home-active-module-main { flex: 1 1 auto; align-items: flex-start; }.home-pinned-note.home-next-active-module .home-active-module-main p { -webkit-line-clamp: 8; font-size: 12px; line-height: 1.7; }.home-pinned-note .home-active-module-main > div { display: flex; min-height: 0; flex-direction: column; }.home-pinned-note .home-pinned-note-meta { margin-top: 12px; }
@@ -402,7 +407,7 @@
 
 /* Keep the status metrics in one shared surface, separated by structure rather than four fills. */
 .home-next .system-status-metrics { gap: 0; border-top: 1px solid rgb(197 216 229 / 15%); border-bottom: 1px solid rgb(197 216 229 / 15%); }
-.home-next .system-status-metrics > div { min-height: 82px; border: 0; border-right: 1px solid rgb(197 216 229 / 15%); border-bottom: 1px solid rgb(197 216 229 / 15%); border-radius: 0; background: transparent; }
+.home-next .system-status-metrics > div { min-height: 104px; border: 0; border-right: 1px solid rgb(197 216 229 / 15%); border-bottom: 1px solid rgb(197 216 229 / 15%); border-radius: 0; background: transparent; }
 .home-next .system-status-metrics > div:nth-child(2n) { border-right: 0; }.home-next .system-status-metrics > div:nth-last-child(-n+2) { border-bottom: 0; }
 
 /* A reading-oriented note uses the full card width; the icon remains a compact identity marker. */
@@ -436,8 +441,8 @@
 .home-session-tool-grid button > svg:first-child { color: var(--tool-accent, #63d4b7); }.home-session-tool-grid button > span { display: flex; min-width: 0; flex-direction: column; }.home-session-tool-grid strong, .home-session-tool-grid small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.home-session-tool-grid strong { color: #e8f2f0; font-size: 11px; }.home-session-tool-grid small { margin-top: 4px; color: #8698a0; font-size: 9px; }.home-session-tool-grid button > svg:last-child { color: #9caeb4; }
 .home-session-empty { display: flex; flex: 1; align-items: center; justify-content: center; margin-top: 10px; padding: 18px; border: 1px dashed rgb(191 213 228 / 18%); border-radius: 6px; color: #8d9ea5; font-size: 11px; line-height: 1.6; text-align: center; }
 
-/* CPU, memory, power and workspace data are the only primary system metrics. */
-.home-next .system-status-metrics > div:first-child strong { color: #eaf5f2; font: 650 13px/1.35 Inter, "Segoe UI", sans-serif; white-space: normal; }
+/* Percentages stay prominent while device names and runtime limits remain supporting detail. */
+.home-next .system-status-metrics > div:first-child strong { color: #eaf5f2; font: 650 19px/1.2 Inter, "Segoe UI", sans-serif; white-space: nowrap; }
 .home-next .system-status-metrics > div:first-child em { white-space: normal; }.home-next .system-status-metrics > div:nth-child(3) strong { font-family: Inter, "Segoe UI", sans-serif; }
 
 /* Motion gate: low-frequency overview entry and deliberate pointer feedback only. */

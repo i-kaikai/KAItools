@@ -29,7 +29,8 @@ def test_default_settings_start_with_collapsed_sidebar(tmp_path: Path) -> None:
         "editorFontSize": 13,
         "editorLineWrapping": True,
         "clipboardMonitoringEnabled": True,
-        "systemStatusRefreshSeconds": 0,
+        "systemStatusRefreshSeconds": 1,
+        "systemStatusRefreshMigrationVersion": 1,
         "developerModeEnabled": False,
         "activationHotkey": "Ctrl+Alt+K",
     }
@@ -56,6 +57,7 @@ def test_storage_round_trip_and_schema(tmp_path: Path) -> None:
                 "editorLineWrapping": False,
                 "clipboardMonitoringEnabled": False,
                 "systemStatusRefreshSeconds": 60,
+                "systemStatusRefreshMigrationVersion": 1,
             "activationHotkey": "ctrl+alt+f8",
         },
         "backendConnection": {"schemaVersion": 1, "localApiOrigin": "http://127.0.0.1:8080", "useLocalApi": True},
@@ -97,6 +99,7 @@ def test_storage_round_trip_and_schema(tmp_path: Path) -> None:
             "editorLineWrapping": False,
             "clipboardMonitoringEnabled": False,
             "systemStatusRefreshSeconds": 60,
+            "systemStatusRefreshMigrationVersion": 1,
         "developerModeEnabled": False,
         "activationHotkey": "Ctrl+Alt+F8",
     }
@@ -271,12 +274,29 @@ def test_legacy_configuration_is_migrated_atomically(tmp_path: Path) -> None:
         "editorFontSize": 13,
         "editorLineWrapping": True,
         "clipboardMonitoringEnabled": True,
-        "systemStatusRefreshSeconds": 0,
+        "systemStatusRefreshSeconds": 1,
+        "systemStatusRefreshMigrationVersion": 1,
         "developerModeEnabled": False,
         "activationHotkey": "Ctrl+Alt+K",
     }
     assert persisted == settings
     assert not list(storage.paths.data_root.glob("*.tmp"))
+
+
+def test_legacy_manual_status_refresh_migrates_once_then_remains_user_configurable(tmp_path: Path) -> None:
+    storage = AppStorage(paths(tmp_path))
+    storage.ensure_directories()
+    storage.paths.settings_file.write_text(
+        json.dumps({"schemaVersion": 1, "systemStatusRefreshSeconds": 0}),
+        encoding="utf-8",
+    )
+
+    migrated = storage.load_all()["settings"]
+    assert migrated["systemStatusRefreshSeconds"] == 1
+    assert migrated["systemStatusRefreshMigrationVersion"] == 1
+
+    storage.save_settings({"settings": {"systemStatusRefreshSeconds": 0, "systemStatusRefreshMigrationVersion": 1}})
+    assert storage.load_all()["settings"]["systemStatusRefreshSeconds"] == 0
 
 
 def test_legacy_loopback_connection_becomes_developer_only_override(tmp_path: Path) -> None:
