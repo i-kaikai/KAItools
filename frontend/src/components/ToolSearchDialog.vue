@@ -34,7 +34,7 @@ const legacySearchNames: Record<string, string> = {
   hosts: 'Hosts 文件编辑',
   calculator: '超级计算器',
   'clipboard-history': '剪切板历史',
-  md5: 'MD5 文本摘要',
+  md5: '哈希摘要',
 }
 const categoryNames = computed(() => Object.fromEntries(toolCategories.map((category) => [category.id, category.name])))
 const results = computed(() => {

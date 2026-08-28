@@ -94,7 +94,12 @@ async function handleVersionClick(): Promise<void> {
 
 function openTool(toolId: keyof typeof toolsById, forceNew = false): void {
   const tool = toolsById[toolId]
+  void tool.preload().catch(() => undefined)
   app.openTool(tool.id, tool.name, tool.initialState(), tool.singleton, forceNew)
+}
+
+function prefetchTool(toolId: keyof typeof toolsById): void {
+  void toolsById[toolId].preload().catch(() => undefined)
 }
 
 function openSearch(): void {
@@ -301,6 +306,8 @@ onBeforeUnmount(() => {
             type="button"
             :aria-label="tool.name"
             :title="app.settings.sidebarCollapsed ? tool.name : undefined"
+            @pointerenter="prefetchTool(tool.id)"
+            @focus="prefetchTool(tool.id)"
             @click="openTool(tool.id)"
           >
             <component :is="tool.icon" :size="17" :stroke-width="1.8" aria-hidden="true" />

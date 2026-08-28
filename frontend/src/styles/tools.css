@@ -142,6 +142,7 @@ html.is-resizing-rows, html.is-resizing-rows * { cursor: row-resize !important; 
 .single-editor-panel { flex: 1; }
 .digest-output { display: grid; grid-template-columns: 24px minmax(0, 1fr) 32px; align-items: center; gap: 8px; flex: 0 0 54px; margin-top: 10px; padding: 0 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--accent); }
 .digest-output code { overflow: hidden; color: var(--text-primary); font: 600 14px "Cascadia Code", Consolas, monospace; text-overflow: ellipsis; }
+.digest-output.invalid { border-color: color-mix(in srgb, var(--danger) 65%, var(--border)); color: var(--danger); }
 
 .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; border: 0 !important; clip: rect(0 0 0 0) !important; overflow: hidden !important; white-space: nowrap !important; }
 
@@ -153,6 +154,13 @@ html.is-resizing-rows, html.is-resizing-rows * { cursor: row-resize !important; 
 .file-meta-band { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(220px, 1fr); gap: 10px; margin-bottom: 10px; }
 .file-meta-band label { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 10px; border: 1px solid var(--border); border-radius: 6px; color: var(--text-secondary); background: var(--surface-subtle); font-size: 10px; white-space: nowrap; }
 .file-meta-band input { width: 100%; min-width: 0; height: 28px; padding: 0 7px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); background: var(--surface); }
+.file-transfer-panel { display: flex; min-width: 0; min-height: 0; border: 1px solid var(--border); border-radius: 8px; flex-direction: column; background: var(--surface); box-shadow: var(--panel-shadow); overflow: hidden; }
+.file-transfer-panel.invalid { border-color: color-mix(in srgb, var(--danger) 65%, var(--border)); }
+.file-transfer-panel .empty-state, .file-transfer-body { flex: 1; }
+.file-transfer-body { display: flex; min-width: 0; align-items: center; justify-content: center; gap: 8px; padding: 20px; flex-direction: column; color: var(--accent); text-align: center; }
+.file-transfer-body strong, .file-transfer-body span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-transfer-body strong { color: var(--text-primary); font: 600 13px "Cascadia Code", Consolas, monospace; }
+.file-transfer-body span { color: var(--text-secondary); font: 11px "Cascadia Code", Consolas, monospace; }
 
 .cron-expression { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 58px; padding: 8px 14px; border: 1px solid var(--border); border-radius: 7px; color: var(--accent); background: var(--surface); }
 .cron-expression.invalid { border-color: color-mix(in srgb, var(--danger) 65%, var(--border)); color: var(--danger); }
@@ -303,6 +311,26 @@ html.is-resizing-rows, html.is-resizing-rows * { cursor: row-resize !important; 
 .fatal-state { flex-direction: column; color: var(--danger); }
 .spinner { width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 700ms linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+.tool-loading-state { display: grid; flex: 1; min-width: 0; min-height: 0; place-content: center; justify-items: center; gap: 12px; padding: 28px; color: var(--text-secondary); text-align: center; }
+.tool-loading-visual { position: relative; display: grid; width: 82px; height: 82px; place-items: center; }
+.tool-loading-orbit { position: absolute; display: block; border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border)); transform-origin: center; }
+.tool-loading-orbit-primary { width: 76px; height: 76px; border-radius: 50%; border-right-color: transparent; border-bottom-color: transparent; animation: tool-loading-orbit 1800ms linear infinite; }
+.tool-loading-orbit-secondary { width: 60px; height: 36px; border-radius: 50%; border-left-color: transparent; transform: rotate(-31deg); animation: tool-loading-orbit-reverse 1350ms linear infinite; }
+.tool-loading-core { display: grid; width: 30px; height: 30px; place-items: center; border: 1px solid color-mix(in srgb, var(--accent) 62%, var(--border)); border-radius: 6px; color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 8%, transparent); animation: tool-loading-core 900ms var(--ease-out) infinite alternate; }
+.tool-loading-copy { display: grid; gap: 4px; }
+.tool-loading-copy strong { color: var(--text-primary); font-size: 13px; font-weight: 670; }
+.tool-loading-copy small { color: var(--text-faint); font: 700 9px/1.3 "Cascadia Code", monospace; text-transform: uppercase; }
+.tool-loading-scan { position: relative; display: block; width: min(188px, 52vw); height: 2px; overflow: hidden; background: var(--border-subtle); }
+.tool-loading-scan i { position: absolute; top: 0; left: 0; display: block; width: 42%; height: 100%; background: var(--accent); transform: translateX(-100%); animation: tool-loading-scan 1050ms linear infinite; }
+@keyframes tool-loading-orbit { to { transform: rotate(360deg); } }
+@keyframes tool-loading-orbit-reverse { to { transform: rotate(-391deg); } }
+@keyframes tool-loading-core { to { opacity: .72; transform: scale(.94); } }
+@keyframes tool-loading-scan { to { transform: translateX(340%); } }
+
+:root[data-motion='reduced'] .tool-loading-orbit, :root[data-motion='reduced'] .tool-loading-core, :root[data-motion='reduced'] .tool-loading-scan i { animation: none; }
+:root[data-motion='reduced'] .tool-loading-core { opacity: 1; transform: none; }
+:root[data-motion='reduced'] .tool-loading-scan i { width: 100%; transform: none; opacity: .58; }
 
 .toast-viewport { position: fixed; z-index: 40; top: 52px; right: 14px; display: flex; width: min(360px, calc(100vw - 28px)); flex-direction: column; gap: 6px; pointer-events: none; }
 .toast { display: grid; grid-template-columns: 22px minmax(0, 1fr) 26px; align-items: center; gap: 7px; min-height: 44px; padding: 6px 7px 6px 11px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-raised); box-shadow: 0 8px 28px rgb(25 31 38 / 16%); pointer-events: auto; transition: transform 180ms var(--ease-out), opacity 180ms var(--ease-out); }

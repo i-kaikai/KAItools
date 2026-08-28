@@ -164,7 +164,7 @@
 }
 
 .segmented-control { display: inline-flex; align-items: center; height: 32px; padding: 3px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-subtle); }
-.segmented-control button { height: 24px; padding: 0 9px; border: 0; border-radius: 4px; color: var(--text-secondary); background: transparent; font-size: 11px; cursor: pointer; }
+.segmented-control button { height: 24px; padding: 0 9px; border: 0; border-radius: 4px; color: var(--text-secondary); background: transparent; font-size: 11px; white-space: nowrap; cursor: pointer; }
 .segmented-control button.active { color: var(--text-primary); background: var(--surface-raised); box-shadow: 0 1px 3px rgb(18 24 31 / 10%); }
 .compact-select, .compact-input, .field-group input, .hosts-editor input { height: 32px; border: 1px solid var(--border); border-radius: 5px; color: var(--text-primary); background: var(--surface); }
 .compact-select { padding: 0 26px 0 8px; font-size: 11px; }

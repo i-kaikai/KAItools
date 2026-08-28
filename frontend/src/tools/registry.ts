@@ -23,6 +23,7 @@ import {
 } from '@lucide/vue'
 import { defineAsyncComponent, type Component } from 'vue'
 
+import ToolLoadingState from '@/components/ToolLoadingState.vue'
 import { t } from '@/i18n'
 import type { ToolId } from '@/types'
 
@@ -57,6 +58,7 @@ export interface ToolDefinition {
   category: ToolCategoryId
   icon: Component
   component: Component
+  preload: () => Promise<Component>
   singleton?: boolean
   initialState: () => Record<string, unknown>
   chainInput?: (value: string) => Record<string, unknown>
@@ -70,6 +72,31 @@ function localizeTool(tool: ToolDefinition): ToolDefinition {
   }) as ToolDefinition
 }
 
+function lazyTool(loader: () => Promise<{ default: Component }>): Pick<ToolDefinition, 'component' | 'preload'> {
+  let pendingLoad: Promise<Component> | undefined
+  const preload = (): Promise<Component> => {
+    pendingLoad ??= loader()
+      .then(({ default: component }) => component)
+      .catch((error: unknown) => {
+        pendingLoad = undefined
+        throw error
+      })
+    return pendingLoad
+  }
+
+  return {
+    // Reusing this Promise lets intent-based prefetching and the visible async component share one request.
+    component: defineAsyncComponent({
+      loader: preload,
+      loadingComponent: ToolLoadingState,
+      delay: 120,
+      timeout: 30_000,
+      suspensible: false,
+    }),
+    preload,
+  }
+}
+
 export const toolCategories = toolCategoryDefinitions.map(localizeCategory)
 
 export const homeTool: ToolDefinition = localizeTool({
@@ -79,7 +106,7 @@ export const homeTool: ToolDefinition = localizeTool({
   keywords: ['home', '首页', '工作台'],
   category: 'developer',
   icon: House,
-  component: defineAsyncComponent(() => import('./home/HomeTool.vue')),
+  ...lazyTool(() => import('./home/HomeTool.vue')),
   singleton: true,
   initialState: () => ({}),
 })
@@ -92,7 +119,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     keywords: ['json', 'jsonpath', '查询', '格式化', '校验', 'tree', 'graph', '关系图'],
     category: 'data',
     icon: Braces,
-    component: defineAsyncComponent(() => import('./json/JsonTool.vue')),
+    ...lazyTool(() => import('./json/JsonTool.vue')),
     initialState: () => ({ input: '{\n  "name": "KAITools",\n  "ready": true,\n  "count": 5\n}', indent: 2, outputMode: 'code', queryPath: '$' }),
     chainInput: (value) => ({ input: value, outputMode: 'code' }),
   },
@@ -103,7 +130,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     keywords: ['json', 'diff', 'compare', '对比', '差异'],
     category: 'data',
     icon: GitCompareArrows,
-    component: defineAsyncComponent(() => import('./jsonDiff/JsonDiffTool.vue')),
+    ...lazyTool(() => import('./jsonDiff/JsonDiffTool.vue')),
     initialState: () => ({ left: '{\n  "name": "KAITools",\n  "version": 1\n}', right: '{\n  "name": "KAITools",\n  "version": 2\n}', ignoreOrder: true }),
   },
   {
@@ -113,7 +140,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     keywords: ['json', 'java', 'javabean', 'pojo', '互转'],
     category: 'data',
     icon: FileJson,
-    component: defineAsyncComponent(() => import('./jsonJava/JsonJavaTool.vue')),
+    ...lazyTool(() => import('./jsonJava/JsonJavaTool.vue')),
     initialState: () => ({ input: '{\n  "id": 1,\n  "name": "demo",\n  "enabled": true\n}', mode: 'json-to-java', className: 'RootBean', lombok: false }),
     chainInput: (value) => ({ input: value, mode: 'json-to-java' }),
   },
@@ -124,7 +151,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     keywords: ['java', 'escape', 'unicode', '转义'],
     category: 'developer',
     icon: Code2,
-    component: defineAsyncComponent(() => import('./java/JavaTool.vue')),
+    ...lazyTool(() => import('./java/JavaTool.vue')),
     initialState: () => ({ input: '', mode: 'escape', unicode: false, autoFormatJson: true }),
     chainInput: (value) => ({ input: value }),
   },
@@ -135,7 +162,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     keywords: ['date', 'datetime', 'timestamp', 'utc', '时区', '日期', '时间戳'],
     category: 'developer',
     icon: Clock3,
-    component: defineAsyncComponent(() => import('./timestamp/TimestampTool.vue')),
+    ...lazyTool(() => import('./timestamp/TimestampTool.vue')),
     initialState: () => ({ mode: 'timestamp', timestamp: '', unit: 'auto', zone: Intl.DateTimeFormat().resolvedOptions().timeZone, dateTime: '' }),
   },
   {
@@ -145,7 +172,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     keywords: ['base64', 'text', 'utf8', '编码', '解码', '文本'],
     category: 'encoding',
     icon: Binary,
-    component: defineAsyncComponent(() => import('./base64Text/Base64TextTool.vue')),
+    ...lazyTool(() => import('./base64Text/Base64TextTool.vue')),
     initialState: () => ({ input: '', mode: 'encode', urlSafe: false }),
     chainInput: (value) => ({ input: value }),
   },
@@ -156,8 +183,8 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     keywords: ['base64', 'image', 'dataurl', '图片', '编码', '解码'],
     category: 'encoding',
     icon: Image,
-    component: defineAsyncComponent(() => import('./base64Image/Base64ImageTool.vue')),
-    initialState: () => ({ dataUrl: '', fileName: '' }),
+    ...lazyTool(() => import('./base64Image/Base64ImageTool.vue')),
+    initialState: () => ({ sourceDataUrl: '', base64: '', mode: 'encode', outputFormat: 'base64', fileName: 'image.png', mimeType: 'image/png', split: 50 }),
   },
   {
     id: 'base64-file',
@@ -166,8 +193,8 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     keywords: ['base64', 'file', 'blob', '文件', '转换'],
     category: 'encoding',
     icon: FileUp,
-    component: defineAsyncComponent(() => import('./base64File/Base64FileTool.vue')),
-    initialState: () => ({ base64: '', fileName: 'decoded.bin', mimeType: 'application/octet-stream' }),
+    ...lazyTool(() => import('./base64File/Base64FileTool.vue')),
+    initialState: () => ({ sourceBase64: '', base64: '', mode: 'encode', fileName: 'decoded.bin', mimeType: 'application/octet-stream', split: 50 }),
   },
   {
     id: 'cron',
@@ -176,7 +203,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     keywords: ['cron', 'crontab', 'schedule', '定时', '表达式'],
     category: 'developer',
     icon: CalendarClock,
-    component: defineAsyncComponent(() => import('./cron/CronTool.vue')),
+    ...lazyTool(() => import('./cron/CronTool.vue')),
     initialState: () => ({ minute: '0', hour: '9', day: '*', month: '*', weekday: '1-5', expression: '0 9 * * 1-5', timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, runCount: 10 }),
   },
   {
@@ -186,7 +213,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     keywords: ['sql', 'mysql', 'postgresql', 'format', '美化', '格式化'],
     category: 'data',
     icon: Database,
-    component: defineAsyncComponent(() => import('./sql/SqlTool.vue')),
+    ...lazyTool(() => import('./sql/SqlTool.vue')),
     initialState: () => ({ input: 'select id,name from users where enabled=1 order by id desc;', dialect: 'sql', keywordCase: 'upper', tabWidth: 2 }),
     chainInput: (value) => ({ input: value }),
   },
@@ -197,7 +224,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     keywords: ['yaml', 'yml', 'config', '美化', '格式化'],
     category: 'data',
     icon: FileType2,
-    component: defineAsyncComponent(() => import('./yaml/YamlTool.vue')),
+    ...lazyTool(() => import('./yaml/YamlTool.vue')),
     initialState: () => ({ input: 'app:\n  name: KAITools\n  enabled: true\n', indent: 2 }),
     chainInput: (value) => ({ input: value }),
   },
@@ -208,7 +235,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     keywords: ['xml', 'format', 'pretty', '格式化', '压缩'],
     category: 'data',
     icon: CodeXml,
-    component: defineAsyncComponent(() => import('./xml/XmlTool.vue')),
+    ...lazyTool(() => import('./xml/XmlTool.vue')),
     initialState: () => ({ input: '<root><item id="1">KAITools</item></root>', indent: 2, compact: false }),
     chainInput: (value) => ({ input: value }),
   },
@@ -219,7 +246,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     keywords: ['text', 'diff', 'compare', '文本', '比较', '差异'],
     category: 'text',
     icon: Diff,
-    component: defineAsyncComponent(() => import('./textDiff/TextDiffTool.vue')),
+    ...lazyTool(() => import('./textDiff/TextDiffTool.vue')),
     initialState: () => ({ left: '第一行\n第二行', right: '第一行\n新的第二行', mode: 'lines', ignoreWhitespace: false }),
   },
   {
@@ -229,7 +256,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     keywords: ['text', 'stats', 'count', '文本', '统计', '字数'],
     category: 'text',
     icon: ChartNoAxesColumn,
-    component: defineAsyncComponent(() => import('./textStats/TextStatsTool.vue')),
+    ...lazyTool(() => import('./textStats/TextStatsTool.vue')),
     initialState: () => ({ input: '' }),
     chainInput: (value) => ({ input: value }),
   },
@@ -240,7 +267,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     keywords: ['regex', 'regexp', '正则', '匹配', '捕获', '替换'],
     category: 'developer',
     icon: Regex,
-    component: defineAsyncComponent(() => import('./regex/RegexTool.vue')),
+    ...lazyTool(() => import('./regex/RegexTool.vue')),
     initialState: () => ({ input: 'order-2026-0817\norder-2025-1201\ninvalid', pattern: 'order-(\\d{4})-(\\d{4})', flags: 'g', replacement: '$1/$2', mode: 'matches' }),
     chainInput: (value) => ({ input: value }),
   },
@@ -251,7 +278,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     keywords: ['notes', 'markdown', 'md', '笔记', '备忘录', '文档'],
     category: 'text',
     icon: BookOpenText,
-    component: defineAsyncComponent(() => import('./notes/NotesTool.vue')),
+    ...lazyTool(() => import('./notes/NotesTool.vue')),
     singleton: true,
     initialState: () => ({}),
   },
@@ -262,7 +289,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     keywords: ['hosts', 'dns', '域名', '映射'],
     category: 'system',
     icon: Network,
-    component: defineAsyncComponent(() => import('./hosts/HostsTool.vue')),
+    ...lazyTool(() => import('./hosts/HostsTool.vue')),
     singleton: true,
     desktopOnly: true,
     initialState: () => ({ selectedGroupId: 'default', search: '', previewOpen: false }),
@@ -274,7 +301,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     keywords: ['calculator', 'math', 'finance', 'matrix', '计算器', '金融', '矩阵', '进制'],
     category: 'developer',
     icon: Calculator,
-    component: defineAsyncComponent(() => import('./calculator/CalculatorTool.vue')),
+    ...lazyTool(() => import('./calculator/CalculatorTool.vue')),
     initialState: () => ({ section: 'scientific', expression: '', expressionResult: '' }),
     chainInput: (value) => ({ section: 'scientific', expression: value }),
   },
@@ -285,20 +312,20 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     keywords: ['clipboard', 'history', '剪切板', '历史', '复制'],
     category: 'system',
     icon: Clipboard,
-    component: defineAsyncComponent(() => import('./clipboardHistory/ClipboardHistoryTool.vue')),
+    ...lazyTool(() => import('./clipboardHistory/ClipboardHistoryTool.vue')),
     singleton: true,
     desktopOnly: true,
     initialState: () => ({}),
   },
   {
     id: 'md5',
-    name: 'MD5 摘要',
-    description: 'UTF-8 文本摘要',
-    keywords: ['md5', 'hash', '摘要'],
+    name: '哈希摘要',
+    description: 'MD5 与 SHA 系列文本摘要',
+    keywords: ['md5', 'sha', 'sha1', 'sha256', 'sha384', 'sha512', 'hash', '哈希', '摘要'],
     category: 'encoding',
     icon: Hash,
-    component: defineAsyncComponent(() => import('./md5/Md5Tool.vue')),
-    initialState: () => ({ input: '', uppercase: false }),
+    ...lazyTool(() => import('./md5/Md5Tool.vue')),
+    initialState: () => ({ input: '', algorithm: 'md5', uppercase: false }),
     chainInput: (value) => ({ input: value }),
   },
 ]

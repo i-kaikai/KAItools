@@ -17,6 +17,10 @@ export function bytesToBase64(bytes: Uint8Array, urlSafe = false): string {
   return urlSafe ? encoded.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') : encoded
 }
 
+export function bytesToDataUrl(bytes: Uint8Array, mimeType = 'application/octet-stream'): string {
+  return `data:${mimeType || 'application/octet-stream'};base64,${bytesToBase64(bytes)}`
+}
+
 export function base64ToBytes(value: string): Uint8Array {
   let binary: string
   try {
@@ -41,14 +45,25 @@ export function decodeBase64Text(value: string): string {
 }
 
 export async function fileToDataUrl(file: File): Promise<string> {
-  const base64 = bytesToBase64(new Uint8Array(await file.arrayBuffer()))
-  return `data:${file.type || 'application/octet-stream'};base64,${base64}`
+  return bytesToDataUrl(new Uint8Array(await file.arrayBuffer()), file.type)
 }
 
 export function parseDataUrl(value: string): { mimeType: string; bytes: Uint8Array } {
   const match = value.trim().match(/^data:([^;,]+)?;base64,([\s\S]+)$/i)
   if (!match) throw new Error('请输入包含 MIME 类型的 Base64 Data URL')
   return { mimeType: match[1] || 'application/octet-stream', bytes: base64ToBytes(match[2] ?? '') }
+}
+
+export function parseImageBase64(value: string, fallbackMimeType = 'image/png'): { mimeType: string; bytes: Uint8Array } {
+  const trimmed = value.trim()
+  if (/^data:/i.test(trimmed)) {
+    const data = parseDataUrl(trimmed)
+    if (!data.mimeType.toLowerCase().startsWith('image/')) throw new Error('Data URL 不是图片类型')
+    return data
+  }
+
+  if (!fallbackMimeType.toLowerCase().startsWith('image/')) throw new Error('图片 MIME 类型必须以 image/ 开头')
+  return { mimeType: fallbackMimeType, bytes: base64ToBytes(trimmed) }
 }
 
 export function bytesToBlob(bytes: Uint8Array, mimeType: string): Blob {

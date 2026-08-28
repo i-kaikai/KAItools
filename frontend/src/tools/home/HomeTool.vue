@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ArrowUpRight, BookOpenText, Boxes, CircleDot, ExternalLink, LayoutDashboard, LayoutGrid, Sparkles } from '@lucide/vue'
-import { computed, ref } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue'
 
 import giteeLogo from '@/assets/gitee-g-red.svg'
 import githubLogo from '@/assets/github-invertocat-white.svg'
@@ -11,11 +11,14 @@ import type { DashboardCard, DashboardCards } from '@/types'
 import DashboardCardManagerDialog from '@/components/DashboardCardManagerDialog.vue'
 import SystemStatusPanel from '@/components/SystemStatusPanel.vue'
 import { APP_VERSION } from '@/version'
-import ParticleField from './ParticleField.vue'
+import type ParticleFieldComponent from './ParticleField.vue'
 import ToolCarousel from './ToolCarousel.vue'
 
 const app = useAppStore()
-const particleField = ref<InstanceType<typeof ParticleField> | null>(null)
+const ParticleField = defineAsyncComponent(() => import('./ParticleField.vue'))
+const particleField = ref<InstanceType<typeof ParticleFieldComponent> | null>(null)
+const particleFieldMounted = ref(false)
+let particleFieldTimer: number | undefined
 const openTabs = computed(() => app.tabs.filter((tab) => tab.toolId !== 'home'))
 const pinnedTabs = computed(() => openTabs.value.filter((tab) => tab.pinned))
 const categorizedTools = computed(() => toolCategories.map((category) => ({
@@ -85,8 +88,20 @@ const todayDateTime = [
   String(currentDate.getDate()).padStart(2, '0'),
 ].join('-')
 
+onMounted(() => {
+  // Keep the first interactive Home paint independent from the optional Three.js scene.
+  particleFieldTimer = window.setTimeout(() => { particleFieldMounted.value = true }, 180)
+})
+
+onBeforeUnmount(() => window.clearTimeout(particleFieldTimer))
+
 function openTool(tool: ToolDefinition): void {
+  void tool.preload().catch(() => undefined)
   app.openTool(tool.id, tool.name, tool.initialState(), tool.singleton)
+}
+
+function prefetchTool(tool: ToolDefinition): void {
+  void tool.preload().catch(() => undefined)
 }
 
 function activateTab(tabId: string): void {
@@ -94,6 +109,7 @@ function activateTab(tabId: string): void {
 }
 
 function focusCard(tool: ToolDefinition): void {
+  prefetchTool(tool)
   particleField.value?.focus({ toolId: tool.id, color: toolColors[tool.id] ?? '#35d0a7' })
 }
 
@@ -117,7 +133,7 @@ async function saveDashboardCards(dashboardCards: DashboardCards): Promise<void>
 <template>
   <section class="home-page home-next" :class="{ 'home-motion-entry': animateOnEntry && !app.reducedMotion }">
     <ParticleField
-      v-if="app.settings.particleQuality !== 'off'"
+      v-if="particleFieldMounted && app.settings.particleQuality !== 'off'"
       ref="particleField"
       stage="workbench"
       :quality="app.settings.particleQuality"
@@ -238,7 +254,7 @@ async function saveDashboardCards(dashboardCards: DashboardCards): Promise<void>
           <section v-for="category in categorizedTools" :key="category.id" class="home-category-group">
             <header><div><strong>{{ category.name }}</strong><small>{{ category.description }}</small></div><span>{{ category.tools.length.toString().padStart(2, '0') }}</span></header>
             <div>
-              <button v-for="tool in category.tools" :key="tool.id" type="button" :style="{ '--tool-accent': toolColors[tool.id] }" @click="openTool(tool)">
+              <button v-for="tool in category.tools" :key="tool.id" type="button" :style="{ '--tool-accent': toolColors[tool.id] }" @pointerenter="prefetchTool(tool)" @focus="prefetchTool(tool)" @click="openTool(tool)">
                 <component :is="tool.icon" :size="16" aria-hidden="true" />
                 <span><strong>{{ tool.name }}</strong><small>{{ tool.description }}</small></span>
                 <ArrowUpRight :size="15" aria-hidden="true" />

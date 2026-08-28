@@ -954,7 +954,7 @@ test('new conversion, formatting and analysis tools produce results', async ({ p
 test('all tools render and remain usable', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto('/')
-  for (const tool of ['JSON / JavaBean', 'Java 转义', '日期转换', 'Base64 图片', 'Base64 文件', 'Crontab 生成器', 'YAML 美化', 'XML 格式化', '文本比较', 'Hosts', 'MD5 摘要']) {
+  for (const tool of ['JSON / JavaBean', 'Java 转义', '日期转换', 'Base64 图片', 'Base64 文件', 'Crontab 生成器', 'YAML 美化', 'XML 格式化', '文本比较', 'Hosts', '哈希摘要']) {
     await openWorkspaceTool(page, tool)
     await expect(page.getByRole('heading', { name: tool, exact: true })).toBeVisible()
     if (tool === '日期转换') {
@@ -1430,6 +1430,48 @@ test('developer mode unlocks from the version and exposes local service tools', 
   } else {
     await expect(dialog).toContainText('打开 WebView2 DevTools')
   }
+})
+
+test('binary Base64 tools and hash digest support both directions', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+
+  await openWorkspaceTool(page, 'Base64 图片')
+  const imageEncodedOutput = page.getByLabel('图片 Base64 编码结果')
+  await expect(imageEncodedOutput).toBeVisible()
+  await page.evaluate(() => {
+    const image = new File(
+      [Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9J1bQAAAAASUVORK5CYII='), (value) => value.charCodeAt(0))],
+      'clipboard-image.png',
+    )
+    const clipboard = new DataTransfer()
+    clipboard.items.add(image)
+    const paste = new Event('paste', { bubbles: true, cancelable: true })
+    Object.defineProperty(paste, 'clipboardData', { value: clipboard })
+    window.dispatchEvent(paste)
+  })
+  await expect(imageEncodedOutput).toContainText('iVBORw0KGgo')
+  await page.getByRole('radio', { name: 'Base64 转图片' }).click()
+  await page.getByLabel('图片 Base64 输入').fill('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9J1bQAAAAASUVORK5CYII=')
+  await expect(page.getByAltText('Base64 解码预览')).toBeVisible()
+
+  await openWorkspaceTool(page, 'Base64 文件')
+  await page.getByRole('radio', { name: 'Base64 转文件' }).click()
+  await page.getByLabel('文件 Base64 输入').fill('aGVsbG8=')
+  await expect(page.getByText('5 字节，可下载还原')).toBeVisible()
+
+  await openWorkspaceTool(page, '哈希摘要')
+  await page.getByLabel('哈希算法').selectOption('sha256')
+  await page.getByLabel('哈希文本输入').fill('abc')
+  await expect(page.getByText('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad', { exact: true })).toBeVisible()
+  await assertViewportIntegrity(page)
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await openWorkspaceTool(page, 'Base64 图片')
+  await page.getByRole('radio', { name: '图片转 Base64' }).click()
+  await page.getByRole('button', { name: '清空当前内容' }).click()
+  await expect(page.getByText('选择或直接粘贴图片，生成 Base64')).toBeVisible()
+  await assertViewportIntegrity(page)
 })
 
 test('local account panel connects and registers against the test service', async ({ page }) => {
