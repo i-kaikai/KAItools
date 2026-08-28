@@ -1,37 +1,34 @@
 <script setup lang="ts">
-import { Clipboard, Keyboard, MonitorDown, Palette, PanelLeft, RotateCcw, Sparkles, Type, X } from '@lucide/vue'
+import { Clipboard, Globe2, Keyboard, MonitorDown, Palette, PanelLeft, RotateCcw, Sparkles, Type, X } from '@lucide/vue'
 import { computed, ref, watch } from 'vue'
 
 import SegmentedControl from '@/components/SegmentedControl.vue'
+import { localeOptions as availableLocales, useI18n } from '@/i18n'
 import { isWebRuntime } from '@/runtime'
 import { useAppStore } from '@/stores/app'
 import { useToastStore } from '@/stores/toast'
-import type { ParticleQuality, SidebarStartup, ThemeMode } from '@/types'
+import type { AppLocale, ParticleQuality, SidebarStartup, ThemeMode } from '@/types'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
 const app = useAppStore()
 const toast = useToastStore()
+const { t } = useI18n()
 const hotkey = ref('Ctrl+Alt+K')
 const capturing = ref(false)
 const saving = ref(false)
-const message = ref('点击组合键区域，然后按下新的快捷键。')
+const message = ref(t('settings.hotkey.initial'))
 
-const themeOptions: Array<{ value: ThemeMode; label: string }> = [
-  { value: 'system', label: '跟随系统' },
-  { value: 'light', label: '浅色' },
-  { value: 'dark', label: '深色' },
-]
-const particleOptions: Array<{ value: ParticleQuality; label: string }> = [
-  { value: 'high', label: '高质量' },
-  { value: 'balanced', label: '均衡' },
-  { value: 'off', label: '关闭' },
-]
-const sidebarStartupOptions: Array<{ value: SidebarStartup; label: string }> = [
-  { value: 'remember', label: '记住状态' },
-  { value: 'collapsed', label: '默认收起' },
-  { value: 'expanded', label: '默认展开' },
-]
+const localeOptions = computed(() => availableLocales.map((option) => ({ value: option.value, label: t(option.labelKey) })))
+const themeOptions = computed<Array<{ value: ThemeMode; label: string }>>(() => [
+  { value: 'system', label: t('settings.theme.system') }, { value: 'light', label: t('settings.theme.light') }, { value: 'dark', label: t('settings.theme.dark') },
+])
+const particleOptions = computed<Array<{ value: ParticleQuality; label: string }>>(() => [
+  { value: 'high', label: t('settings.particles.high') }, { value: 'balanced', label: t('settings.particles.balanced') }, { value: 'off', label: t('settings.particles.off') },
+])
+const sidebarStartupOptions = computed<Array<{ value: SidebarStartup; label: string }>>(() => [
+  { value: 'remember', label: t('settings.sidebar.remember') }, { value: 'collapsed', label: t('settings.sidebar.collapsed') }, { value: 'expanded', label: t('settings.sidebar.expanded') },
+])
 const formattedHotkey = computed(() => hotkey.value.replaceAll('+', ' + '))
 
 watch(() => props.open, (open) => {
@@ -39,8 +36,8 @@ watch(() => props.open, (open) => {
   hotkey.value = app.settings.activationHotkey || 'Ctrl+Alt+K'
   capturing.value = false
   message.value = isWebRuntime
-    ? '网页环境由浏览器管理系统快捷键，无法注册全局唤起。'
-    : '点击组合键区域，然后按下新的快捷键。'
+    ? t('settings.hotkey.web')
+    : t('settings.hotkey.initial')
 }, { immediate: true })
 
 function normalizeKey(key: string): string | null {
@@ -52,7 +49,7 @@ function beginCapture(event: MouseEvent): void {
   if (isWebRuntime) return
   if (event.currentTarget instanceof HTMLButtonElement) event.currentTarget.focus()
   capturing.value = true
-  message.value = '请按 Ctrl 或 Alt 加字母、数字或 F1-F12。'
+  message.value = t('settings.hotkey.instructions')
 }
 
 function captureHotkey(event: KeyboardEvent): void {
@@ -61,23 +58,23 @@ function captureHotkey(event: KeyboardEvent): void {
   event.stopPropagation()
   if (event.key === 'Escape') {
     capturing.value = false
-    message.value = '已取消修改。'
+    message.value = t('settings.hotkey.cancelled')
     return
   }
   if (event.metaKey) {
-    message.value = '暂不支持 Windows 徽标键，请使用 Ctrl、Alt 或 Shift。'
+    message.value = t('settings.hotkey.meta')
     return
   }
   const key = normalizeKey(event.key)
   if (!key || (!event.ctrlKey && !event.altKey)) {
-    message.value = '需要 Ctrl 或 Alt 加字母、数字或 F1-F12。'
+    message.value = t('settings.hotkey.invalid')
     return
   }
   hotkey.value = [event.ctrlKey ? 'Ctrl' : '', event.altKey ? 'Alt' : '', event.shiftKey ? 'Shift' : '', key]
     .filter(Boolean)
     .join('+')
   capturing.value = false
-  message.value = `已录入 ${formattedHotkey.value}，保存后立即生效。`
+  message.value = t('settings.hotkey.recorded', { hotkey: formattedHotkey.value })
 }
 
 async function saveHotkey(): Promise<void> {
@@ -86,17 +83,17 @@ async function saveHotkey(): Promise<void> {
   const saved = await app.setActivationHotkey(hotkey.value)
   saving.value = false
   if (!saved) {
-    message.value = '未能注册该组合键，请换一个后重试。'
+    message.value = t('settings.hotkey.failed')
     return
   }
-  message.value = `${formattedHotkey.value} 已生效，可在应用最小化或后台时唤起 KAITools。`
-  toast.show('全局唤起快捷键已更新')
+  message.value = t('settings.hotkey.active', { hotkey: formattedHotkey.value })
+  toast.show(t('settings.hotkey.updated'))
 }
 
 function restoreHotkeyDefault(): void {
   hotkey.value = 'Ctrl+Alt+K'
   capturing.value = false
-  message.value = '已恢复默认组合键，保存后生效。'
+  message.value = t('settings.hotkey.default')
 }
 </script>
 
@@ -106,48 +103,52 @@ function restoreHotkeyDefault(): void {
       <header>
         <div>
           <span><Sparkles :size="14" />APPLICATION SETTINGS</span>
-          <h2 id="application-settings-title">应用设置</h2>
-          <p>偏好仅保存在当前设备，调整后立即生效。</p>
+          <h2 id="application-settings-title">{{ t('settings.title') }}</h2>
+          <p>{{ t('settings.description') }}</p>
         </div>
-        <button type="button" aria-label="关闭应用设置" @click="emit('close')"><X :size="18" /></button>
+        <button type="button" :aria-label="t('settings.close')" @click="emit('close')"><X :size="18" /></button>
       </header>
 
       <div class="application-settings-body">
         <section class="application-settings-section">
-          <div class="application-settings-heading"><Palette :size="17" /><span><strong>外观与性能</strong><small>主题、粒子背景与动态效果</small></span></div>
-          <div class="application-settings-option"><span><strong>主题</strong><small>侧栏快捷切换与此处保持同步</small></span><SegmentedControl :model-value="app.settings.theme" label="主题" :options="themeOptions" @update:model-value="app.setTheme($event as ThemeMode)" /></div>
-          <div class="application-settings-option"><span><strong>背景粒子</strong><small>高质量保持当前视觉密度；均衡档降低渲染负载</small></span><SegmentedControl :model-value="app.settings.particleQuality" label="背景粒子质量" :options="particleOptions" @update:model-value="app.setParticleQuality($event as ParticleQuality)" /></div>
-          <label class="application-settings-switch"><span><strong>减少动态效果</strong><small>跟随系统的减少动态效果偏好；启用后保留静态首帧</small></span><input :checked="app.settings.motionMode === 'reduced'" type="checkbox" aria-label="减少动态效果" @change="app.setMotionMode(($event.target as HTMLInputElement).checked ? 'reduced' : 'system')" /></label>
+          <div class="application-settings-heading"><Globe2 :size="17" /><span><strong>{{ t('settings.language.title') }}</strong><small>{{ t('settings.language.description') }}</small></span></div>
+          <div class="application-settings-option"><span><strong>{{ t('settings.language.label') }}</strong><small>{{ t('settings.language.description') }}</small></span><SegmentedControl :model-value="app.settings.locale" :label="t('settings.language.label')" :options="localeOptions" @update:model-value="app.setLocale($event as AppLocale)" /></div>
+        </section>
+        <section class="application-settings-section">
+          <div class="application-settings-heading"><Palette :size="17" /><span><strong>{{ t('settings.appearance.title') }}</strong><small>{{ t('settings.appearance.description') }}</small></span></div>
+          <div class="application-settings-option"><span><strong>{{ t('settings.theme.title') }}</strong><small>{{ t('settings.theme.description') }}</small></span><SegmentedControl :model-value="app.settings.theme" :label="t('settings.theme.title')" :options="themeOptions" @update:model-value="app.setTheme($event as ThemeMode)" /></div>
+          <div class="application-settings-option"><span><strong>{{ t('settings.particles.title') }}</strong><small>{{ t('settings.particles.description') }}</small></span><SegmentedControl :model-value="app.settings.particleQuality" :label="t('settings.particles.title')" :options="particleOptions" @update:model-value="app.setParticleQuality($event as ParticleQuality)" /></div>
+          <label class="application-settings-switch"><span><strong>{{ t('settings.motion.title') }}</strong><small>{{ t('settings.motion.description') }}</small></span><input :checked="app.settings.motionMode === 'reduced'" type="checkbox" :aria-label="t('settings.motion.title')" @change="app.setMotionMode(($event.target as HTMLInputElement).checked ? 'reduced' : 'system')" /></label>
         </section>
 
         <section class="application-settings-section">
-          <div class="application-settings-heading"><Clipboard :size="17" /><span><strong>桌面与状态</strong><small>仅当前设备生效</small></span></div>
-          <label class="application-settings-switch" :class="{ disabled: isWebRuntime }"><span><strong>记录剪切板历史</strong><small>{{ isWebRuntime ? '浏览器无法持续监听系统剪切板，请使用 Windows 桌面版。' : '默认记录纯文本，隐藏到托盘后继续运行，退出应用自动清空。' }}</small></span><input :checked="app.settings.clipboardMonitoringEnabled" type="checkbox" aria-label="记录剪切板历史" :disabled="isWebRuntime" @change="app.setClipboardMonitoringEnabled(($event.target as HTMLInputElement).checked)" /></label>
-          <label class="application-settings-option"><span><strong>系统状态自动刷新</strong><small>手动刷新可随时使用；自动刷新只在首页停留时运行</small></span><select :value="app.settings.systemStatusRefreshSeconds" aria-label="系统状态自动刷新" @change="app.setSystemStatusRefreshSeconds(Number(($event.target as HTMLSelectElement).value) as 0 | 30 | 60 | 300)"><option :value="0">仅手动</option><option :value="30">30 秒</option><option :value="60">60 秒</option><option :value="300">5 分钟</option></select></label>
+          <div class="application-settings-heading"><Clipboard :size="17" /><span><strong>{{ t('settings.desktop.title') }}</strong><small>{{ t('settings.desktop.description') }}</small></span></div>
+          <label class="application-settings-switch" :class="{ disabled: isWebRuntime }"><span><strong>{{ t('settings.clipboard.title') }}</strong><small>{{ isWebRuntime ? t('settings.clipboard.web') : t('settings.clipboard.desktop') }}</small></span><input :checked="app.settings.clipboardMonitoringEnabled" type="checkbox" :aria-label="t('settings.clipboard.title')" :disabled="isWebRuntime" @change="app.setClipboardMonitoringEnabled(($event.target as HTMLInputElement).checked)" /></label>
+          <label class="application-settings-option"><span><strong>{{ t('settings.refresh.title') }}</strong><small>{{ t('settings.refresh.description') }}</small></span><select :value="app.settings.systemStatusRefreshSeconds" :aria-label="t('settings.refresh.title')" @change="app.setSystemStatusRefreshSeconds(Number(($event.target as HTMLSelectElement).value) as 0 | 30 | 60 | 300)"><option :value="0">{{ t('settings.refresh.manual') }}</option><option :value="30">{{ t('settings.refresh.seconds', { count: 30 }) }}</option><option :value="60">{{ t('settings.refresh.seconds', { count: 60 }) }}</option><option :value="300">{{ t('settings.refresh.minutes', { count: 5 }) }}</option></select></label>
         </section>
 
         <section class="application-settings-section">
-          <div class="application-settings-heading"><PanelLeft :size="17" /><span><strong>工作台</strong><small>侧栏与标签恢复方式</small></span></div>
-          <div class="application-settings-option"><span><strong>侧栏启动状态</strong><small>当前选择在下一次启动时应用</small></span><SegmentedControl :model-value="app.settings.sidebarStartup" label="侧栏启动状态" :options="sidebarStartupOptions" @update:model-value="app.setSidebarStartup($event as SidebarStartup)" /></div>
-          <label class="application-settings-switch"><span><strong>恢复固定标签</strong><small>关闭后每次从干净首页开始，固定标签仍会保留在本机</small></span><input :checked="app.settings.restorePinnedTabsOnLaunch" type="checkbox" aria-label="启动时恢复固定标签" @change="app.setRestorePinnedTabsOnLaunch(($event.target as HTMLInputElement).checked)" /></label>
+          <div class="application-settings-heading"><PanelLeft :size="17" /><span><strong>{{ t('settings.workspace.title') }}</strong><small>{{ t('settings.workspace.description') }}</small></span></div>
+          <div class="application-settings-option"><span><strong>{{ t('settings.sidebar.title') }}</strong><small>{{ t('settings.sidebar.description') }}</small></span><SegmentedControl :model-value="app.settings.sidebarStartup" :label="t('settings.sidebar.title')" :options="sidebarStartupOptions" @update:model-value="app.setSidebarStartup($event as SidebarStartup)" /></div>
+          <label class="application-settings-switch"><span><strong>{{ t('settings.restore.title') }}</strong><small>{{ t('settings.restore.description') }}</small></span><input :checked="app.settings.restorePinnedTabsOnLaunch" type="checkbox" :aria-label="t('settings.restore.title')" @change="app.setRestorePinnedTabsOnLaunch(($event.target as HTMLInputElement).checked)" /></label>
         </section>
 
         <section class="application-settings-section">
-          <div class="application-settings-heading"><Type :size="17" /><span><strong>编辑器</strong><small>适用于所有代码和 Markdown 编辑区域</small></span></div>
-          <label class="application-settings-option"><span><strong>编辑器字号</strong><small>只影响编辑内容和行号，不缩放应用界面</small></span><select :value="app.settings.editorFontSize" aria-label="编辑器字号" @change="app.setEditorFontSize(Number(($event.target as HTMLSelectElement).value))"><option v-for="size in [12, 13, 14, 15, 16]" :key="size" :value="size">{{ size }} px</option></select></label>
-          <label class="application-settings-switch"><span><strong>自动换行</strong><small>关闭后保留长行，使用编辑器底部横向滚动查看</small></span><input :checked="app.settings.editorLineWrapping" type="checkbox" aria-label="编辑器自动换行" @change="app.setEditorLineWrapping(($event.target as HTMLInputElement).checked)" /></label>
+          <div class="application-settings-heading"><Type :size="17" /><span><strong>{{ t('settings.editor.title') }}</strong><small>{{ t('settings.editor.description') }}</small></span></div>
+          <label class="application-settings-option"><span><strong>{{ t('settings.editor.fontSize.title') }}</strong><small>{{ t('settings.editor.fontSize.description') }}</small></span><select :value="app.settings.editorFontSize" :aria-label="t('settings.editor.fontSize.title')" @change="app.setEditorFontSize(Number(($event.target as HTMLSelectElement).value))"><option v-for="size in [12, 13, 14, 15, 16]" :key="size" :value="size">{{ size }} px</option></select></label>
+          <label class="application-settings-switch"><span><strong>{{ t('settings.editor.wrap.title') }}</strong><small>{{ t('settings.editor.wrap.description') }}</small></span><input :checked="app.settings.editorLineWrapping" type="checkbox" :aria-label="t('settings.editor.wrap.title')" @change="app.setEditorLineWrapping(($event.target as HTMLInputElement).checked)" /></label>
         </section>
 
         <section class="application-settings-section">
-          <div class="application-settings-heading"><MonitorDown :size="17" /><span><strong>唤起应用</strong><small>最小化或后台运行时恢复窗口</small></span></div>
-          <button class="hotkey-capture" :class="{ capturing }" type="button" :disabled="isWebRuntime || saving" aria-label="录入全局唤起快捷键" @click="beginCapture" @keydown="captureHotkey"><Keyboard :size="17" aria-hidden="true" /><strong>{{ formattedHotkey }}</strong><small>{{ capturing ? '正在录入' : '点击修改' }}</small></button>
+          <div class="application-settings-heading"><MonitorDown :size="17" /><span><strong>{{ t('settings.hotkey.title') }}</strong><small>{{ t('settings.hotkey.description') }}</small></span></div>
+          <button class="hotkey-capture" :class="{ capturing }" type="button" :disabled="isWebRuntime || saving" :aria-label="t('settings.hotkey.capture')" @click="beginCapture" @keydown="captureHotkey"><Keyboard :size="17" aria-hidden="true" /><strong>{{ formattedHotkey }}</strong><small>{{ capturing ? t('settings.hotkey.capturing') : t('settings.hotkey.edit') }}</small></button>
           <p class="application-settings-status" role="status">{{ message }}</p>
-          <div class="application-settings-actions"><button class="command-button subtle" type="button" :disabled="isWebRuntime || saving" @click="restoreHotkeyDefault"><RotateCcw :size="14" />恢复默认</button><button class="command-button" type="button" :disabled="isWebRuntime || saving" @click="saveHotkey">{{ saving ? '正在注册…' : '保存并启用' }}</button></div>
+          <div class="application-settings-actions"><button class="command-button subtle" type="button" :disabled="isWebRuntime || saving" @click="restoreHotkeyDefault"><RotateCcw :size="14" />{{ t('settings.hotkey.restore') }}</button><button class="command-button" type="button" :disabled="isWebRuntime || saving" @click="saveHotkey">{{ saving ? t('settings.hotkey.saving') : t('settings.hotkey.save') }}</button></div>
         </section>
 
-        <section class="application-settings-section application-minimize-hint"><Keyboard :size="16" /><span><strong>应用内最小化</strong><small>没有打开搜索、菜单或弹层时，按 <kbd>Esc</kbd> 最小化应用窗口。</small></span></section>
+        <section class="application-settings-section application-minimize-hint"><Keyboard :size="16" /><span><strong>{{ t('settings.minimize.title') }}</strong><small>{{ t('settings.minimize.description', { key: 'Esc' }) }}</small></span></section>
       </div>
-      <footer><button class="command-button" type="button" @click="emit('close')">完成</button></footer>
+      <footer><button class="command-button" type="button" @click="emit('close')">{{ t('settings.done') }}</button></footer>
     </section>
   </div>
 </template>

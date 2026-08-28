@@ -29,6 +29,7 @@ import { isWebRuntime } from '@/runtime'
 import ToastViewport from '@/components/ToastViewport.vue'
 import giteeLogo from '@/assets/gitee-g-red.svg'
 import githubLogo from '@/assets/github-invertocat-white.svg'
+import { t } from '@/i18n'
 import kaitoolsMarkWhite from '@/assets/kaitools-mark-white.svg'
 import { useAppStore } from '@/stores/app'
 import { useToastStore } from '@/stores/toast'
@@ -57,9 +58,9 @@ const visibleTools = computed(() => {
 })
 const activeTool = computed(() => (app.activeTab ? toolsById[app.activeTab.toolId] : undefined))
 const themeIcon = computed(() => ({ system: Monitor, light: Sun, dark: Moon })[app.settings.theme])
-const themeLabel = computed(() => ({ system: '跟随系统', light: '浅色主题', dark: '深色主题' })[app.settings.theme])
-const accountTitle = computed(() => app.account?.displayName || app.account?.email || '本地模式')
-const accountSubtitle = computed(() => app.account ? (app.usingLocalDeveloperService ? '已登录 · 本机开发服务' : '已登录 · 同步已启用') : '账户与同步')
+const themeLabel = computed(() => ({ system: t('settings.theme.system'), light: t('settings.theme.light'), dark: t('settings.theme.dark') })[app.settings.theme])
+const accountTitle = computed(() => app.account?.displayName || app.account?.email || t('shell.localMode'))
+const accountSubtitle = computed(() => app.account ? (app.usingLocalDeveloperService ? t('shell.signedInLocal') : t('shell.signedInSync')) : t('shell.accountAndSync'))
 const developerModeActive = computed(() => import.meta.env.DEV || app.settings.developerModeEnabled)
 
 async function signOut(): Promise<void> {
@@ -76,12 +77,12 @@ async function handleVersionClick(): Promise<void> {
   developerUnlockClicks += 1
   developerUnlockTimer = window.setTimeout(() => { developerUnlockClicks = 0 }, 2500)
   if (developerUnlockClicks === 6) {
-    toast.show('再点击 1 次启用开发者模式')
+    toast.show(t('shell.developerUnlock'))
   } else if (developerUnlockClicks >= 7) {
     developerUnlockClicks = 0
     const saved = await app.setDeveloperModeEnabled(true)
     if (!saved) return
-    toast.show('开发者模式已启用')
+    toast.show(t('shell.developerEnabled'))
     developerPanelOpen.value = true
   }
 }
@@ -234,21 +235,21 @@ onBeforeUnmount(() => {
     <aside class="app-sidebar">
       <div class="brand-row">
         <div class="brand-row-main">
-          <button class="brand-home" type="button" aria-label="返回首页" @click="openTool('home')">
+          <button class="brand-home" type="button" :aria-label="t('shell.goHome')" @click="openTool('home')">
             <div class="brand-mark" aria-hidden="true"><img :src="kaitoolsMarkWhite" alt="" /></div>
             <div v-if="!app.settings.sidebarCollapsed" class="brand-copy"><strong>KAITools</strong><small>Local workspace</small></div>
           </button>
           <IconButton
             :icon="app.settings.sidebarCollapsed ? PanelLeftOpen : PanelLeftClose"
-            :label="app.settings.sidebarCollapsed ? '展开侧栏' : '收起侧栏'"
+            :label="app.settings.sidebarCollapsed ? t('shell.expandSidebar') : t('shell.collapseSidebar')"
             size="small"
             @click="app.toggleSidebar"
           />
         </div>
         <div v-if="!app.settings.sidebarCollapsed" class="runtime-copy sidebar-runtime">
           <button class="runtime-version" type="button" @click="handleVersionClick"><span>v{{ app.runtime?.version ?? APP_VERSION }}</span><small v-if="developerModeActive">DEV</small></button>
-          <small v-if="isWebRuntime">浏览器 · 本地存储</small>
-          <small v-else :title="`WebView2 ${app.runtime?.webview2 ?? '检测中'}`">WebView2 {{ app.runtime?.webview2 ?? '检测中' }}</small>
+          <small v-if="isWebRuntime">{{ t('shell.browserStorage') }}</small>
+          <small v-else :title="`WebView2 ${app.runtime?.webview2 ?? t('shell.detecting')}`">WebView2 {{ app.runtime?.webview2 ?? t('shell.detecting') }}</small>
         </div>
       </div>
 
@@ -256,24 +257,24 @@ onBeforeUnmount(() => {
         class="sidebar-home"
         :class="{ active: app.activeTab?.toolId === 'home' }"
         type="button"
-        aria-label="首页"
+        :aria-label="t('shell.home')"
         @click="openTool('home')"
       >
         <component :is="homeTool.icon" :size="17" :stroke-width="1.8" aria-hidden="true" />
-        <span v-if="!app.settings.sidebarCollapsed">首页</span>
+        <span v-if="!app.settings.sidebarCollapsed">{{ t('shell.home') }}</span>
       </button>
 
       <div v-if="!app.settings.sidebarCollapsed" class="tool-search">
-        <input v-model="sidebarSearch" placeholder="搜索工具" aria-label="筛选工具" @keydown.esc="sidebarSearch = ''" />
+        <input v-model="sidebarSearch" :placeholder="t('shell.searchTools')" :aria-label="t('shell.filterTools')" @keydown.esc="sidebarSearch = ''" />
         <kbd>Ctrl K</kbd>
-        <button class="tool-search-open tooltip-anchor" type="button" aria-label="打开全局搜索" data-tooltip="打开全局搜索 (Ctrl K)" @click="openSearch">
+        <button class="tool-search-open tooltip-anchor" type="button" :aria-label="t('shell.openSearch')" :data-tooltip="`${t('shell.openSearch')} (Ctrl K)`" @click="openSearch">
           <Search :size="15" aria-hidden="true" />
         </button>
       </div>
-      <IconButton v-else class="sidebar-search-button" :icon="Search" label="搜索工具" @click="openSearch" />
+      <IconButton v-else class="sidebar-search-button" :icon="Search" :label="t('shell.searchTools')" @click="openSearch" />
 
-      <nav class="tool-nav" aria-label="开发工具">
-        <div v-if="!app.settings.sidebarCollapsed" class="nav-section-label"><span>快捷工具</span><small>{{ sidebarTools.length }}</small></div>
+      <nav class="tool-nav" :aria-label="t('shell.toolNav')">
+        <div v-if="!app.settings.sidebarCollapsed" class="nav-section-label"><span>{{ t('shell.shortcuts') }}</span><small>{{ sidebarTools.length }}</small></div>
         <div
           v-for="tool in visibleTools"
           :key="tool.id"
@@ -293,31 +294,31 @@ onBeforeUnmount(() => {
           <IconButton
             v-if="!app.settings.sidebarCollapsed && !tool.singleton"
             :icon="Plus"
-            :label="`新建${tool.name}标签`"
+            :label="t('shell.newTab', { tool: tool.name })"
             size="small"
             @click="openTool(tool.id, true)"
           />
         </div>
-        <div v-if="!app.settings.sidebarCollapsed && !visibleTools.length" class="tool-search-empty-state">未找到匹配工具<br /><button type="button" @click="openSearch">管理快捷方式</button></div>
-        <button v-if="!app.settings.sidebarCollapsed" class="sidebar-manage-shortcuts" type="button" @click="openShortcutManager"><SlidersHorizontal :size="16" /><span>管理快捷方式</span><small>{{ sidebarTools.length }}/12</small></button>
+        <div v-if="!app.settings.sidebarCollapsed && !visibleTools.length" class="tool-search-empty-state">{{ t('shell.noTools') }}<br /><button type="button" @click="openSearch">{{ t('shell.manageShortcuts') }}</button></div>
+        <button v-if="!app.settings.sidebarCollapsed" class="sidebar-manage-shortcuts" type="button" @click="openShortcutManager"><SlidersHorizontal :size="16" /><span>{{ t('shell.manageShortcuts') }}</span><small>{{ sidebarTools.length }}/12</small></button>
         <div v-else class="tool-nav-row sidebar-manage-row">
-          <button class="tool-nav-main" type="button" aria-label="管理快捷方式" title="管理快捷方式" @click="openShortcutManager"><SlidersHorizontal :size="17" aria-hidden="true" /></button>
+          <button class="tool-nav-main" type="button" :aria-label="t('shell.manageShortcuts')" :title="t('shell.manageShortcuts')" @click="openShortcutManager"><SlidersHorizontal :size="17" aria-hidden="true" /></button>
         </div>
       </nav>
 
       <div class="sidebar-footer">
         <div class="sidebar-footer-actions">
-          <button class="icon-button tooltip-anchor repository-brand-button" type="button" aria-label="打开 Gitee 仓库" data-tooltip="打开 Gitee 仓库" @click="app.openProjectRepository"><img :src="giteeLogo" alt="" /></button>
-          <button class="icon-button tooltip-anchor repository-brand-button" type="button" aria-label="打开 GitHub 仓库" data-tooltip="打开 GitHub 仓库" @click="app.openGithubRepository"><img :src="githubLogo" alt="" /></button>
+          <button class="icon-button tooltip-anchor repository-brand-button" type="button" :aria-label="t('home.openGitee')" :data-tooltip="t('home.openGitee')" @click="app.openProjectRepository"><img :src="giteeLogo" alt="" /></button>
+          <button class="icon-button tooltip-anchor repository-brand-button" type="button" :aria-label="t('home.openGithub')" :data-tooltip="t('home.openGithub')" @click="app.openGithubRepository"><img :src="githubLogo" alt="" /></button>
           <IconButton :icon="themeIcon" :label="themeLabel" @click="cycleTheme" />
-          <IconButton :icon="Settings" label="应用设置" @click="applicationSettingsOpen = true" />
+          <IconButton :icon="Settings" :label="t('shell.applicationSettings')" @click="applicationSettingsOpen = true" />
         </div>
       </div>
     </aside>
 
     <main class="workspace">
       <div class="workspace-topbar">
-        <div class="tab-strip" role="tablist" aria-label="工作标签">
+        <div class="tab-strip" role="tablist" :aria-label="t('shell.workspaceTabs')">
           <div
           v-for="tab in app.tabs"
           :key="tab.id"
@@ -336,17 +337,17 @@ onBeforeUnmount(() => {
           <IconButton
             v-if="tab.toolId !== 'home'"
             :icon="tab.pinned ? Pin : PinOff"
-            :label="tab.pinned ? '取消固定' : '固定标签'"
+            :label="tab.pinned ? t('shell.unpinTab') : t('shell.pinTab')"
             size="small"
             :active="tab.pinned"
             @click.stop="app.togglePin(tab.id)"
           />
-          <IconButton v-if="tab.toolId !== 'home'" :icon="X" label="关闭标签" size="small" @click.stop="closeTab(tab)" />
+          <IconButton v-if="tab.toolId !== 'home'" :icon="X" :label="t('shell.closeTab')" size="small" @click.stop="closeTab(tab)" />
         </div>
           <IconButton
             v-if="activeTool && !activeTool.singleton"
             :icon="Plus"
-            :label="`新建${activeTool.name}标签`"
+            :label="t('shell.newTab', { tool: activeTool.name })"
             size="small"
             @click="openTool(activeTool.id, true)"
           />
@@ -362,23 +363,23 @@ onBeforeUnmount(() => {
         v-if="tabMenu.visible"
         class="tab-context-menu"
         role="menu"
-        aria-label="标签页操作"
+        :aria-label="t('shell.tabActions')"
         :style="{ left: `${tabMenu.x}px`, top: `${tabMenu.y}px` }"
         @pointerdown.stop
         @contextmenu.prevent
       >
-        <button role="menuitem" type="button" :disabled="!tabsForMenu('current').length" @click="closeTabsFromMenu('current')">关闭当前</button>
-        <button role="menuitem" type="button" :disabled="!tabsForMenu('others').length" @click="closeTabsFromMenu('others')">关闭其他</button>
-        <button role="menuitem" type="button" :disabled="!tabsForMenu('right').length" @click="closeTabsFromMenu('right')">关闭右侧</button>
+        <button role="menuitem" type="button" :disabled="!tabsForMenu('current').length" @click="closeTabsFromMenu('current')">{{ t('shell.closeCurrent') }}</button>
+        <button role="menuitem" type="button" :disabled="!tabsForMenu('others').length" @click="closeTabsFromMenu('others')">{{ t('shell.closeOthers') }}</button>
+        <button role="menuitem" type="button" :disabled="!tabsForMenu('right').length" @click="closeTabsFromMenu('right')">{{ t('shell.closeRight') }}</button>
         <div role="separator" />
-        <button role="menuitem" type="button" class="danger" :disabled="!tabsForMenu('all').length" @click="closeTabsFromMenu('all')">关闭所有</button>
+        <button role="menuitem" type="button" class="danger" :disabled="!tabsForMenu('all').length" @click="closeTabsFromMenu('all')">{{ t('shell.closeAll') }}</button>
       </div>
 
       <div v-if="app.loadingError" class="fatal-state">
-        <strong>无法加载 KAITools</strong>
+        <strong>{{ t('shell.loadFailed') }}</strong>
         <span>{{ app.loadingError }}</span>
       </div>
-      <div v-else-if="!app.ready" class="loading-state"><span class="spinner" />正在启动</div>
+      <div v-else-if="!app.ready" class="loading-state"><span class="spinner" />{{ t('shell.starting') }}</div>
       <component
         :is="activeTool?.component"
         v-else-if="app.activeTab && activeTool"

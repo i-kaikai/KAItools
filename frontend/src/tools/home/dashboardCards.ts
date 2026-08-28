@@ -1,20 +1,49 @@
-import type { DashboardCard, DashboardCards } from '@/types'
+import { getActiveLocale, translateForLocale } from '@/i18n'
+import type { AppLocale, DashboardCard, DashboardCards } from '@/types'
 
-const SYSTEM_CARDS: DashboardCard[] = [
-  { id: 'system-json', toolId: 'json', title: 'JSON', description: '格式化、压缩与关系图', accentColor: '#35d0a7', sortOrder: 0, enabled: true },
-  { id: 'system-java', toolId: 'java', title: 'Java 转义', description: '字符串转义与反转义', accentColor: '#ff7d5d', sortOrder: 1, enabled: true },
-  { id: 'system-timestamp', toolId: 'timestamp', title: '日期转换', description: '多格式日期与时间戳转换', accentColor: '#6ea0ff', sortOrder: 2, enabled: true },
-  { id: 'system-base64-text', toolId: 'base64-text', title: 'Base64 文本', description: 'UTF-8 文本编码与解码', accentColor: '#dcad49', sortOrder: 3, enabled: true },
-  { id: 'system-cron', toolId: 'cron', title: 'Crontab', description: '生成并校验 Cron 表达式', accentColor: '#6eb9ff', sortOrder: 4, enabled: true },
-  { id: 'system-notes', toolId: 'notes', title: '笔记', description: 'Markdown 本地笔记', accentColor: '#a58df0', sortOrder: 5, enabled: true },
+const SYSTEM_CARD_DEFINITIONS = [
+  { id: 'system-json', toolId: 'json', descriptionKey: 'dashboard.json', accentColor: '#35d0a7' },
+  { id: 'system-java', toolId: 'java', descriptionKey: 'dashboard.java', accentColor: '#ff7d5d' },
+  { id: 'system-timestamp', toolId: 'timestamp', descriptionKey: 'dashboard.timestamp', accentColor: '#6ea0ff' },
+  { id: 'system-base64-text', toolId: 'base64-text', descriptionKey: 'dashboard.base64-text', accentColor: '#dcad49' },
+  { id: 'system-cron', toolId: 'cron', descriptionKey: 'dashboard.cron', accentColor: '#6eb9ff' },
+  { id: 'system-notes', toolId: 'notes', descriptionKey: 'dashboard.notes', accentColor: '#a58df0' },
 ]
 
-export function defaultDashboardCards(): DashboardCards {
+function systemCard(definition: typeof SYSTEM_CARD_DEFINITIONS[number], locale: AppLocale, sortOrder: number): DashboardCard {
+  return {
+    id: definition.id,
+    toolId: definition.toolId as DashboardCard['toolId'],
+    title: translateForLocale(locale, `tool.${definition.toolId}.name`),
+    description: translateForLocale(locale, definition.descriptionKey),
+    accentColor: definition.accentColor,
+    sortOrder,
+    enabled: true,
+  }
+}
+
+export function defaultDashboardCards(locale: AppLocale = getActiveLocale()): DashboardCards {
   return {
     schemaVersion: 1,
-    cards: SYSTEM_CARDS.map((card) => ({ ...card })),
+    cards: SYSTEM_CARD_DEFINITIONS.map((definition, sortOrder) => systemCard(definition, locale, sortOrder)),
     carouselMode: 'step',
     classicRotationSpeed: 16,
     stepIntervalMs: 1600,
+  }
+}
+
+export function localizeSystemDashboardCards(cards: DashboardCards, toLocale: AppLocale): DashboardCards {
+  return {
+    ...cards,
+    cards: cards.cards.map((card) => {
+      const definition = SYSTEM_CARD_DEFINITIONS.find((item) => item.id === card.id)
+      if (!definition) return card
+      const matchesSystemDefault = (['zh-CN', 'en-US'] as AppLocale[]).some((locale) => {
+        const defaultCard = systemCard(definition, locale, card.sortOrder)
+        return card.title === defaultCard.title && card.description === defaultCard.description
+      })
+      if (!matchesSystemDefault) return card
+      return { ...card, title: translateForLocale(toLocale, `tool.${definition.toolId}.name`), description: translateForLocale(toLocale, definition.descriptionKey) }
+    }),
   }
 }

@@ -15,8 +15,9 @@ import {
   type ShortcutSnapshot,
 } from '@/api/remoteApi'
 import { useToastStore } from '@/stores/toast'
-import { defaultDashboardCards } from '@/tools/home/dashboardCards'
-import type { AppSettings, BackendConnection, DashboardCards, HostsProfiles, NotesState, RuntimeInfo, ShortcutSyncState, SidebarShortcuts, ThemeMode, ToolId, ToolTab } from '@/types'
+import { setActiveLocale, translateForLocale } from '@/i18n'
+import { defaultDashboardCards, localizeSystemDashboardCards } from '@/tools/home/dashboardCards'
+import type { AppLocale, AppSettings, BackendConnection, DashboardCards, HostsProfiles, NotesState, RuntimeInfo, ShortcutSyncState, SidebarShortcuts, ThemeMode, ToolId, ToolTab } from '@/types'
 
 // Debounce persistence separately so high-frequency editor and tab interactions never block rendering.
 let workspaceTimer: number | undefined
@@ -37,6 +38,7 @@ function defaultShortcutSync(): ShortcutSyncState {
 function defaultAppSettings(): AppSettings {
   return {
     schemaVersion: 1,
+    locale: 'zh-CN',
     theme: 'system',
     sidebarCollapsed: true,
     particleQuality: 'high',
@@ -56,6 +58,7 @@ function normalizeAppSettings(value: Partial<AppSettings> | undefined): AppSetti
   const defaults = defaultAppSettings()
   return {
     schemaVersion: 1,
+    locale: value?.locale === 'en-US' ? 'en-US' : 'zh-CN',
     theme: value?.theme === 'light' || value?.theme === 'dark' ? value.theme : 'system',
     sidebarCollapsed: typeof value?.sidebarCollapsed === 'boolean' ? value.sidebarCollapsed : defaults.sidebarCollapsed,
     particleQuality: value?.particleQuality === 'balanced' || value?.particleQuality === 'off' ? value.particleQuality : 'high',
@@ -89,6 +92,17 @@ function isShortcutSnapshot(value: unknown): value is ShortcutSnapshot {
   if (!value || typeof value !== 'object') return false
   const snapshot = value as Partial<ShortcutSnapshot>
   return typeof snapshot.revision === 'number' && Array.isArray(snapshot.toolIds)
+}
+
+function localizeDefaultTabTitle(tab: ToolTab, locale: AppLocale): ToolTab {
+  const translatedName = translateForLocale(locale, `tool.${tab.toolId}.name`)
+  for (const sourceLocale of ['zh-CN', 'en-US'] as AppLocale[]) {
+    const sourceName = translateForLocale(sourceLocale, `tool.${tab.toolId}.name`)
+    if (tab.title === sourceName) return { ...tab, title: translatedName }
+    const suffix = tab.title.match(new RegExp(`^${sourceName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} (\\d+)$`))
+    if (suffix) return { ...tab, title: `${translatedName} ${suffix[1]}` }
+  }
+  return tab
 }
 
 export const useAppStore = defineStore('app', {
@@ -132,6 +146,7 @@ export const useAppStore = defineStore('app', {
       const result = await desktopApi.loadState()
       if (!result.ok) { this.loadingError = result.error.message; return }
       this.settings = normalizeAppSettings(result.data.settings)
+      setActiveLocale(this.settings.locale)
       const legacyConnection = result.data.backendConnection as BackendConnection & { apiOrigin?: unknown }
       const legacyLocalOrigin = typeof legacyConnection.apiOrigin === 'string' ? resolveLocalServiceOrigin(legacyConnection.apiOrigin) : null
       const configuredLocalOrigin = typeof legacyConnection.localApiOrigin === 'string'
@@ -146,7 +161,7 @@ export const useAppStore = defineStore('app', {
       this.sidebarShortcuts = result.data.sidebarShortcuts
       this.shortcutSync = result.data.shortcutSync ?? defaultShortcutSync()
       const defaultCards = defaultDashboardCards()
-      this.dashboardCards = {
+      this.dashboardCards = localizeSystemDashboardCards({
         schemaVersion: 1,
         cards: result.data.dashboardCards?.cards ?? defaultCards.cards,
         carouselMode: result.data.dashboardCards?.carouselMode === 'classic' ? 'classic' : 'step',
@@ -156,13 +171,13 @@ export const useAppStore = defineStore('app', {
         stepIntervalMs: typeof result.data.dashboardCards?.stepIntervalMs === 'number'
           ? Math.max(800, Math.min(6000, result.data.dashboardCards.stepIntervalMs))
           : defaultCards.stepIntervalMs,
-      }
+      }, this.settings.locale)
       this.hostsProfiles = result.data.hostsProfiles
       this.runtime = result.data.runtime
       const pinnedTabs = this.settings.restorePinnedTabsOnLaunch
-        ? result.data.workspace.tabs.filter((tab) => tab.pinned && tab.toolId !== 'home')
+        ? result.data.workspace.tabs.filter((tab) => tab.pinned && tab.toolId !== 'home').map((tab) => localizeDefaultTabTitle(tab, this.settings.locale))
         : []
-      this.tabs = [{ id: id('home'), toolId: 'home', title: '首页', pinned: false, state: defaultHomeState }, ...pinnedTabs]
+      this.tabs = [{ id: id('home'), toolId: 'home', title: translateForLocale(this.settings.locale, 'tool.home.name'), pinned: false, state: defaultHomeState }, ...pinnedTabs]
       this.activeTabId = this.tabs[0]?.id ?? ''
       if (this.settings.sidebarStartup === 'collapsed') this.settings.sidebarCollapsed = true
       if (this.settings.sidebarStartup === 'expanded') this.settings.sidebarCollapsed = false
@@ -211,6 +226,14 @@ export const useAppStore = defineStore('app', {
       workspaceTimer = window.setTimeout(() => { void desktopApi.saveWorkspace(this.tabs.filter((tab) => tab.pinned).map((tab) => structuredClone(toRaw(tab)))) }, 350)
     },
     setTheme(theme: ThemeMode) { this.settings.theme = theme; this.applyTheme(theme); this.scheduleSettingsSave() },
+    setLocale(locale: AppLocale) {
+      if (this.settings.locale === locale) return
+      this.settings.locale = locale
+      this.dashboardCards = localizeSystemDashboardCards(this.dashboardCards, locale)
+      this.tabs = this.tabs.map((tab) => localizeDefaultTabTitle(tab, locale))
+      setActiveLocale(locale)
+      this.scheduleSettingsSave()
+    },
     toggleSidebar() { this.settings.sidebarCollapsed = !this.settings.sidebarCollapsed; this.scheduleSettingsSave() },
     setParticleQuality(quality: AppSettings['particleQuality']) {
       this.settings.particleQuality = quality

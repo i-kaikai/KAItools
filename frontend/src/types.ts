@@ -1,4 +1,5 @@
 export type ThemeMode = 'system' | 'light' | 'dark'
+export type AppLocale = 'zh-CN' | 'en-US'
 export type ParticleQuality = 'high' | 'balanced' | 'off'
 export type MotionMode = 'system' | 'reduced'
 export type SidebarStartup = 'remember' | 'collapsed' | 'expanded'
@@ -45,6 +46,7 @@ export type ApiResult<T> =
 
 export interface AppSettings {
   schemaVersion: number
+  locale: AppLocale
   theme: ThemeMode
   sidebarCollapsed: boolean
   particleQuality: ParticleQuality

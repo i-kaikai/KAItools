@@ -43,6 +43,7 @@ function defaultBrowserState(): BootstrapState {
   return {
     settings: {
       schemaVersion: 1,
+      locale: 'zh-CN',
       theme: 'system',
       sidebarCollapsed: true,
       particleQuality: 'high',
@@ -388,6 +389,7 @@ function normalizeBrowserSettings(value: Partial<AppSettings> | undefined): AppS
   const defaults = defaultBrowserState().settings
   return {
     schemaVersion: 1,
+    locale: value?.locale === 'en-US' ? 'en-US' : 'zh-CN',
     theme: value?.theme === 'light' || value?.theme === 'dark' ? value.theme : 'system',
     sidebarCollapsed: typeof value?.sidebarCollapsed === 'boolean' ? value.sidebarCollapsed : defaults.sidebarCollapsed,
     particleQuality: value?.particleQuality === 'balanced' || value?.particleQuality === 'off' ? value.particleQuality : 'high',

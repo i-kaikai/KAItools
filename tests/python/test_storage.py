@@ -19,6 +19,7 @@ def test_default_settings_start_with_collapsed_sidebar(tmp_path: Path) -> None:
 
     assert storage.load_all()["settings"] == {
         "schemaVersion": 1,
+        "locale": "zh-CN",
         "theme": "system",
         "sidebarCollapsed": True,
         "particleQuality": "high",
@@ -44,6 +45,7 @@ def test_storage_round_trip_and_schema(tmp_path: Path) -> None:
     storage.ensure_directories()
     storage.save_settings({
         "settings": {
+            "locale": "en-US",
             "theme": "dark",
             "sidebarCollapsed": True,
             "particleQuality": "balanced",
@@ -84,6 +86,7 @@ def test_storage_round_trip_and_schema(tmp_path: Path) -> None:
     assert state["settings"]["activationHotkey"] == "Ctrl+Alt+F8"
     assert state["settings"] == {
         "schemaVersion": 1,
+        "locale": "en-US",
         "theme": "dark",
         "sidebarCollapsed": True,
         "particleQuality": "balanced",
@@ -112,6 +115,8 @@ def test_storage_rejects_unknown_and_oversized_content(tmp_path: Path) -> None:
         storage.save_settings({"settings": {"theme": "dark", "unexpected": True}})
     with pytest.raises(StorageError):
         storage.save_settings({"settings": {"particleQuality": "ultra"}})
+    with pytest.raises(StorageError):
+        storage.save_settings({"settings": {"locale": "fr-FR"}})
     with pytest.raises(StorageError):
         storage.save_settings({"settings": {"editorFontSize": 17}})
     with pytest.raises(StorageError):
@@ -256,6 +261,7 @@ def test_legacy_configuration_is_migrated_atomically(tmp_path: Path) -> None:
 
     assert settings == {
         "schemaVersion": 1,
+        "locale": "zh-CN",
         "theme": "dark",
         "sidebarCollapsed": True,
         "particleQuality": "high",

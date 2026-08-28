@@ -18,6 +18,7 @@ THEMES = {"system", "light", "dark"}
 PARTICLE_QUALITIES = {"high", "balanced", "off"}
 MOTION_MODES = {"system", "reduced"}
 SIDEBAR_STARTUP_MODES = {"remember", "collapsed", "expanded"}
+APP_LOCALES = {"zh-CN", "en-US"}
 TOOL_IDS = {
     "json",
     "json-diff",
@@ -43,6 +44,7 @@ TOOL_IDS = {
 
 DEFAULT_SETTINGS: dict[str, Any] = {
     "schemaVersion": SCHEMA_VERSION,
+    "locale": "zh-CN",
     "theme": "system",
     "sidebarCollapsed": True,
     "particleQuality": "high",
@@ -197,6 +199,9 @@ def _read_settings(path: Path) -> dict[str, Any]:
         changed = True
     if settings.get("theme") not in THEMES:
         settings["theme"] = DEFAULT_SETTINGS["theme"]
+        changed = True
+    if settings.get("locale") not in APP_LOCALES:
+        settings["locale"] = DEFAULT_SETTINGS["locale"]
         changed = True
     if not isinstance(settings.get("sidebarCollapsed"), bool):
         settings["sidebarCollapsed"] = DEFAULT_SETTINGS["sidebarCollapsed"]
@@ -362,12 +367,14 @@ class AppStorage:
             settings = payload["settings"]
             if not isinstance(settings, dict):
                 raise StorageError("设置格式无效")
-            if set(settings) - {"schemaVersion", "theme", "sidebarCollapsed", "particleQuality", "motionMode", "sidebarStartup", "restorePinnedTabsOnLaunch", "editorFontSize", "editorLineWrapping", "clipboardMonitoringEnabled", "systemStatusRefreshSeconds", "developerModeEnabled", "activationHotkey"}:
+            if set(settings) - {"schemaVersion", "locale", "theme", "sidebarCollapsed", "particleQuality", "motionMode", "sidebarStartup", "restorePinnedTabsOnLaunch", "editorFontSize", "editorLineWrapping", "clipboardMonitoringEnabled", "systemStatusRefreshSeconds", "developerModeEnabled", "activationHotkey"}:
                 raise StorageError("设置中包含不支持的字段")
             if settings.get("schemaVersion", SCHEMA_VERSION) != SCHEMA_VERSION:
                 raise StorageError("设置版本无效")
             current = _read_settings(self.paths.settings_file)
-            update = {key: settings[key] for key in ("theme", "sidebarCollapsed", "particleQuality", "motionMode", "sidebarStartup", "restorePinnedTabsOnLaunch", "editorFontSize", "editorLineWrapping", "clipboardMonitoringEnabled", "systemStatusRefreshSeconds", "developerModeEnabled", "activationHotkey") if key in settings}
+            update = {key: settings[key] for key in ("locale", "theme", "sidebarCollapsed", "particleQuality", "motionMode", "sidebarStartup", "restorePinnedTabsOnLaunch", "editorFontSize", "editorLineWrapping", "clipboardMonitoringEnabled", "systemStatusRefreshSeconds", "developerModeEnabled", "activationHotkey") if key in settings}
+            if "locale" in update and update["locale"] not in APP_LOCALES:
+                raise StorageError("语言设置无效")
             if "theme" in update and update["theme"] not in THEMES:
                 raise StorageError("主题设置无效")
             if "sidebarCollapsed" in update and not isinstance(

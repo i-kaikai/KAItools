@@ -3,6 +3,7 @@ import { ArrowRight, Pin, PinOff, Search, X } from '@lucide/vue'
 import { computed, nextTick, ref, watch } from 'vue'
 
 import { toolCategories, workspaceTools, type ToolDefinition } from '@/tools/registry'
+import { t } from '@/i18n'
 
 const props = defineProps<{ open: boolean; shortcutIds: string[] }>()
 const emit = defineEmits<{
@@ -14,7 +15,7 @@ const emit = defineEmits<{
 const input = ref<HTMLInputElement | null>(null)
 const query = ref('')
 const selectedIndex = ref(0)
-const localizedNames: Record<string, string> = {
+const legacySearchNames: Record<string, string> = {
   json: 'JSON 格式化与查看',
   'json-diff': 'JSON 差异对比',
   'json-java': 'JSON 与 JavaBean 互转',
@@ -35,15 +36,15 @@ const localizedNames: Record<string, string> = {
   'clipboard-history': '剪切板历史',
   md5: 'MD5 文本摘要',
 }
-const categoryNames = Object.fromEntries(toolCategories.map((category) => [category.id, category.name]))
+const categoryNames = computed(() => Object.fromEntries(toolCategories.map((category) => [category.id, category.name])))
 const results = computed(() => {
   const normalized = query.value.trim().toLowerCase()
   if (!normalized) return workspaceTools
   return workspaceTools.filter((tool) => [
-    localizedNames[tool.id] ?? tool.name,
+    legacySearchNames[tool.id] ?? tool.name,
     tool.name,
     tool.description,
-    categoryNames[tool.category] ?? '',
+    categoryNames.value[tool.category] ?? '',
     ...tool.keywords,
   ].some((value) => value.toLowerCase().includes(normalized)))
 })
@@ -103,27 +104,27 @@ watch(query, () => (selectedIndex.value = 0))
       <header>
         <Search :size="19" aria-hidden="true" />
         <div>
-          <h2 id="tool-search-title">搜索工具</h2>
+          <h2 id="tool-search-title">{{ t('search.title') }}</h2>
           <input
             ref="input"
             v-model="query"
             type="search"
-            placeholder="输入工具名称、用途或关键词"
-            aria-label="输入工具名称、用途或关键词"
+            :placeholder="t('search.input')"
+            :aria-label="t('search.input')"
             aria-controls="tool-search-results"
             :aria-activedescendant="results.length ? `tool-search-result-${selectedIndex}` : undefined"
             @keydown.stop="onInputKeydown"
           />
         </div>
-        <button type="button" aria-label="关闭工具搜索" @click="emit('close')"><X :size="17" aria-hidden="true" /></button>
+        <button type="button" :aria-label="t('search.close')" @click="emit('close')"><X :size="17" aria-hidden="true" /></button>
       </header>
 
       <div class="tool-search-summary">
-        <span>{{ query.trim() ? '搜索结果' : '全部工具' }}</span>
-        <small>找到 {{ results.length }} 个工具</small>
+        <span>{{ query.trim() ? t('search.results') : t('search.allTools') }}</span>
+        <small>{{ t('search.found', { count: results.length }) }}</small>
       </div>
 
-      <div id="tool-search-results" class="tool-search-results" role="listbox" aria-label="工具搜索结果">
+      <div id="tool-search-results" class="tool-search-results" role="listbox" :aria-label="t('search.resultList')">
         <div
           v-for="(tool, index) in results"
           :id="`tool-search-result-${index}`"
@@ -138,15 +139,15 @@ watch(query, () => (selectedIndex.value = 0))
         >
           <span class="tool-search-result-icon"><component :is="tool.icon" :size="18" :stroke-width="1.8" aria-hidden="true" /></span>
           <span class="tool-search-result-copy">
-            <strong>{{ localizedNames[tool.id] ?? tool.name }}</strong>
+            <strong>{{ tool.name }}</strong>
             <small>{{ tool.name }} · {{ tool.description }}</small>
           </span>
           <span class="tool-search-category">{{ categoryNames[tool.category] }}</span>
           <button
             class="tool-search-shortcut"
             type="button"
-            :aria-label="isShortcut(tool) ? `从侧栏移除 ${tool.name}` : `添加 ${tool.name} 到侧栏`"
-            :title="isShortcut(tool) ? '从侧栏移除' : '添加到侧栏'"
+            :aria-label="isShortcut(tool) ? t('search.removeSidebar', { tool: tool.name }) : t('search.addSidebar', { tool: tool.name })"
+            :title="isShortcut(tool) ? t('search.remove') : t('search.add')"
             @click.stop="emit('toggleShortcut', tool)"
           >
             <PinOff v-if="isShortcut(tool)" :size="15" aria-hidden="true" />
@@ -156,15 +157,15 @@ watch(query, () => (selectedIndex.value = 0))
         </div>
         <div v-if="!results.length" class="tool-search-empty">
           <Search :size="23" aria-hidden="true" />
-          <strong>没有找到匹配工具</strong>
-          <span>可以尝试“格式化”“日期”“编码”等中文关键词</span>
+          <strong>{{ t('search.empty') }}</strong>
+          <span>{{ t('search.emptyHint') }}</span>
         </div>
       </div>
 
       <footer>
-        <span><kbd>↑</kbd><kbd>↓</kbd> 选择</span>
-        <span><kbd>Enter</kbd> 打开</span>
-        <span><kbd>Esc</kbd> 关闭</span>
+        <span><kbd>↑</kbd><kbd>↓</kbd> {{ t('search.select') }}</span>
+        <span><kbd>Enter</kbd> {{ t('search.open') }}</span>
+        <span><kbd>Esc</kbd> {{ t('search.dismiss') }}</span>
       </footer>
     </section>
   </div>

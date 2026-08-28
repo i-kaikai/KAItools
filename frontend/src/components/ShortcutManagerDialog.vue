@@ -3,6 +3,7 @@ import { GripVertical, Pin, PinOff, RotateCcw, Search, X } from '@lucide/vue'
 import { computed, ref, watch } from 'vue'
 
 import { workspaceTools } from '@/tools/registry'
+import { t } from '@/i18n'
 import type { ToolId } from '@/types'
 
 const props = defineProps<{ open: boolean; toolIds: ToolId[] }>()
@@ -63,12 +64,12 @@ function reset(): void {
   <div v-if="open" class="shortcut-manager-backdrop" @pointerdown.self="emit('close')">
     <section class="shortcut-manager-dialog" role="dialog" aria-modal="true" aria-labelledby="shortcut-manager-title">
       <header>
-        <div><span>SIDEBAR SHORTCUTS</span><h2 id="shortcut-manager-title">管理快捷方式</h2><p>侧栏仅展示这里选择的工具，最多 12 个。</p></div>
-        <button type="button" aria-label="关闭管理快捷方式" @click="emit('close')"><X :size="18" /></button>
+        <div><span>SIDEBAR SHORTCUTS</span><h2 id="shortcut-manager-title">{{ t('shortcuts.title') }}</h2><p>{{ t('shortcuts.description') }}</p></div>
+        <button type="button" :aria-label="t('shortcuts.close')" @click="emit('close')"><X :size="18" /></button>
       </header>
       <div class="shortcut-manager-body">
         <section class="shortcut-manager-selected">
-          <div class="shortcut-manager-section-heading"><strong>侧栏顺序</strong><small>{{ draft.length }}/12</small></div>
+          <div class="shortcut-manager-section-heading"><strong>{{ t('shortcuts.order') }}</strong><small>{{ draft.length }}/12</small></div>
           <div class="shortcut-manager-list">
             <div
               v-for="(tool, index) in selectedTools"
@@ -81,29 +82,29 @@ function reset(): void {
               <GripVertical :size="15" aria-hidden="true" />
               <component :is="tool!.icon" :size="17" aria-hidden="true" />
               <span><strong>{{ tool!.name }}</strong><small>{{ tool!.description }}</small></span>
-              <button type="button" :disabled="index === 0" aria-label="上移" @click="move(tool!.id, -1)">↑</button>
-              <button type="button" :disabled="index === selectedTools.length - 1" aria-label="下移" @click="move(tool!.id, 1)">↓</button>
-              <button type="button" aria-label="从侧栏移除" @click="toggle(tool!.id)"><PinOff :size="15" /></button>
+              <button type="button" :disabled="index === 0" :aria-label="t('shortcuts.moveUp')" @click="move(tool!.id, -1)">↑</button>
+              <button type="button" :disabled="index === selectedTools.length - 1" :aria-label="t('shortcuts.moveDown')" @click="move(tool!.id, 1)">↓</button>
+              <button type="button" :aria-label="t('shortcuts.remove')" @click="toggle(tool!.id)"><PinOff :size="15" /></button>
             </div>
           </div>
         </section>
         <section class="shortcut-manager-catalog">
-          <label><Search :size="16" /><input v-model="query" type="search" placeholder="搜索全部工具" /></label>
-          <div class="shortcut-manager-section-heading"><strong>全部工具</strong><small>{{ allTools.length }} 个</small></div>
+          <label><Search :size="16" /><input v-model="query" type="search" :placeholder="t('shortcuts.search')" /></label>
+          <div class="shortcut-manager-section-heading"><strong>{{ t('shortcuts.allTools') }}</strong><small>{{ allTools.length }}</small></div>
           <div class="shortcut-manager-catalog-list">
             <button v-for="tool in allTools" :key="tool.id" type="button" :class="{ active: isSelected(tool.id) }" @click="toggle(tool.id)">
               <component :is="tool.icon" :size="17" aria-hidden="true" />
               <span><strong>{{ tool.name }}</strong><small>{{ tool.description }}</small></span>
-              <Pin v-if="isSelected(tool.id)" :size="15" aria-hidden="true" /><span v-else class="shortcut-add">添加</span>
+              <Pin v-if="isSelected(tool.id)" :size="15" aria-hidden="true" /><span v-else class="shortcut-add">{{ t('shortcuts.add') }}</span>
             </button>
           </div>
         </section>
       </div>
       <footer>
-        <button class="command-button subtle" type="button" @click="reset"><RotateCcw :size="15" />恢复默认</button>
+        <button class="command-button subtle" type="button" @click="reset"><RotateCcw :size="15" />{{ t('shortcuts.restore') }}</button>
         <span />
-        <button class="command-button subtle" type="button" @click="emit('close')">取消</button>
-        <button class="command-button" type="button" @click="emit('save', draft); emit('close')">保存快捷方式</button>
+        <button class="command-button subtle" type="button" @click="emit('close')">{{ t('common.cancel') }}</button>
+        <button class="command-button" type="button" @click="emit('save', draft); emit('close')">{{ t('shortcuts.save') }}</button>
       </footer>
     </section>
   </div>

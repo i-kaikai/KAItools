@@ -2,6 +2,7 @@
 import { ArrowUpRight } from '@lucide/vue'
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
+import { t } from '@/i18n'
 import type { ToolDefinition } from '@/tools/registry'
 import type { DashboardCard, DashboardCarouselMode } from '@/types'
 
@@ -439,13 +440,13 @@ onBeforeUnmount(() => {
 <template>
   <section class="home-tools" aria-labelledby="home-tools-title">
     <header class="home-section-heading">
-      <div><span>TOOLS</span><h2 id="home-tools-title">工具模块</h2></div>
-      <small>{{ items.length }} 个首页模块</small>
+      <div><span>TOOLS</span><h2 id="home-tools-title">{{ t('carousel.title') }}</h2></div>
+      <small>{{ t('carousel.summary', { count: items.length }) }}</small>
     </header>
     <div
       ref="stage"
       class="home-tool-orbit"
-      aria-label="工具模块动态卡片"
+      :aria-label="t('carousel.ariaLabel')"
       @pointerenter="onPointerEnter"
       @pointerleave="onPointerLeave"
       @pointerdown="onPointerDown"

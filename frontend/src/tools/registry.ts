@@ -23,6 +23,7 @@ import {
 } from '@lucide/vue'
 import { defineAsyncComponent, type Component } from 'vue'
 
+import { t } from '@/i18n'
 import type { ToolId } from '@/types'
 
 export type ToolCategoryId = 'data' | 'encoding' | 'developer' | 'text' | 'system'
@@ -33,13 +34,20 @@ export interface ToolCategory {
   description: string
 }
 
-export const toolCategories: ToolCategory[] = [
+const toolCategoryDefinitions: ToolCategory[] = [
   { id: 'data', name: '数据格式', description: '结构化数据、配置与查询语句' },
   { id: 'encoding', name: '编码转换', description: '文本、图片、文件与摘要处理' },
   { id: 'developer', name: '开发辅助', description: '代码、时间、任务与系统配置' },
   { id: 'text', name: '文本处理', description: '差异分析与内容统计' },
   { id: 'system', name: '系统工具', description: '本机环境与网络配置' },
 ]
+
+function localizeCategory(category: ToolCategory): ToolCategory {
+  return Object.defineProperties(category, {
+    name: { enumerable: true, get: () => t(`category.${category.id}.name`) },
+    description: { enumerable: true, get: () => t(`category.${category.id}.description`) },
+  }) as ToolCategory
+}
 
 export interface ToolDefinition {
   id: ToolId
@@ -55,7 +63,16 @@ export interface ToolDefinition {
   desktopOnly?: boolean
 }
 
-export const homeTool: ToolDefinition = {
+function localizeTool(tool: ToolDefinition): ToolDefinition {
+  return Object.defineProperties(tool, {
+    name: { enumerable: true, get: () => t(`tool.${tool.id}.name`) },
+    description: { enumerable: true, get: () => t(`tool.${tool.id}.description`) },
+  }) as ToolDefinition
+}
+
+export const toolCategories = toolCategoryDefinitions.map(localizeCategory)
+
+export const homeTool: ToolDefinition = localizeTool({
   id: 'home',
   name: '首页',
   description: '开发工具工作台',
@@ -65,9 +82,9 @@ export const homeTool: ToolDefinition = {
   component: defineAsyncComponent(() => import('./home/HomeTool.vue')),
   singleton: true,
   initialState: () => ({}),
-}
+})
 
-export const workspaceTools: ToolDefinition[] = [
+const workspaceToolDefinitions: ToolDefinition[] = [
   {
     id: 'json',
     name: 'JSON',
@@ -285,6 +302,8 @@ export const workspaceTools: ToolDefinition[] = [
     chainInput: (value) => ({ input: value }),
   },
 ]
+
+export const workspaceTools: ToolDefinition[] = workspaceToolDefinitions.map(localizeTool)
 
 export const tools: ToolDefinition[] = [homeTool, ...workspaceTools]
 

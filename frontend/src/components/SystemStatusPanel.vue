@@ -3,6 +3,7 @@ import { Activity, BatteryCharging, BatteryMedium, Cpu, Database, Gauge, HardDri
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { desktopApi } from '@/api/desktopApi'
+import { formatDate, t } from '@/i18n'
 import { checkService } from '@/api/remoteApi'
 import { isWebRuntime } from '@/runtime'
 import { useAppStore } from '@/stores/app'
@@ -17,7 +18,7 @@ const refreshing = ref(false)
 let refreshTimer: number | undefined
 
 function formatBytes(value: unknown): string {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return '不可用'
+  if (typeof value !== 'number' || !Number.isFinite(value)) return t('status.unavailable')
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
   let amount = value
   let index = 0
@@ -29,24 +30,24 @@ function formatBytes(value: unknown): string {
 }
 
 function formatValue(value: unknown): string {
-  if (value === null || value === undefined || value === '') return '不可用'
-  if (typeof value === 'boolean') return value ? '可用' : '不可用'
+  if (value === null || value === undefined || value === '') return t('status.unavailable')
+  if (typeof value === 'boolean') return value ? t('status.available') : t('status.unavailable')
   return String(value)
 }
 
 const runtimeTitle = computed(() => {
-  if (snapshot.value?.runtime === 'desktop') return '本地运行正常'
-  return snapshot.value?.system.online ? '浏览器本地模式' : '浏览器离线模式'
+  if (snapshot.value?.runtime === 'desktop') return t('status.desktopReady')
+  return snapshot.value?.system.online ? t('status.browserLocal') : t('status.browserOffline')
 })
 const runtimeDescription = computed(() => snapshot.value?.runtime === 'desktop'
-  ? '数据仅保存在当前设备，可继续离线使用'
-  : '浏览器存储可用，桌面专属能力不可用')
-const capturedAt = computed(() => snapshot.value ? new Date(snapshot.value.capturedAt).toLocaleTimeString() : '正在读取')
-const serviceLabel = computed(() => serviceStatus.value === 'ready' ? '已连接' : serviceStatus.value === 'checking' ? '检测中' : '本地模式')
+  ? t('status.desktopDescription')
+  : t('status.browserDescription'))
+const capturedAt = computed(() => snapshot.value ? formatDate(new Date(snapshot.value.capturedAt), { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : t('status.reading'))
+const serviceLabel = computed(() => serviceStatus.value === 'ready' ? t('status.connected') : serviceStatus.value === 'checking' ? t('status.checking') : t('status.localMode'))
 
 function compactCpuName(value: unknown): string {
   const source = formatValue(value)
-  if (source === '不可用') return source
+  if (source === t('status.unavailable')) return source
   return source.replaceAll('(R)', '').replaceAll('(TM)', '').replace(/\s+/g, ' ').trim()
 }
 
@@ -58,21 +59,21 @@ const primaryMetrics = computed((): Array<{ label: string; value: string; hint: 
     const powerPercent = status.system.powerPercent
     const powerCharging = status.system.powerCharging === true
     const batteryValue = powerSource === 'battery'
-      ? typeof powerPercent === 'number' ? `${powerPercent}%` : '电池供电'
-      : powerSource === 'external' ? '外接电源' : '不可用'
-    const batteryHint = powerSource === 'battery' ? powerCharging ? '正在充电' : '使用电池' : powerSource === 'external' ? '未检测到电池' : '电源信息不可用'
+      ? typeof powerPercent === 'number' ? `${powerPercent}%` : t('status.battery')
+      : powerSource === 'external' ? t('status.externalPower') : t('status.unavailable')
+    const batteryHint = powerSource === 'battery' ? powerCharging ? t('status.charging') : t('status.onBattery') : powerSource === 'external' ? t('status.noBattery') : t('status.powerUnavailable')
     return [
-      { label: 'CPU', value: compactCpuName(status.system.cpuName), hint: '当前设备处理器', icon: Cpu },
-      { label: '内存', value: formatBytes(status.system.memoryAvailableBytes), hint: `总计 ${formatBytes(status.system.memoryTotalBytes)}`, icon: Gauge },
-      { label: '电量', value: batteryValue, hint: batteryHint, icon: powerCharging ? BatteryCharging : BatteryMedium },
-      { label: '工作区数据', value: formatBytes(status.application.dataDirectoryBytes), hint: '受控本地目录', icon: HardDrive },
+      { label: t('status.cpu'), value: compactCpuName(status.system.cpuName), hint: t('status.processor'), icon: Cpu },
+      { label: t('status.memory'), value: formatBytes(status.system.memoryAvailableBytes), hint: t('status.memoryTotal', { value: formatBytes(status.system.memoryTotalBytes) }), icon: Gauge },
+      { label: t('status.power'), value: batteryValue, hint: batteryHint, icon: powerCharging ? BatteryCharging : BatteryMedium },
+      { label: t('status.workspaceData'), value: formatBytes(status.application.dataDirectoryBytes), hint: t('status.managedDirectory'), icon: HardDrive },
     ]
   }
   return [
-    { label: 'CPU', value: '不可用', hint: '浏览器无法读取处理器型号', icon: Cpu },
-    { label: '内存', value: typeof status.system.deviceMemoryGiB === 'number' ? `${status.system.deviceMemoryGiB} GB` : '不可用', hint: '浏览器可提供的设备内存', icon: Gauge },
-    { label: '电量', value: '不可用', hint: '浏览器不读取电源状态', icon: BatteryMedium },
-    { label: '工作区数据', value: formatBytes(status.application.storageUsageBytes), hint: `配额 ${formatBytes(status.application.storageQuotaBytes)}`, icon: HardDrive },
+    { label: t('status.cpu'), value: t('status.unavailable'), hint: t('status.browserCpu'), icon: Cpu },
+    { label: t('status.memory'), value: typeof status.system.deviceMemoryGiB === 'number' ? `${status.system.deviceMemoryGiB} GB` : t('status.unavailable'), hint: t('status.browserMemory'), icon: Gauge },
+    { label: t('status.power'), value: t('status.unavailable'), hint: t('status.browserPower'), icon: BatteryMedium },
+    { label: t('status.workspaceData'), value: formatBytes(status.application.storageUsageBytes), hint: t('status.quota', { value: formatBytes(status.application.storageQuotaBytes) }), icon: HardDrive },
   ]
 })
 
@@ -81,13 +82,13 @@ const diagnostics = computed((): Detail[] => {
   if (!status) return []
   if (status.runtime === 'desktop') {
     return [
-      ['系统', status.system.platform], ['WebView2', status.application.webview2],
-      ['同步服务', serviceLabel.value], ['托盘', status.application.trayHidden ? '已隐藏' : '运行中'],
+      [t('status.system'), status.system.platform], ['WebView2', status.application.webview2],
+      [t('status.syncService'), serviceLabel.value], [t('status.tray'), status.application.trayHidden ? t('status.hidden') : t('status.running')],
     ]
   }
   return [
-    ['浏览器', status.system.browser], ['IndexedDB', status.application.indexedDbAvailable],
-    ['本地存储', status.application.localStorageAvailable], ['同步服务', serviceLabel.value],
+    [t('status.browser'), status.system.browser], ['IndexedDB', status.application.indexedDbAvailable],
+    [t('status.localStorage'), status.application.localStorageAvailable], [t('status.syncService'), serviceLabel.value],
   ]
 })
 
@@ -113,10 +114,10 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer))
 </script>
 
 <template>
-  <section class="system-status-panel" :data-runtime="isWebRuntime ? 'web' : 'desktop'" :data-service="serviceStatus" aria-label="系统状态">
+  <section class="system-status-panel" :data-runtime="isWebRuntime ? 'web' : 'desktop'" :data-service="serviceStatus" :aria-label="t('status.title')">
     <header class="system-status-header">
-      <div><span><MonitorCog :size="17" />系统状态</span><small>{{ snapshot ? `${capturedAt} 更新` : '正在读取' }}</small></div>
-      <button class="icon-button small" type="button" aria-label="刷新系统状态" :disabled="refreshing" @click="refresh"><RefreshCw :size="15" :class="{ spinning: refreshing }" /></button>
+      <div><span><MonitorCog :size="17" />{{ t('status.title') }}</span><small>{{ snapshot ? t('status.updated', { time: capturedAt }) : t('status.reading') }}</small></div>
+      <button class="icon-button small" type="button" :aria-label="t('status.refresh')" :disabled="refreshing" @click="refresh"><RefreshCw :size="15" :class="{ spinning: refreshing }" /></button>
     </header>
     <div class="system-status-hero">
       <span class="system-status-signal" :class="serviceStatus"><ShieldCheck v-if="serviceStatus === 'ready'" :size="20" /><Activity v-else :size="20" /></span>
@@ -124,7 +125,7 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer))
       <span class="system-status-service"><ShieldCheck v-if="serviceStatus === 'ready'" :size="13" /><WifiOff v-else :size="13" />{{ serviceLabel }}</span>
     </div>
     <div v-if="snapshot" class="system-status-metrics"><div v-for="metric in primaryMetrics" :key="metric.label"><component :is="metric.icon" :size="15" /><span><small>{{ metric.label }}</small><strong>{{ metric.value }}</strong><em>{{ metric.hint }}</em></span></div></div>
-    <div v-else class="system-status-loading"><Database :size="16" /><span>正在读取运行环境</span></div>
+    <div v-else class="system-status-loading"><Database :size="16" /><span>{{ t('status.readingRuntime') }}</span></div>
     <dl v-if="snapshot" class="system-status-details"><div v-for="([label, value]) in diagnostics" :key="String(label)"><dt>{{ label }}</dt><dd :title="formatValue(value)">{{ formatValue(value) }}</dd></div></dl>
   </section>
 </template>

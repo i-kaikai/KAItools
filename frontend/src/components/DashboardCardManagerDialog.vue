@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUp, LayoutDashboard, Palette, Plus, RotateCcw, Search, 
 import { computed, ref, watch } from 'vue'
 
 import SegmentedControl from '@/components/SegmentedControl.vue'
+import { t } from '@/i18n'
 import { workspaceTools } from '@/tools/registry'
 import { defaultDashboardCards } from '@/tools/home/dashboardCards'
 import type { DashboardCard, DashboardCarouselMode, DashboardCards, ToolId } from '@/types'
@@ -17,10 +18,9 @@ const classicRotationSpeed = ref(16)
 const stepIntervalMs = ref(1600)
 const selectedId = ref('')
 const palette = ['#35d0a7', '#6ea0ff', '#ef8f62', '#b79ae8', '#db7ca9', '#dcad49']
-const carouselModeOptions: Array<{ value: DashboardCarouselMode; label: string }> = [
-  { value: 'classic', label: '连续旋转' },
-  { value: 'step', label: '逐卡切换' },
-]
+const carouselModeOptions = computed<Array<{ value: DashboardCarouselMode; label: string }>>(() => [
+  { value: 'classic', label: t('cards.classic') }, { value: 'step', label: t('cards.step') },
+])
 
 const selectedCard = computed(() => draft.value.find((card) => card.id === selectedId.value) ?? null)
 const canSave = computed(() => draft.value.length > 0 && draft.value.some((card) => card.enabled) && draft.value.every((card) => card.title.trim()))
@@ -115,35 +115,35 @@ function reset(): void {
   <div v-if="open" class="dashboard-card-backdrop" @pointerdown.self="emit('close')">
     <section class="dashboard-card-dialog" role="dialog" aria-modal="true" aria-labelledby="dashboard-card-title">
       <header>
-        <div><span><LayoutDashboard :size="14" />HOME CARDS</span><h2 id="dashboard-card-title">管理首页卡片</h2><p>卡片仅保存在当前设备，点击后直接打开对应工具。</p></div>
-        <button type="button" aria-label="关闭首页卡片管理" @click="emit('close')"><X :size="18" /></button>
+        <div><span><LayoutDashboard :size="14" />HOME CARDS</span><h2 id="dashboard-card-title">{{ t('cards.title') }}</h2><p>{{ t('cards.description') }}</p></div>
+        <button type="button" :aria-label="t('cards.close')" @click="emit('close')"><X :size="18" /></button>
       </header>
       <div class="dashboard-card-body">
         <section class="dashboard-card-list">
-          <div class="dashboard-card-section-heading"><strong>已添加</strong><small>{{ draft.length }}/6</small></div>
+          <div class="dashboard-card-section-heading"><strong>{{ t('cards.added') }}</strong><small>{{ draft.length }}/6</small></div>
           <div v-if="draft.length" class="dashboard-card-list-items">
             <div v-for="(card, index) in draft" :key="card.id" :class="{ active: card.id === selectedId }">
               <button class="dashboard-card-select" type="button" :aria-pressed="card.id === selectedId" @click="selectedId = card.id"><span class="dashboard-card-swatch" :style="{ backgroundColor: card.accentColor }" /><span><strong>{{ card.title }}</strong><small>{{ workspaceTools.find((tool) => tool.id === card.toolId)?.name }}</small></span></button>
-              <i v-if="!card.enabled">隐藏</i><button type="button" aria-label="上移首页卡片" :disabled="index === 0" @click="move(card.id, -1)"><ArrowUp :size="14" /></button><button type="button" aria-label="下移首页卡片" :disabled="index === draft.length - 1" @click="move(card.id, 1)"><ArrowDown :size="14" /></button><button type="button" aria-label="移除首页卡片" :disabled="draft.length === 1" @click="remove(card.id)"><Trash2 :size="14" /></button>
+              <i v-if="!card.enabled">{{ t('cards.hidden') }}</i><button type="button" :aria-label="t('cards.moveUp')" :disabled="index === 0" @click="move(card.id, -1)"><ArrowUp :size="14" /></button><button type="button" :aria-label="t('cards.moveDown')" :disabled="index === draft.length - 1" @click="move(card.id, 1)"><ArrowDown :size="14" /></button><button type="button" :aria-label="t('cards.remove')" :disabled="draft.length === 1" @click="remove(card.id)"><Trash2 :size="14" /></button>
             </div>
           </div>
-          <p v-else class="dashboard-card-empty">从右侧选择工具，添加为首页卡片。</p>
+          <p v-else class="dashboard-card-empty">{{ t('cards.empty') }}</p>
         </section>
         <section class="dashboard-card-catalog">
-          <label><Search :size="16" /><input v-model="query" type="search" placeholder="搜索工具" /></label>
-          <div class="dashboard-card-section-heading"><strong>可添加工具</strong><small>{{ availableTools.length }} 个</small></div>
+          <label><Search :size="16" /><input v-model="query" type="search" :placeholder="t('cards.search')" /></label>
+          <div class="dashboard-card-section-heading"><strong>{{ t('cards.available') }}</strong><small>{{ availableTools.length }}</small></div>
           <div class="dashboard-card-catalog-items">
-            <button v-for="tool in availableTools" :key="tool.id" type="button" :class="{ active: cardForTool(tool.id) }" :disabled="!canAddMoreCards && !cardForTool(tool.id)" @click="add(tool.id)"><component :is="tool.icon" :size="17" /><span><strong>{{ tool.name }}</strong><small>{{ tool.description }}</small></span><span v-if="cardForTool(tool.id)">已添加</span><Plus v-else :size="16" /></button>
+            <button v-for="tool in availableTools" :key="tool.id" type="button" :class="{ active: cardForTool(tool.id) }" :disabled="!canAddMoreCards && !cardForTool(tool.id)" @click="add(tool.id)"><component :is="tool.icon" :size="17" /><span><strong>{{ tool.name }}</strong><small>{{ tool.description }}</small></span><span v-if="cardForTool(tool.id)">{{ t('cards.alreadyAdded') }}</span><Plus v-else :size="16" /></button>
           </div>
         </section>
       </div>
-      <section v-if="selectedCard" class="dashboard-card-editor" aria-label="编辑首页卡片">
-        <div class="dashboard-carousel-mode"><span>轮播</span><SegmentedControl v-model="carouselMode" label="首页卡片轮播方式" :options="carouselModeOptions" /></div>
-        <div class="dashboard-motion-control" :class="{ inactive: carouselMode !== 'classic' }"><label>连续旋转速度 <output>{{ classicRotationSpeed }} 度/秒</output><input v-model.number="classicRotationSpeed" aria-label="连续旋转速度" type="range" min="6" max="30" step="1" :disabled="carouselMode !== 'classic'" /></label></div>
-        <div class="dashboard-motion-control" :class="{ inactive: carouselMode !== 'step' }"><label>逐卡停留时间 <output>{{ (stepIntervalMs / 1000).toFixed(1) }} 秒</output><input v-model.number="stepIntervalMs" aria-label="逐卡停留时间" type="range" min="800" max="6000" step="200" :disabled="carouselMode !== 'step'" /></label></div>
-        <label>标题<input v-model="selectedCard.title" maxlength="80" /></label><label>描述<input v-model="selectedCard.description" maxlength="240" /></label><div><span><Palette :size="14" />强调色</span><button v-for="color in palette" :key="color" type="button" class="dashboard-card-color" :class="{ active: selectedCard.accentColor === color }" :style="{ backgroundColor: color }" :aria-label="`使用 ${color} 强调色`" @click="selectedCard.accentColor = color" /></div><label class="dashboard-card-enabled"><input v-model="selectedCard.enabled" type="checkbox" />显示此卡片</label>
+      <section v-if="selectedCard" class="dashboard-card-editor" :aria-label="t('cards.edit')">
+        <div class="dashboard-carousel-mode"><span>{{ t('cards.carousel') }}</span><SegmentedControl v-model="carouselMode" :label="t('cards.carouselMode')" :options="carouselModeOptions" /></div>
+        <div class="dashboard-motion-control" :class="{ inactive: carouselMode !== 'classic' }"><label>{{ t('cards.rotationSpeed') }} <output>{{ t('cards.degreesPerSecond', { count: classicRotationSpeed }) }}</output><input v-model.number="classicRotationSpeed" :aria-label="t('cards.rotationSpeed')" type="range" min="6" max="30" step="1" :disabled="carouselMode !== 'classic'" /></label></div>
+        <div class="dashboard-motion-control" :class="{ inactive: carouselMode !== 'step' }"><label>{{ t('cards.dwellTime') }} <output>{{ t('cards.seconds', { count: (stepIntervalMs / 1000).toFixed(1) }) }}</output><input v-model.number="stepIntervalMs" :aria-label="t('cards.dwellTime')" type="range" min="800" max="6000" step="200" :disabled="carouselMode !== 'step'" /></label></div>
+        <label>{{ t('cards.name') }}<input v-model="selectedCard.title" maxlength="80" /></label><label>{{ t('cards.descriptionLabel') }}<input v-model="selectedCard.description" maxlength="240" /></label><div><span><Palette :size="14" />{{ t('cards.accent') }}</span><button v-for="color in palette" :key="color" type="button" class="dashboard-card-color" :class="{ active: selectedCard.accentColor === color }" :style="{ backgroundColor: color }" :aria-label="t('cards.useAccent', { color })" @click="selectedCard.accentColor = color" /></div><label class="dashboard-card-enabled"><input v-model="selectedCard.enabled" type="checkbox" />{{ t('cards.show') }}</label>
       </section>
-      <footer><button class="command-button subtle" type="button" :disabled="saving" @click="reset"><RotateCcw :size="14" />恢复系统默认</button><span /><button class="command-button subtle" type="button" :disabled="saving" @click="emit('close')">取消</button><button class="command-button" type="button" :disabled="saving || !canSave" @click="save">{{ saving ? '正在保存…' : '保存首页卡片' }}</button></footer>
+      <footer><button class="command-button subtle" type="button" :disabled="saving" @click="reset"><RotateCcw :size="14" />{{ t('cards.restore') }}</button><span /><button class="command-button subtle" type="button" :disabled="saving" @click="emit('close')">{{ t('common.cancel') }}</button><button class="command-button" type="button" :disabled="saving || !canSave" @click="save">{{ saving ? t('cards.saving') : t('cards.save') }}</button></footer>
     </section>
   </div>
 </template>

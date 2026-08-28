@@ -2,6 +2,7 @@ import { createPinia } from 'pinia'
 import { createApp } from 'vue'
 
 import App from './App.vue'
+import { setActiveLocale } from './i18n'
 import './styles/index.css'
 
 function syncViewportHeight(): void {
@@ -10,6 +11,7 @@ function syncViewportHeight(): void {
 }
 
 syncViewportHeight()
+setActiveLocale('zh-CN')
 window.addEventListener('resize', syncViewportHeight)
 window.visualViewport?.addEventListener('resize', syncViewportHeight)
 

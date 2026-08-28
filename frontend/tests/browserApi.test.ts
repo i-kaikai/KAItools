@@ -19,6 +19,7 @@ describe('browser API storage', () => {
     if (!initial.ok) return
     expect(initial.data.runtime.version).toBe(APP_VERSION)
     expect(initial.data.settings.theme).toBe('system')
+    expect(initial.data.settings.locale).toBe('zh-CN')
     expect(initial.data.settings.sidebarCollapsed).toBe(true)
     expect(initial.data.shortcutSync).toMatchObject({ accountId: null, mode: 'pending', pendingToolIds: null })
     expect(initial.data.dashboardCards.cards.map((card) => card.toolId)).toEqual(['json', 'java', 'timestamp', 'base64-text', 'cron', 'notes'])
@@ -28,6 +29,7 @@ describe('browser API storage', () => {
     expect(initial.data.settings.developerModeEnabled).toBe(false)
     expect(initial.data.settings.activationHotkey).toBe('Ctrl+Alt+K')
     expect(initial.data.settings).toMatchObject({
+      locale: 'zh-CN',
       particleQuality: 'high',
       motionMode: 'system',
       sidebarStartup: 'remember',
@@ -53,13 +55,14 @@ describe('browser API storage', () => {
       classicRotationSpeed: 22,
       stepIntervalMs: 2400,
     }
-    await desktopApi.saveSettings({ settings: { ...initial.data.settings, theme: 'dark' }, dashboardCards })
+    await desktopApi.saveSettings({ settings: { ...initial.data.settings, theme: 'dark', locale: 'en-US' }, dashboardCards })
     await desktopApi.saveWorkspace([tab])
 
     const restored = await desktopApi.loadState()
     expect(restored.ok).toBe(true)
     if (!restored.ok) return
     expect(restored.data.settings.theme).toBe('dark')
+    expect(restored.data.settings.locale).toBe('en-US')
     expect(restored.data.dashboardCards).toEqual(dashboardCards)
     expect(restored.data.workspace.tabs).toEqual([tab])
   })
@@ -100,6 +103,7 @@ describe('browser API storage', () => {
     expect(result.ok).toBe(true)
     if (!result.ok) return
     expect(result.data.settings).toMatchObject({
+      locale: 'zh-CN',
       theme: 'dark',
       particleQuality: 'high',
       motionMode: 'system',
