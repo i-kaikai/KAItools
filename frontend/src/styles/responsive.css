@@ -21,9 +21,9 @@
 }
 
 @media (max-width: 720px) {
-  .app-shell, .app-shell.sidebar-collapsed { display: block; padding-bottom: 58px; }
-  .app-sidebar { position: fixed; z-index: 30; inset: auto 0 0; display: flex; height: 58px; flex-direction: row; border-top: 1px solid var(--sidebar-border); border-right: 0; overflow: hidden; }
-  .brand-row, .tool-search, .nav-section-label, .sidebar-footer { display: none; }
+  .app-shell, .app-shell.sidebar-collapsed { display: block; padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px)); }
+  .app-sidebar { position: fixed; z-index: 30; inset: auto 0 0; display: flex; height: calc(58px + env(safe-area-inset-bottom, 0px)); padding-bottom: env(safe-area-inset-bottom, 0px); flex-direction: row; border-top: 1px solid var(--sidebar-border); border-right: 0; overflow: hidden; }
+  .brand-row, .tool-search, .nav-section-label { display: none; }
   .sidebar-home { justify-content: center; flex: 0 0 52px; width: 52px; min-height: 44px; margin: 7px 2px 7px 6px; padding: 0; }
   .sidebar-home span { display: none; }
   .sidebar-search-button { flex: 0 0 42px; width: 42px; height: 44px; margin: 7px 1px; border-color: transparent; background: transparent; }
@@ -34,8 +34,13 @@
   .tool-nav-row.active::before { top: 0; left: 50%; width: 20px; height: 3px; transform: translateX(-50%); }
   .sidebar-manage-shortcuts { justify-content: center; flex: 0 0 42px; width: 42px; min-height: 44px; margin: 7px 1px; padding: 0; border-color: transparent; background: transparent; }
   .sidebar-manage-shortcuts span, .sidebar-manage-shortcuts small { display: none; }
+  .sidebar-footer { display: flex; align-items: center; flex: 0 0 auto; min-height: 0; padding: 6px 6px 6px 4px; border-top: 0; border-left: 1px solid var(--sidebar-border); }
+  .sidebar-footer-actions { width: auto; gap: 2px; justify-content: flex-end; }
+  .sidebar-footer .repository-brand-button { display: none; }
+  .sidebar-footer .icon-button { width: 44px; height: 44px; border-color: transparent; background: transparent; }
+  .sidebar-footer .tooltip-anchor[data-tooltip]::after { display: none; }
   .workspace { width: 100%; height: 100%; }
-  .particle-field, .app-shell.sidebar-collapsed .particle-field { inset: 48px 0 58px; }
+  .particle-field, .app-shell.sidebar-collapsed .particle-field { inset: 48px 0 calc(58px + env(safe-area-inset-bottom, 0px)); }
   .tab-strip { padding-inline: 8px; }
   .language-menu-trigger { width: 42px; justify-content: center; padding: 0; }.language-menu-trigger > span, .language-menu-trigger > svg:last-child { display: none; }
   .language-menu { right: 0; min-width: 176px; }
