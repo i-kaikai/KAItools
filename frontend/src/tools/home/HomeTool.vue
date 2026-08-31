@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowUpRight, BookOpenText, Boxes, CircleDot, ExternalLink, LayoutDashboard, LayoutGrid, Sparkles } from '@lucide/vue'
+import { ArrowUpRight, BookOpenText, Boxes, CircleDot, ExternalLink, LayoutGrid, Sparkles } from '@lucide/vue'
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue'
 
 import giteeLogo from '@/assets/gitee-g-red.svg'
@@ -50,11 +50,18 @@ const toolColors: Record<string, string> = {
   json: '#35d0a7',
   'json-diff': '#40c9a2',
   'json-java': '#ef8f62',
+  'api-client': '#45abd7',
+  jwt: '#c08be1',
+  mermaid: '#52bea0',
+  kanban: '#66b991',
   java: '#ff7d5d',
   timestamp: '#6ea0ff',
   'base64-text': '#dcad49',
   'base64-image': '#db7ca9',
   'base64-file': '#b79ae8',
+  'html-pdf': '#58c0a4',
+  'word-pdf': '#76a8e7',
+  'pdf-word': '#eb9d80',
   qrcode: '#62c5aa',
   'image-studio': '#df8b5b',
   'video-audio': '#7d9ee8',
@@ -160,7 +167,6 @@ async function saveDashboardCards(dashboardCards: DashboardCards): Promise<void>
             <span><b>{{ workspaceTools.length.toString().padStart(2, '0') }}</b>{{ t('home.tools') }}</span>
             <span><b>{{ openTabs.length.toString().padStart(2, '0') }}</b>{{ t('home.working') }}</span>
           </div>
-          <button class="home-card-manager" type="button" @click="dashboardCardManagerOpen = true"><LayoutDashboard :size="15" /><span>{{ t('home.manageCards') }}</span><small>{{ app.dashboardCards.cards.length }}</small></button>
         </div>
       </header>
 
@@ -177,7 +183,7 @@ async function saveDashboardCards(dashboardCards: DashboardCards): Promise<void>
         </div>
 
         <div class="home-deck-carousel home-next-deck">
-          <ToolCarousel :items="carouselItems" :mode="app.dashboardCards.carouselMode" :classic-rotation-speed="app.dashboardCards.classicRotationSpeed" :step-interval-ms="app.dashboardCards.stepIntervalMs" :reduced-motion="app.reducedMotion" @open="openTool" @focus="focusCard" @release="releaseCard" />
+          <ToolCarousel :items="carouselItems" :card-count="app.dashboardCards.cards.length" :mode="app.dashboardCards.carouselMode" :classic-rotation-speed="app.dashboardCards.classicRotationSpeed" :step-interval-ms="app.dashboardCards.stepIntervalMs" :reduced-motion="app.reducedMotion" @open="openTool" @focus="focusCard" @release="releaseCard" @manage="dashboardCardManagerOpen = true" />
         </div>
 
         <aside class="home-pinned-note home-next-active-module" :aria-label="t('home.pinnedNote')">

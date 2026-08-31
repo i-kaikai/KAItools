@@ -470,7 +470,23 @@ test('homepage card manager adds a local tool card and opens its tool', async ({
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto('/')
   await page.getByRole('button', { name: '展开侧栏' }).click()
-  await page.getByRole('button', { name: '管理首页卡片' }).click()
+  const cardManager = page.getByRole('button', { name: '管理首页卡片' })
+  await expect(cardManager).toBeVisible()
+  const managerPosition = await cardManager.evaluate((button) => {
+    const deck = document.querySelector<HTMLElement>('.home-next-deck')
+    const buttonRect = button.getBoundingClientRect()
+    const deckRect = deck?.getBoundingClientRect()
+    return deckRect ? {
+      topOffset: buttonRect.top - deckRect.top,
+      rightOffset: deckRect.right - buttonRect.right,
+      deckHeight: deckRect.height,
+    } : null
+  })
+  expect(managerPosition).not.toBeNull()
+  expect(managerPosition!.topOffset).toBeLessThan(managerPosition!.deckHeight / 3)
+  expect(managerPosition!.rightOffset).toBeGreaterThanOrEqual(0)
+  expect(managerPosition!.rightOffset).toBeLessThanOrEqual(20)
+  await cardManager.click()
   const dialog = page.getByRole('dialog', { name: '管理首页卡片' })
   await expect(dialog).toBeVisible()
   const dialogLayer = await page.evaluate(() => {
@@ -958,6 +974,69 @@ test('new conversion, formatting and analysis tools produce results', async ({ p
   await openWorkspaceTool(page, '文本统计')
   await page.getByLabel('文本统计输入').fill('你好 KAITools')
   await expect(page.getByLabel('文本统计结果')).toContainText('UTF-8 字节')
+  await assertViewportIntegrity(page)
+})
+
+test('API debugger, JWT analyzer, and Mermaid editor run locally', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.route('**/api/debug**', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      headers: { 'x-request-id': 'local-debug-request' },
+      body: JSON.stringify({ ok: true, source: 'local test route' }),
+    })
+  })
+  await page.goto('/')
+
+  await openWorkspaceTool(page, 'API 调试台')
+  await page.getByLabel('请求地址').fill('http://127.0.0.1:5173/api/debug')
+  await page.getByRole('button', { name: '添加参数' }).click()
+  await page.getByLabel('查询参数 1 名称').fill('source')
+  await page.getByLabel('查询参数 1 值').fill('workspace')
+  await page.getByRole('button', { name: '发送', exact: true }).click()
+  await expect(page.getByLabel('API 响应内容')).toContainText('local test route')
+  await expect(page.getByText('响应 Header')).toBeVisible()
+
+  await openWorkspaceTool(page, 'JWT 分析器')
+  await page.getByLabel('JWT Token 输入').fill('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJrYWkiLCJpYXQiOjE3MDAwMDAwMDAsIm5iZiI6MTcwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMDAwfQ.signature')
+  await expect(page.getByLabel('JWT Header')).toContainText('HS256')
+  await expect(page.getByLabel('JWT Payload')).toContainText('"sub": "kai"')
+  await expect(page.getByText('签名段存在')).toBeVisible()
+
+  await openWorkspaceTool(page, 'Mermaid 流程图')
+  await page.getByLabel('Mermaid 图表代码').fill('flowchart LR\nA[输入] --> B[输出]')
+  await expect(page.locator('.mermaid-canvas svg')).toBeVisible()
+  await assertViewportIntegrity(page)
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  for (const tool of ['API 调试台', 'JWT 分析器', 'Mermaid 流程图']) {
+    await openWorkspaceTool(page, tool)
+    await expect(page.getByRole('heading', { name: tool, exact: true })).toBeVisible()
+    await assertViewportIntegrity(page)
+  }
+})
+
+test('lightweight task board manages local task flow', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await openWorkspaceTool(page, '轻量任务看板')
+
+  await page.getByRole('button', { name: '新建任务' }).click()
+  await page.getByLabel('任务名称').fill('整理项目周报')
+  await page.getByLabel('优先级').selectOption('high')
+  await page.getByLabel('截止日').fill('2030-01-02')
+  await page.getByRole('button', { name: '添加任务' }).click()
+  await expect(page.getByLabel('待办')).toContainText('整理项目周报')
+
+  await page.getByRole('button', { name: '将 整理项目周报 移到下一列' }).click()
+  await expect(page.getByLabel('进行中')).toContainText('整理项目周报')
+  await page.getByRole('button', { name: '编辑任务：整理项目周报' }).click()
+  await page.getByLabel('备注').fill('等待数据汇总')
+  await page.getByRole('button', { name: '保存修改' }).click()
+  await expect(page.getByLabel('进行中')).toContainText('等待数据汇总')
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(page.getByRole('heading', { name: '轻量任务看板', exact: true })).toBeVisible()
   await assertViewportIntegrity(page)
 })
 

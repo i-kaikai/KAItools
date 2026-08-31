@@ -207,7 +207,7 @@
 .home-next-deck .home-tools { height: 100%; padding: 14px 16px 10px; }
 .home-next-deck .home-section-heading { min-height: 30px; margin-bottom: 2px; }
 .home-next-deck .home-section-heading h2 { font-size: 16px; }
-.home-next-deck .home-section-heading > small { color: #93a4b2; font-size: 11px; }
+.home-next-deck .home-carousel-header-actions > small { color: #93a4b2; font-size: 11px; }
 .home-next-deck .home-tool-orbit { height: 264px; perspective: 1200px; }
 .home-next-deck .home-tool-card { width: clamp(220px, 34%, 286px); height: auto; aspect-ratio: 1.45; padding: 14px 15px 12px; border-color: rgb(203 221 236 / 19%); border-radius: 9px; background: rgb(15 23 31 / 78%); box-shadow: inset 0 1px rgb(255 255 255 / 10%), 0 18px 42px rgb(0 0 0 / 30%); }
 .home-next-deck .home-tool-card::after { opacity: .18; }

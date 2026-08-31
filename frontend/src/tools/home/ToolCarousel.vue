@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowUpRight } from '@lucide/vue'
+import { ArrowUpRight, LayoutDashboard } from '@lucide/vue'
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { t } from '@/i18n'
@@ -27,6 +27,7 @@ interface RingGeometry {
 
 const props = defineProps<{
   items: CarouselItem[]
+  cardCount: number
   mode: DashboardCarouselMode
   classicRotationSpeed: number
   stepIntervalMs: number
@@ -37,6 +38,7 @@ const emit = defineEmits<{
   open: [tool: ToolDefinition]
   focus: [tool: ToolDefinition]
   release: []
+  manage: []
 }>()
 
 const stage = ref<HTMLDivElement | null>(null)
@@ -441,7 +443,10 @@ onBeforeUnmount(() => {
   <section class="home-tools" aria-labelledby="home-tools-title">
     <header class="home-section-heading">
       <div><span>TOOLS</span><h2 id="home-tools-title">{{ t('carousel.title') }}</h2></div>
-      <small>{{ t('carousel.summary', { count: items.length }) }}</small>
+      <div class="home-carousel-header-actions">
+        <button class="home-card-manager" type="button" @click="emit('manage')"><LayoutDashboard :size="15" /><span>{{ t('home.manageCards') }}</span><small>{{ cardCount }}</small></button>
+        <small>{{ t('carousel.summary', { count: items.length }) }}</small>
+      </div>
     </header>
     <div
       ref="stage"
