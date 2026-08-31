@@ -1,15 +1,17 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { syncAppViewportHeight } from '@/viewport'
 
 const originalInnerHeight = Object.getOwnPropertyDescriptor(window, 'innerHeight')
 const originalVisualViewport = Object.getOwnPropertyDescriptor(window, 'visualViewport')
+const originalScrollX = Object.getOwnPropertyDescriptor(window, 'scrollX')
+const originalScrollY = Object.getOwnPropertyDescriptor(window, 'scrollY')
 
-function setWindowProperty(name: 'innerHeight' | 'visualViewport', value: unknown): void {
+function setWindowProperty(name: 'innerHeight' | 'visualViewport' | 'scrollX' | 'scrollY', value: unknown): void {
   Object.defineProperty(window, name, { configurable: true, value })
 }
 
-function restoreWindowProperty(name: 'innerHeight' | 'visualViewport', descriptor: PropertyDescriptor | undefined): void {
+function restoreWindowProperty(name: 'innerHeight' | 'visualViewport' | 'scrollX' | 'scrollY', descriptor: PropertyDescriptor | undefined): void {
   if (descriptor) {
     Object.defineProperty(window, name, descriptor)
     return
@@ -21,7 +23,10 @@ describe('application viewport height', () => {
   afterEach(() => {
     restoreWindowProperty('innerHeight', originalInnerHeight)
     restoreWindowProperty('visualViewport', originalVisualViewport)
+    restoreWindowProperty('scrollX', originalScrollX)
+    restoreWindowProperty('scrollY', originalScrollY)
     document.documentElement.style.removeProperty('--app-viewport-height')
+    vi.restoreAllMocks()
   })
 
   it('uses the layout viewport when the visual viewport is offset or shorter', () => {
@@ -38,5 +43,15 @@ describe('application viewport height', () => {
 
     expect(syncAppViewportHeight()).toBe(0)
     expect(document.documentElement.style.getPropertyValue('--app-viewport-height')).toBe('100vh')
+  })
+
+  it('resets a restored root scroll position while synchronizing the viewport', () => {
+    setWindowProperty('innerHeight', 800)
+    setWindowProperty('scrollX', 0)
+    setWindowProperty('scrollY', 24)
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+
+    expect(syncAppViewportHeight()).toBe(800)
+    expect(scrollTo).toHaveBeenCalledWith(0, 0)
   })
 })

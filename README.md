@@ -94,6 +94,7 @@ $env:DEVTOOLKIT_DEV_URL = 'http://127.0.0.1:5173'
 
 ```powershell
 .\scripts\set_version.ps1 x.y.z
+.\scripts\check_release_notes.ps1
 .\scripts\check_version.ps1
 .\scripts\verify.ps1
 .\scripts\build_portable.ps1
@@ -102,6 +103,9 @@ $env:DEVTOOLKIT_DEV_URL = 'http://127.0.0.1:5173'
 
 根目录 `VERSION` 是唯一维护的版本号。每个交付批次都先按语义化版本更新它；前端、Python
 项目和 Windows 文件元数据会在构建时从它派生，校验脚本会阻止遗留的版本副本进入构建。
+设置新版本号时会在根目录 `RELEASE_NOTES.md` 顶部生成待填写条目。正式发布前由发布者填写
+发布日期和更新内容；便携包构建会拒绝仍含 `TBD` 的当前版本说明，并将完成后的版本说明
+打入发布包。
 
 便携目录输出到 `dist/KAITools`，ZIP 和 SHA-256 文件输出到 `release`。
 

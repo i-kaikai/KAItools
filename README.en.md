@@ -82,6 +82,7 @@ $env:DEVTOOLKIT_DEV_URL = 'http://127.0.0.1:5173'
 
 ```powershell
 .\scripts\set_version.ps1 x.y.z
+.\scripts\check_release_notes.ps1
 .\scripts\check_version.ps1
 .\scripts\verify.ps1
 .\scripts\build_portable.ps1
@@ -91,6 +92,10 @@ $env:DEVTOOLKIT_DEV_URL = 'http://127.0.0.1:5173'
 The root `VERSION` file is the only maintained version. Bump it for every delivery using semantic
 versioning; frontend, Python, and Windows file metadata derive from it during builds, and the check
 script blocks maintained version copies from entering a build.
+
+Setting a new version prepends a draft entry to `RELEASE_NOTES.md`. Before publishing, the releaser
+fills in the release date and changes. Portable packaging rejects a current-version entry that still
+contains `TBD` and includes the completed release notes in the package.
 
 The portable directory is written to `dist/KAITools`; the ZIP and SHA-256 files
 are written to `release`.

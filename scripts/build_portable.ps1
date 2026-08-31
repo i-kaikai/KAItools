@@ -14,6 +14,7 @@ $Version = (Get-Content -LiteralPath (Join-Path $RepoRoot 'VERSION') -Raw -Encod
 $ZipPath = Join-Path $ReleaseRoot "KAITools-v$Version-windows-x64.zip"
 $HashPath = "$ZipPath.sha256"
 
+& (Join-Path $PSScriptRoot 'check_release_notes.ps1')
 & (Join-Path $PSScriptRoot 'verify.ps1') -SkipE2E:$SkipE2E
 if ($LASTEXITCODE -ne 0) { throw 'Verification failed' }
 
@@ -60,6 +61,7 @@ foreach ($SourceFile in $SourceFiles) {
 }
 
 Copy-Item -LiteralPath (Join-Path $RepoRoot 'README.md') -Destination (Join-Path $PortableRoot 'README.md')
+Copy-Item -LiteralPath (Join-Path $RepoRoot 'RELEASE_NOTES.md') -Destination (Join-Path $PortableRoot 'RELEASE_NOTES.md')
 New-Item -ItemType Directory -Path (Join-Path $PortableRoot 'data') -Force | Out-Null
 Compress-Archive -Path (Join-Path $PortableRoot '*') -DestinationPath $ZipPath -CompressionLevel Optimal
 $ZipHash = (Get-FileHash -LiteralPath $ZipPath -Algorithm SHA256).Hash

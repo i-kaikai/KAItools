@@ -105,6 +105,7 @@
 }
 *::-webkit-scrollbar-thumb:hover { background-color: var(--scrollbar-thumb-hover); }
 html, body, #app { width: 100%; height: var(--app-viewport-height); margin: 0; overflow: hidden; }
+#app { position: fixed; top: 0; left: 0; }
 body { color: var(--text-primary); background: var(--bg); font-size: 13px; -webkit-font-smoothing: antialiased; }
 button, input, textarea, select { font: inherit; letter-spacing: 0; }
 button { color: inherit; }

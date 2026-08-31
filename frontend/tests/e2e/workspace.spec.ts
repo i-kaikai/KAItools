@@ -162,6 +162,34 @@ async function sampleParticleCanvas(page: Page): Promise<{ brightPixels: number;
 
 test.beforeAll(() => mkdirSync(qaDir, { recursive: true }))
 
+test('application stays anchored when the browser restores root scrolling', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await expect(page.locator('.app-shell')).toBeVisible()
+
+  const drifted = await page.evaluate(() => {
+    document.documentElement.style.setProperty('--app-viewport-height', `${window.innerHeight + 48}px`)
+    window.scrollTo(0, 24)
+    const app = document.querySelector('#app')?.getBoundingClientRect()
+    const topbar = document.querySelector('.workspace-topbar')?.getBoundingClientRect()
+    return {
+      appTop: app?.top,
+      rootScroll: window.scrollY,
+      topbarTop: topbar?.top,
+    }
+  })
+
+  expect(drifted.rootScroll).toBe(24)
+  expect(drifted.appTop).toBe(0)
+  expect(drifted.topbarTop).toBe(0)
+
+  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow')))
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0)
+  await expect.poll(() => page.evaluate(() => document.querySelector('#app')?.getBoundingClientRect().top)).toBe(0)
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--app-viewport-height').trim())).toBe('800px')
+  await expect.poll(() => page.evaluate(() => window.history.scrollRestoration)).toBe('manual')
+})
+
 for (const viewport of [
   { width: 960, height: 640, name: 'compact' },
   { width: 1280, height: 800, name: 'desktop' },

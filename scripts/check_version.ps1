@@ -37,4 +37,5 @@ if ($Failures.Count -gt 0) {
     throw "Version metadata must derive from VERSION ($Version): $($Failures -join '; ')"
 }
 
+& (Join-Path $PSScriptRoot 'check_release_notes.ps1') -AllowDraft
 Write-Host "VERSION_OK version=$Version"

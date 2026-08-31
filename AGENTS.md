@@ -16,10 +16,12 @@
 - 发布名称保持 `KAITools.spec`、`KAITools.exe`、`dist/KAITools` 和
   `KAITools-v<version>-windows-x64.zip`。
 - 根目录 `VERSION` 是产品版本的权威来源。每个准备交付的功能、修复、界面或发布配置
-  修改都必须同步更新版本号；默认修复递增 patch，兼容功能递增 minor，破坏性变更递增
-  major。只维护此文件；前端、Python 项目和 Windows 打包元数据必须在构建时从它派生，
-  不得保存同步副本。使用 `scripts/set_version.ps1` 更新版本，并由
-  `scripts/check_version.ps1` 校验。
+  修改都必须同步更新版本号；每次只递增 patch（`x.y.z` 的最后一位 `z`），不得因变更
+  类型自动递增 major 或 minor。只维护此文件；前端、Python 项目和 Windows 打包元数据
+  必须在构建时从它派生，不得保存同步副本。使用 `scripts/set_version.ps1` 更新版本，并由
+  `scripts/check_version.ps1` 校验。设置版本时会在 `RELEASE_NOTES.md` 顶部生成待填写条目；
+  每次正式发布前由发布者填写发布日期和用户可见变化，并通过
+  `scripts/check_release_notes.ps1` 校验，不能发布仍含 `TBD` 的版本说明。
 - 不要把 Spring Boot、PostgreSQL、Redis 或其他 API 服务实现放进本仓库。客户端只通过
   明确的 `/api/...` 契约连接独立服务。
 
