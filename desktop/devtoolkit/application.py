@@ -9,6 +9,7 @@ from pathlib import Path
 
 from .api import DesktopApi
 from .clipboard import ClipboardHistoryService
+from .document_conversion import execute_conversion_request
 from .hotkeys import GlobalActivationHotkey, HotkeyError
 from .hosts import execute_request
 from .logging_config import configure_logging
@@ -110,6 +111,7 @@ def _configure_native_window(window: object, tray: TrayController) -> None:
 def _arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--apply-hosts-request", nargs=2, metavar=("PATH", "SHA256"))
+    parser.add_argument("--document-conversion-request", nargs=2, metavar=("PATH", "SHA256"))
     parser.add_argument("--debug", action="store_true")
     return parser.parse_args()
 
@@ -133,6 +135,10 @@ def _activate_window(window: object) -> None:
 def main() -> int:
     args = _arguments()
     paths = resolve_paths()
+    document_conversion_request = getattr(args, "document_conversion_request", None)
+    if document_conversion_request:
+        request_path, expected_sha = document_conversion_request
+        return execute_conversion_request(Path(request_path), expected_sha)
     storage = AppStorage(paths)
     storage.ensure_directories()
     configure_logging(paths)

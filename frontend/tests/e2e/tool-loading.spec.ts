@@ -11,7 +11,7 @@ test('shows a loading state while a tool module is still downloading', async ({ 
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'KAITools' })).toBeVisible()
 
-  await page.route('**/assets/JsonTool-*.js', async (route) => {
+  await page.route(/\/(?:assets\/JsonTool-[^/]+\.js|src\/tools\/json\/JsonTool\.vue(?:\?.*)?)$/, async (route) => {
     await new Promise<void>((resolve) => setTimeout(resolve, 650))
     await route.continue()
   })

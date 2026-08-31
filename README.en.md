@@ -24,6 +24,9 @@ Python, pywebview, WebView2, Vue 3, and TypeScript. Extract the ZIP and launch
 - **Base64 Image**: image file and Data URL conversion with preview.
 - **Base64 File**: arbitrary file and Base64 conversion.
 - **MD5 Digest**: standard 32-character UTF-8 text digests with lower- or uppercase output.
+- **HTML to PDF**: import HTML or a ZIP with local CSS, fonts, and images, then safely preview and export without remote asset requests.
+- **Word to PDF**: Windows desktop prefers installed Microsoft Word and falls back to LibreOffice; Web uses compatibility rendering.
+- **PDF to Word**: Windows uses enhanced Microsoft Word conversion when available; Web and no-Word environments create an editable text-compatible DOCX.
 
 ### Developer utilities
 

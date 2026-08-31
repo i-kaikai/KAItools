@@ -118,6 +118,8 @@ def test_storage_rejects_unknown_and_oversized_content(tmp_path: Path) -> None:
         storage.save_settings({"settings": {"theme": "dark", "unexpected": True}})
     with pytest.raises(StorageError):
         storage.save_settings({"settings": {"particleQuality": "ultra"}})
+
+
     with pytest.raises(StorageError):
         storage.save_settings({"settings": {"locale": "fr-FR"}})
     with pytest.raises(StorageError):
@@ -154,6 +156,26 @@ def test_storage_rejects_unknown_and_oversized_content(tmp_path: Path) -> None:
                 ]
             }
         )
+
+
+def test_document_tools_are_valid_persistent_workspace_and_shortcut_ids(tmp_path: Path) -> None:
+    storage = AppStorage(paths(tmp_path))
+    storage.ensure_directories()
+    document_tools = ["html-pdf", "word-pdf", "pdf-word"]
+
+    storage.save_settings({"sidebarShortcuts": {"schemaVersion": 1, "toolIds": document_tools}})
+    storage.save_workspace(
+        {
+            "tabs": [
+                {"id": f"{tool_id}-1", "toolId": tool_id, "title": tool_id, "pinned": True, "state": {"kind": tool_id}}
+                for tool_id in document_tools
+            ]
+        }
+    )
+
+    state = storage.load_all()
+    assert state["sidebarShortcuts"]["toolIds"] == document_tools
+    assert [tab["toolId"] for tab in state["workspace"]["tabs"]] == document_tools
 
 
 def test_dashboard_cards_round_trip_as_local_structured_settings(tmp_path: Path) -> None:

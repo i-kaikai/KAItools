@@ -24,6 +24,9 @@ export type ToolId =
   | 'qrcode'
   | 'image-studio'
   | 'video-audio'
+  | 'html-pdf'
+  | 'word-pdf'
+  | 'pdf-word'
   | 'cron'
   | 'sql'
   | 'yaml'
@@ -163,6 +166,31 @@ export interface SystemStatusSnapshot {
   runtime: 'desktop' | 'web'
   system: Record<string, string | number | boolean | null>
   application: Record<string, string | number | boolean | null | Record<string, string | number | boolean | null>>
+}
+
+export type DocumentConversionEngine = 'microsoft-word' | 'libreoffice'
+
+export interface DocumentConversionCapabilities {
+  docxToPdf: {
+    engines: DocumentConversionEngine[]
+    preferred: DocumentConversionEngine | null
+  }
+  pdfToDocx: {
+    engines: DocumentConversionEngine[]
+    preferred: DocumentConversionEngine | null
+  }
+}
+
+export interface DocumentConversionPayload {
+  dataBase64: string
+  fileName: string
+}
+
+export interface DocumentConversionResult {
+  cancelled: boolean
+  engine: DocumentConversionEngine
+  outputName: string
+  outputSize: number
 }
 
 export interface BootstrapState {

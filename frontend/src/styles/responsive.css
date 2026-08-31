@@ -79,6 +79,12 @@
   .home-category-grid { grid-template-columns: minmax(0, 1fr); }
   .home-categories .home-section-heading { align-items: flex-start; gap: 8px; }
   .home-categories .home-section-heading > small { text-align: right; }
+  .document-conversion-tool { min-height: 980px; overflow: visible; }
+  .document-conversion-header .toolbar { width: 100%; justify-content: flex-start; overflow-x: auto; }
+  .document-engine-strip { align-items: flex-start; padding-block: 8px; flex-direction: column; }
+  .document-engine-strip > small { overflow: visible; white-space: normal; }
+  .document-html-dropzone { min-height: 116px; flex-basis: 116px; }
+  .document-preview-panel iframe, .document-docx-preview { min-height: 420px; }
   .tool-page { padding: 14px 12px 16px; overflow-y: auto; }
   .tool-header { align-items: stretch; flex: 0 0 auto; flex-direction: column; margin-bottom: 12px; }
   .tool-header .toolbar { width: 100%; padding-bottom: 2px; overflow-x: auto; }

@@ -25,7 +25,7 @@ let settingsTimer: number | undefined
 let notesTimer: number | undefined
 let mediaQuery: MediaQueryList | undefined
 let motionQuery: MediaQueryList | undefined
-const knownToolIds = new Set<ToolId>(['notes', 'json', 'json-diff', 'json-java', 'java', 'timestamp', 'base64-text', 'base64-image', 'base64-file', 'qrcode', 'image-studio', 'video-audio', 'cron', 'sql', 'yaml', 'xml', 'text-diff', 'text-stats', 'regex', 'md5', 'naming', 'identifiers', 'hosts', 'clipboard-history', 'calculator'])
+const knownToolIds = new Set<ToolId>(['notes', 'json', 'json-diff', 'json-java', 'java', 'timestamp', 'base64-text', 'base64-image', 'base64-file', 'qrcode', 'image-studio', 'video-audio', 'html-pdf', 'word-pdf', 'pdf-word', 'cron', 'sql', 'yaml', 'xml', 'text-diff', 'text-stats', 'regex', 'md5', 'naming', 'identifiers', 'hosts', 'clipboard-history', 'calculator'])
 
 function id(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`

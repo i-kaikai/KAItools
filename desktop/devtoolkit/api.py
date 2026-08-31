@@ -7,7 +7,7 @@ import base64
 import binascii
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .elevation import ElevationError, run_elevated_request
 from .hosts import (
@@ -23,6 +23,13 @@ from .hosts import (
 )
 from .hotkeys import GlobalActivationHotkey, HotkeyError, normalize_activation_hotkey
 from .clipboard import ClipboardHistoryService, PNG_SIGNATURE, write_clipboard_png, write_clipboard_text
+from .document_conversion import (
+    DocumentConversionError,
+    convert_document,
+    decode_document_payload,
+    document_conversion_capabilities,
+    safe_stem,
+)
 from .paths import AppPaths
 from .runtime import open_desktop_download, open_developer_tools, open_github_repository, open_project_repository, open_webview2_download, webview2_version
 from .storage import AppStorage, StorageError
@@ -52,6 +59,8 @@ class DesktopApi:
         activation_hotkey: GlobalActivationHotkey | None = None,
         tray: TrayController | None = None,
         clipboard: ClipboardHistoryService | None = None,
+        document_capabilities: Callable[[], dict[str, Any]] = document_conversion_capabilities,
+        document_converter: Callable[[str, bytes, Path, Path], dict[str, Any]] = convert_document,
     ) -> None:
         self._paths = paths
         self._storage = storage
@@ -59,6 +68,8 @@ class DesktopApi:
         self._activation_hotkey = activation_hotkey
         self._tray = tray
         self._clipboard = clipboard
+        self._document_capabilities = document_capabilities
+        self._document_converter = document_converter
         self._window: object | None = None
         self._system_status = SystemStatusCollector()
 
@@ -204,6 +215,71 @@ class DesktopApi:
         except Exception as exc:
             LOGGER.exception("system_status_read_failed")
             return _failure("SYSTEM_STATUS_FAILED", "无法读取系统状态", str(exc))
+
+    def get_document_conversion_capabilities(self) -> dict[str, Any]:
+        try:
+            return _success(self._document_capabilities())
+        except Exception as exc:
+            LOGGER.exception("document_capabilities_failed")
+            return _failure("DOCUMENT_CAPABILITIES_FAILED", "无法检测本机文档转换引擎", str(exc))
+
+    def _document_save_path(self, output_name: str, suffix: str) -> Path | None:
+        dialog = getattr(self._window, "create_file_dialog", None)
+        if not callable(dialog):
+            raise DocumentConversionError("DOCUMENT_SAVE_UNAVAILABLE", "桌面保存窗口尚未就绪")
+        file_type = "PDF 文档 (*.pdf)" if suffix == ".pdf" else "Word 文档 (*.docx)"
+        selected = dialog(30, save_filename=output_name, file_types=(file_type,))
+        if not selected:
+            return None
+        raw_path = selected if isinstance(selected, str) else selected[0]
+        path = Path(raw_path)
+        return path if path.suffix.lower() == suffix else path.with_suffix(suffix)
+
+    def _convert_document(self, kind: str, payload: Any) -> dict[str, Any]:
+        started = time.perf_counter()
+        try:
+            capabilities = self._document_capabilities()
+            capability_key = "docxToPdf" if kind == "docx-to-pdf" else "pdfToDocx"
+            preferred = capabilities[capability_key]["preferred"]
+            if preferred is None:
+                return _failure("DOCUMENT_ENGINE_UNAVAILABLE", "未检测到可用的本机文档转换引擎")
+            file_name, content = decode_document_payload(payload, kind)
+            suffix = ".pdf" if kind == "docx-to-pdf" else ".docx"
+            output_name = f"{safe_stem(file_name)}{suffix}"
+            destination = self._document_save_path(output_name, suffix)
+            if destination is None:
+                return _success({"cancelled": True, "engine": preferred, "outputName": output_name, "outputSize": 0})
+            converted = self._document_converter(kind, content, destination, self._paths.application_root)
+            LOGGER.info(
+                "document_converted kind=%s engine=%s output_bytes=%d duration_ms=%d",
+                kind,
+                converted["engine"],
+                converted["outputSize"],
+                (time.perf_counter() - started) * 1000,
+            )
+            return _success(
+                {
+                    "cancelled": False,
+                    "engine": converted["engine"],
+                    "outputName": destination.name,
+                    "outputSize": converted["outputSize"],
+                }
+            )
+        except DocumentConversionError as exc:
+            LOGGER.warning("document_conversion_failed kind=%s code=%s reason=%s", kind, exc.code, exc)
+            return _failure(exc.code, str(exc), exc.details)
+        except OSError as exc:
+            LOGGER.exception("document_save_failed kind=%s", kind)
+            return _failure("DOCUMENT_SAVE_FAILED", "无法保存转换结果", str(exc))
+        except Exception as exc:
+            LOGGER.exception("document_conversion_failed kind=%s", kind)
+            return _failure("DOCUMENT_CONVERSION_FAILED", "文档转换失败", str(exc))
+
+    def convert_docx_to_pdf(self, payload: Any) -> dict[str, Any]:
+        return self._convert_document("docx-to-pdf", payload)
+
+    def convert_pdf_to_docx(self, payload: Any) -> dict[str, Any]:
+        return self._convert_document("pdf-to-docx", payload)
 
     def save_workspace(self, payload: Any) -> dict[str, Any]:
         try:

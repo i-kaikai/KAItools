@@ -370,7 +370,7 @@ test('visible Home refreshes local metrics every second and service status every
   await expect.poll(() => healthChecks).toBeGreaterThanOrEqual(1)
   const initialHealthChecks = healthChecks
 
-  await page.clock.fastForward(30_000)
+  for (let second = 0; second < 30; second += 1) await page.clock.fastForward(1_000)
   await expect.poll(async () => Number(await page.locator('html').getAttribute('data-system-status-samples'))).toBeGreaterThanOrEqual(30)
   expect(healthChecks - initialHealthChecks).toBe(1)
 })

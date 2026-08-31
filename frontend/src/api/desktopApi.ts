@@ -4,6 +4,9 @@ import type {
   BackendConnection,
   BootstrapState,
   DashboardCards,
+  DocumentConversionCapabilities,
+  DocumentConversionPayload,
+  DocumentConversionResult,
   HostsBackup,
   HostsPreview,
   HostsProfiles,
@@ -38,6 +41,9 @@ const DESKTOP_ONLY_METHODS = new Set([
   'set_clipboard_monitoring',
   'copy_text',
   'copy_png',
+  'get_document_conversion_capabilities',
+  'convert_docx_to_pdf',
+  'convert_pdf_to_docx',
 ])
 const SYSTEM_STATUS_REFRESH_MIGRATION_VERSION = 1
 const BROWSER_DIAGNOSTICS_CACHE_MS = 30_000
@@ -428,6 +434,9 @@ export const desktopApi = {
   setClipboardMonitoring: (enabled: boolean) => invoke<{ enabled: boolean }>('set_clipboard_monitoring', enabled),
   copyText: (text: string) => invoke<void>('copy_text', text),
   copyPng: (dataUrl: string) => invoke<void>('copy_png', dataUrl),
+  getDocumentConversionCapabilities: () => invoke<DocumentConversionCapabilities>('get_document_conversion_capabilities'),
+  convertDocxToPdf: (payload: DocumentConversionPayload) => invoke<DocumentConversionResult>('convert_docx_to_pdf', payload),
+  convertPdfToDocx: (payload: DocumentConversionPayload) => invoke<DocumentConversionResult>('convert_pdf_to_docx', payload),
   getSystemStatus: () => invoke<SystemStatusSnapshot>('get_system_status'),
   setBrowserSystemStatusMonitoring: (active: boolean) => setBrowserCpuPressureMonitoring(active),
 }

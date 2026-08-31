@@ -35,6 +35,9 @@ KAITools 是面向开发者的本地工具箱，同时提供纯静态 Web 版和
 - **二维码工具**：本地生成带纠错级别的二维码，并从图片识别二维码内容。
 - **图片工作台**：在本地裁剪、缩放、压缩图片，转换 PNG、JPEG、WebP；可保持原文件字节无损复制。
 - **视频转音频**：本地提取视频音轨，输出浏览器支持的 WebM/Opus 或 Ogg/Opus 音频。
+- **HTML 转 PDF**：导入 HTML 或包含本地 CSS、字体和图片的 ZIP 资源包，安全预览并导出 PDF，不请求远程资源。
+- **Word 转 PDF**：Windows 桌面版优先调用本机 Microsoft Word、回退 LibreOffice；Web 版使用浏览器兼容渲染。
+- **PDF 转 Word**：安装 Microsoft Word 时使用桌面增强转换；Web 与无 Word 环境以文本兼容模式生成可编辑 DOCX。
 - **命名转换**：转换 camelCase、PascalCase、snake_case、kebab-case 等代码命名。
 - **UUID / ULID**：生成 UUID v4、UUID v7、ULID，并解析 UUID v7 和 ULID 的时间。
 

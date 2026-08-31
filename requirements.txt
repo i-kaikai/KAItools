@@ -1,2 +1,2 @@
 pywebview==6.2.1
-
+pywin32==312
