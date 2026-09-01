@@ -50,6 +50,7 @@ const resultRows = computed(() => {
     { label: '识别格式', value: value.detectedFormat },
     { label: '秒时间戳', value: String(value.seconds) },
     { label: '毫秒时间戳', value: String(value.milliseconds) },
+    { label: 'yyyy-MM-dd HH:mm:ss', value: value.dateTime },
     { label: 'ISO 8601', value: value.iso },
     { label: '本地时间', value: value.local },
     { label: 'UTC', value: value.utc },

@@ -64,12 +64,13 @@ async function copyDigest(): Promise<void> {
           <input v-model="model.uppercase" type="checkbox" />
           <span>大写</span>
         </label>
+        <ToolChainButton :value="model.output" :source-name="model.algorithm.toUpperCase()" />
       </div>
     </header>
     <ResizableSplit v-model="model.split">
       <template #left><div class="editor-panel"><div class="panel-label">UTF-8 文本</div><CodeEditor v-model="model.input" label="哈希文本输入" /></div></template>
       <template #right><div class="editor-panel hash-result-panel" :class="{ invalid: error }"><div class="panel-label"><span>摘要结果</span><IconButton :icon="RefreshCw" label="恢复计算结果" size="small" :disabled="hashing" @click="updateDigest" /></div><CodeEditor v-model="model.output" label="哈希摘要结果" /></div></template>
     </ResizableSplit>
-    <div class="hash-result-actions"><ToolChainButton :value="model.output" :source-name="model.algorithm.toUpperCase()" /><IconButton :icon="Copy" label="复制摘要" :disabled="!model.output || hashing || !!error" @click="copyDigest" /><IconButton :icon="Trash2" label="清空输入" :disabled="!model.input" @click="model.input = ''" /></div>
+    <div class="hash-result-actions"><IconButton :icon="Copy" label="复制摘要" :disabled="!model.output || hashing || !!error" @click="copyDigest" /><IconButton :icon="Trash2" label="清空输入" :disabled="!model.input" @click="model.input = ''" /></div>
   </section>
 </template>

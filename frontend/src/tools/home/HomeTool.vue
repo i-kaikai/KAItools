@@ -8,6 +8,7 @@ import { formatDate, t } from '@/i18n'
 import { useAppStore } from '@/stores/app'
 import { toolCategories, workspaceTools, type ToolDefinition } from '@/tools/registry'
 import type { DashboardCard, DashboardCards } from '@/types'
+import { markdownCardPreview } from '@/utils/markdownPreview'
 import DashboardCardManagerDialog from '@/components/DashboardCardManagerDialog.vue'
 import SystemStatusPanel from '@/components/SystemStatusPanel.vue'
 import { APP_VERSION } from '@/version'
@@ -26,14 +27,7 @@ const categorizedTools = computed(() => toolCategories.map((category) => ({
   tools: workspaceTools.filter((tool) => tool.category === category.id),
 })))
 const pinnedNote = computed(() => app.notes.notes.find((note) => note.pinned) ?? app.notes.notes[0])
-const pinnedNotePreview = computed(() => (pinnedNote.value?.content ?? t('home.localDescription'))
-  .replace(/^\s{0,3}#{1,6}\s*/gm, '')
-  .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
-  .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
-  .replace(/[`*_~]/g, '')
-  .replace(/^\s{0,3}[-+]\s+/gm, '')
-  .replace(/\s+/g, ' ')
-  .trim())
+const pinnedNotePreview = computed(() => markdownCardPreview(pinnedNote.value?.content ?? t('home.localDescription')))
 const sessionTools = computed(() => openTabs.value.flatMap((tab) => {
   const tool = workspaceTools.find((item) => item.id === tab.toolId)
   return tool ? [{ tab, tool }] : []
@@ -64,6 +58,7 @@ const toolColors: Record<string, string> = {
   'pdf-word': '#eb9d80',
   qrcode: '#62c5aa',
   'image-studio': '#df8b5b',
+  'image-format': '#58bfc5',
   'video-audio': '#7d9ee8',
   cron: '#6eb9ff',
   sql: '#4cc7c9',

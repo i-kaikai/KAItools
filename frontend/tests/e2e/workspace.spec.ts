@@ -272,7 +272,7 @@ for (const viewport of [
     await expect(page.locator('.home-active-module')).toHaveCount(0)
     await expect(page.locator('.home-shortcut-grid')).toHaveCount(0)
     await expect(page.locator('.home-tool-card')).toHaveCount(6)
-    await expect(page.locator('.home-category-group')).toHaveCount(5)
+    await expect(page.locator('.home-category-group')).toHaveCount(9)
     const currentDate = page.locator('.home-current-date')
     await expect(currentDate).toBeVisible()
     await expect(currentDate).toHaveAttribute('datetime', /^\d{4}-\d{2}-\d{2}$/)
@@ -870,7 +870,7 @@ test('clipboard history remains discoverable but desktop-only in the web build',
 })
 
 test('ring geometry stays compact across card counts and viewports', async ({ page }) => {
-  const toolIds = ['json', 'java', 'timestamp', 'base64-text', 'cron', 'notes', 'json-diff', 'json-java', 'base64-image', 'base64-file', 'qrcode', 'image-studio', 'video-audio', 'sql', 'yaml', 'xml', 'text-diff', 'text-stats', 'regex', 'hosts', 'md5', 'naming', 'identifiers']
+  const toolIds = ['json', 'java', 'timestamp', 'base64-text', 'cron', 'notes', 'json-diff', 'json-java', 'base64-image', 'base64-file', 'qrcode', 'image-studio', 'image-format', 'video-audio', 'sql', 'yaml', 'xml', 'text-diff', 'text-stats', 'regex', 'hosts', 'md5', 'naming', 'identifiers']
   const scenarios = [
     { count: 1, viewport: { width: 960, height: 640 } },
     { count: 2, viewport: { width: 1280, height: 800 } },
@@ -1007,13 +1007,70 @@ test('JSON graph node editor scrolls long content and drags without selecting te
   await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
 })
 
-test('new conversion, formatting and analysis tools produce results', async ({ page }) => {
+test('pinned Markdown note cards retain line breaks from the editor', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await openWorkspaceTool(page, '笔记')
+  await page.getByLabel('Markdown 笔记内容').fill('# 标题\n\n第一行\n第二行  \n第三行')
+  await page.getByRole('button', { name: '首页', exact: true }).click()
+
+  const preview = page.locator('.home-pinned-note-content p')
+  await expect(preview).toBeVisible()
+  const rendered = await preview.evaluate((element) => ({ text: element.textContent, whiteSpace: getComputedStyle(element).whiteSpace }))
+  expect(rendered.text).toBe('标题\n\n第一行\n第二行\n第三行')
+  expect(rendered.whiteSpace).toBe('pre-line')
+  await assertViewportIntegrity(page)
+})
+
+test('tool chain menu is mounted in the upper-right toolbar', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await openWorkspaceTool(page, '哈希摘要')
+
+  const trigger = page.getByRole('button', { name: '发送到其他工具' })
+  await expect(trigger).toBeEnabled()
+  const actionBounds = await page.locator('.hash-result-actions').evaluate((element) => element.getBoundingClientRect())
+  const triggerBounds = await trigger.evaluate((element) => element.getBoundingClientRect())
+  expect(triggerBounds.top).toBeLessThan(actionBounds.top)
+  await trigger.click()
+  const menu = page.getByRole('menu', { name: '发送到其他工具' })
+  await expect(menu).toBeVisible()
+
+  const menuBounds = await menu.evaluate((element) => element.getBoundingClientRect())
+  expect(menuBounds.top).toBeGreaterThanOrEqual(0)
+  expect(menuBounds.bottom).toBeLessThanOrEqual(800)
+  expect(menuBounds.top).toBeGreaterThanOrEqual(triggerBounds.bottom + 6)
+
+  await menu.getByRole('menuitem', { name: 'JSON 格式化、关系图与 JSONPath', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'JSON', exact: true })).toBeVisible()
+  await assertViewportIntegrity(page)
+})
+
+test('new conversion, formatting and analysis tools produce results', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto('/')
 
   await openWorkspaceTool(page, 'Base64 文本')
   await page.getByLabel('Base64 文本输入').fill('你好')
   await expect(page.getByLabel('Base64 文本结果')).toContainText('5L2g5aW9')
+
+  await openWorkspaceTool(page, '图片格式转换')
+  const imageFormatTool = page.locator('.image-format-tool')
+  await dropFile(page, '图片格式转换文件输入', 'sample.png', 'image/png', 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/6wAAAABJRU5ErkJggg==')
+  await expect(imageFormatTool.getByAltText('转换后的图片预览')).toBeVisible()
+  await imageFormatTool.getByLabel('输出图片格式').selectOption('image/jpeg')
+  await imageFormatTool.getByRole('button', { name: '转换图片格式' }).click()
+  await expect(imageFormatTool.getByText(/sample-converted\.jpg/)).toBeVisible()
+  const imageDownload = page.waitForEvent('download')
+  await imageFormatTool.getByRole('button', { name: '下载转换结果' }).click()
+  expect((await imageDownload).suggestedFilename()).toBe('sample-converted.jpg')
+  await assertViewportIntegrity(page)
+  await page.screenshot({ path: resolve(qaDir, `image-format-desktop-${testInfo.project.name}.png`), fullPage: true })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(imageFormatTool.getByRole('heading', { name: '图片格式转换', exact: true })).toBeVisible()
+  await assertViewportIntegrity(page)
+  await page.screenshot({ path: resolve(qaDir, `image-format-mobile-${testInfo.project.name}.png`), fullPage: true })
+  await page.setViewportSize({ width: 1280, height: 800 })
 
   await openWorkspaceTool(page, 'SQL 美化与转换')
   await page.getByLabel('SQL 输入').fill('select id,name from users where enabled=1')
@@ -1055,11 +1112,13 @@ test('API debugger, JWT analyzer, and Mermaid editor run locally', async ({ page
   await page.getByRole('button', { name: '发送', exact: true }).click()
   await expect(page.getByLabel('API 响应内容')).toContainText('local test route')
   await expect(page.getByText('响应 Header')).toBeVisible()
+  await expect(page.locator('.api-client-tool .tool-header').getByRole('button', { name: '发送到其他工具' })).toBeEnabled()
+  await expect(page.locator('.api-response-panel footer').getByRole('button', { name: '发送到其他工具' })).toHaveCount(0)
 
   await openWorkspaceTool(page, 'JWT 分析器')
   await page.getByLabel('JWT Token 输入').fill('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJrYWkiLCJpYXQiOjE3MDAwMDAwMDAsIm5iZiI6MTcwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMDAwfQ.signature')
-  await expect(page.getByLabel('JWT Header')).toContainText('HS256')
-  await expect(page.getByLabel('JWT Payload')).toContainText('"sub": "kai"')
+  await expect(page.getByRole('textbox', { name: 'JWT Header' })).toContainText('HS256')
+  await expect(page.getByRole('textbox', { name: 'JWT Payload' })).toContainText('"sub": "kai"')
   await expect(page.getByText('签名段存在')).toBeVisible()
 
   await openWorkspaceTool(page, 'Mermaid 流程图')
@@ -1102,12 +1161,13 @@ test('lightweight task board manages local task flow', async ({ page }) => {
 test('all tools render and remain usable', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto('/')
-  for (const tool of ['JSON / JavaBean', 'Java 转义', '日期转换', 'Base64 图片', 'Base64 文件', '二维码工具', '图片工作台', '视频转音频', 'Crontab 生成器', 'YAML 美化', 'XML 格式化', '文本比较', 'Hosts', '哈希摘要', '命名转换', 'UUID / ULID']) {
+  for (const tool of ['JSON / JavaBean', 'Java 转义', '日期转换', 'Base64 图片', 'Base64 文件', '二维码工具', '图片工作台', '图片格式转换', '视频转音频', 'Crontab 生成器', 'YAML 美化', 'XML 格式化', '文本比较', 'Hosts', '哈希摘要', '命名转换', 'UUID / ULID']) {
     await openWorkspaceTool(page, tool)
     await expect(page.getByRole('heading', { name: tool, exact: true })).toBeVisible()
     if (tool === '日期转换') {
       await page.getByLabel('日期、时间或时间戳').fill('2024年1月1日 08时00分00秒')
       await expect(page.getByText('1704067200', { exact: true })).toBeVisible()
+      await expect(page.getByText('2024-01-01 08:00:00', { exact: true })).toBeVisible()
     }
     await assertViewportIntegrity(page)
     if (tool === 'Hosts') {

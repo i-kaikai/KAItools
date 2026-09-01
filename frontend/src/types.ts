@@ -30,6 +30,7 @@ export type ToolId =
   | 'pdf-word'
   | 'qrcode'
   | 'image-studio'
+  | 'image-format'
   | 'video-audio'
   | 'html-pdf'
   | 'word-pdf'

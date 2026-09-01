@@ -395,12 +395,12 @@ onBeforeUnmount(() => {
         </div>
         <div v-else-if="kind === 'pdf-word'" class="document-preview-panel" :class="{ invalid: !!errorMessage }">
           <div class="panel-label"><span>{{ t('document.layoutPreview') }}</span><span class="document-file-name">{{ outputName }}</span></div>
-          <div ref="pdfLayoutPreview" class="document-pdf-preview"><div v-if="!sourceFile" class="empty-state"><FileText :size="30" /><span>{{ dropPrompt }}</span></div></div>
+          <div ref="pdfLayoutPreview" class="document-pdf-preview" data-scroll-sync-target><div v-if="!sourceFile" class="empty-state"><FileText :size="30" /><span>{{ dropPrompt }}</span></div></div>
         </div>
         <div v-else class="document-preview-panel" :class="{ invalid: !!errorMessage }">
           <div class="panel-label"><span>{{ t('document.preview') }}</span><span class="document-file-name">{{ outputName }}</span></div>
-          <iframe v-if="isHtml" ref="previewFrame" :srcdoc="previewHtml" sandbox="allow-modals allow-same-origin" :title="t('document.preview')" />
-          <div v-else ref="docxPreview" class="document-docx-preview"><div v-if="!sourceFile" class="empty-state"><FileText :size="30" /><span>{{ dropPrompt }}</span></div></div>
+          <iframe v-if="isHtml" ref="previewFrame" :srcdoc="previewHtml" sandbox="allow-modals allow-same-origin" :title="t('document.preview')" data-scroll-sync-target />
+          <div v-else ref="docxPreview" class="document-docx-preview" data-scroll-sync-target><div v-if="!sourceFile" class="empty-state"><FileText :size="30" /><span>{{ dropPrompt }}</span></div></div>
         </div>
       </template>
     </ResizableSplit>

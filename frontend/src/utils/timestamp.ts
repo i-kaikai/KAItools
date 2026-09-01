@@ -5,6 +5,7 @@ export type TimestampUnit = 'auto' | 'seconds' | 'milliseconds'
 export interface TimeResult {
   milliseconds: number
   seconds: number
+  dateTime: string
   iso: string
   local: string
   utc: string
@@ -19,6 +20,7 @@ function resultFromDateTime(value: DateTime, zone: string, detectedFormat: strin
   return {
     milliseconds: value.toMillis(),
     seconds: Math.trunc(value.toMillis() / 1000),
+    dateTime: zoned.toFormat('yyyy-LL-dd HH:mm:ss'),
     iso: value.toUTC().toISO({ suppressMilliseconds: false }) ?? '',
     local: value.toLocal().toFormat('yyyy-LL-dd HH:mm:ss.SSS ZZZZ'),
     utc: value.toUTC().toFormat("yyyy-LL-dd HH:mm:ss.SSS 'UTC'"),

@@ -194,7 +194,7 @@ onBeforeUnmount(() => {
       <template #right>
         <div class="editor-panel mermaid-preview-panel" :class="{ invalid: !!error }">
           <div class="panel-label"><span>图表预览</span><small>{{ svgMarkup ? '可滚动查看' : '等待输入' }}</small></div>
-          <div v-if="svgMarkup" class="mermaid-canvas" v-html="svgMarkup" />
+          <div v-if="svgMarkup" class="mermaid-canvas" data-scroll-sync-target v-html="svgMarkup" />
           <div v-else class="mermaid-empty"><FileImage :size="28" aria-hidden="true" /><span>{{ error || '输入 Mermaid 代码后自动生成预览' }}</span></div>
         </div>
       </template>

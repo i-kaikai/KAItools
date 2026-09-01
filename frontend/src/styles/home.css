@@ -415,7 +415,7 @@
 .home-pinned-note .home-pinned-note-main { display: block; margin-top: 14px; }.home-pinned-note .home-pinned-note-main .home-active-module-icon { display: inline-grid; }
 .home-pinned-note-content { display: flex; min-height: 0; flex: 1 1 auto; margin-top: 13px; flex-direction: column; }
 .home-pinned-note-content > strong { color: #f3f0ff; font-size: 20px; line-height: 1.2; }
-.home-pinned-note-content > p { display: -webkit-box; overflow: hidden; margin: 10px 0 0; color: #c2c9d2; font-size: 12px; line-height: 1.7; -webkit-box-orient: vertical; -webkit-line-clamp: 8; }
+.home-pinned-note-content > p { display: -webkit-box; overflow: hidden; margin: 10px 0 0; color: #c2c9d2; font-size: 12px; line-height: 1.7; white-space: pre-line; -webkit-box-orient: vertical; -webkit-line-clamp: 8; }
 .home-pinned-note .home-pinned-note-meta { margin-top: 15px; }
 
 .home-next .home-bottom-grid { align-items: stretch; }

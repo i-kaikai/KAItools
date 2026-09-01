@@ -242,6 +242,7 @@ function clear(): void {
         <IconButton :icon="Save" label="保存当前请求" @click="saveCurrent" />
         <IconButton v-if="busy" :icon="Square" label="取消请求" danger @click="cancel" />
         <IconButton v-else :icon="Send" label="发送请求" @click="send" />
+        <ToolChainButton :value="responseBody" source-name="API 响应" />
         <IconButton :icon="Trash2" label="清空当前请求" :disabled="!model.url && !body && !responseBody" @click="clear" />
       </div>
     </header>
@@ -299,7 +300,6 @@ function clear(): void {
           <CodeEditor v-model="responseBody" label="API 响应内容" />
           <footer>
             <span>{{ response?.contentType || '响应 Header 将在请求完成后显示' }}</span>
-            <ToolChainButton :value="responseBody" source-name="API 响应" />
             <IconButton :icon="Copy" label="复制响应内容" size="small" :disabled="!responseBody" @click="copyResponse" />
           </footer>
           <details v-if="responseHeaders" class="api-response-headers"><summary>响应 Header</summary><pre>{{ responseHeaders }}</pre></details>

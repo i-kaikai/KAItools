@@ -386,6 +386,7 @@ onMounted(() => {
       ],
     }),
   })
+  editor.scrollDOM.dataset.scrollSyncTarget = ''
   applyHighlights()
 })
 

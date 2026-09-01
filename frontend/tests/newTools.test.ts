@@ -7,7 +7,7 @@ import { formatSql, formatXml, formatYaml } from '@/utils/formatters'
 import { compareJson } from '@/utils/jsonDiff'
 import { javaBeanToJson, jsonToJavaBean } from '@/utils/jsonJava'
 import { evaluateRegex, serializeRegexMatches } from '@/utils/regex'
-import { workspaceTools } from '@/tools/registry'
+import { toolCategories, workspaceTools } from '@/tools/registry'
 import { compareText, getTextComparisonHighlights, getTextStatistics } from '@/utils/text'
 
 describe('new local developer tools', () => {
@@ -92,6 +92,7 @@ describe('new local developer tools', () => {
     const sql = workspaceTools.find((tool) => tool.id === 'sql')
     const calculator = workspaceTools.find((tool) => tool.id === 'calculator')
     const clipboardHistory = workspaceTools.find((tool) => tool.id === 'clipboard-history')
+    const imageFormat = workspaceTools.find((tool) => tool.id === 'image-format')
     expect(regex?.chainInput?.('alpha')).toEqual({ input: 'alpha' })
     expect(json?.chainInput?.('{"ok":true}')).toEqual({ input: '{"ok":true}', outputMode: 'code' })
     expect(sql?.name).toBe('SQL 美化与转换')
@@ -99,6 +100,8 @@ describe('new local developer tools', () => {
     expect(sql?.keywords).toEqual(expect.arrayContaining(['oracle', '转换']))
     expect(calculator?.chainInput?.('2 + 2')).toEqual({ section: 'scientific', expression: '2 + 2' })
     expect(clipboardHistory?.desktopOnly).toBe(true)
+    expect(imageFormat).toMatchObject({ name: '图片格式转换', category: 'media' })
+    expect(toolCategories.map((category) => category.id)).toEqual(['data', 'encoding', 'media', 'document', 'debugging', 'code', 'productivity', 'text', 'system'])
     expect(workspaceTools.filter((tool) => tool.chainInput).length).toBeGreaterThanOrEqual(10)
   })
 })

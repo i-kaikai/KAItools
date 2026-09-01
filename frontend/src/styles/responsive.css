@@ -99,7 +99,7 @@
   .file-meta-band { grid-template-columns: minmax(0, 1fr); }
   .document-controls { align-items: stretch; flex-wrap: wrap; }.document-controls label { flex: 1 1 138px; }.document-security-note { flex: 1 0 100%; margin-left: 0; }.document-tool > .editor-split { min-height: 0; flex: 0 0 540px; }
   .hash-result-actions { min-height: 36px; }
-  .qr-options, .image-studio-controls { align-items: stretch; }.qr-options label, .image-studio-controls label { flex: 1 1 110px; }.video-audio-workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(220px, 1fr) minmax(220px, 1fr); flex: 0 0 460px; }
+  .qr-options, .image-studio-controls, .image-format-controls { align-items: stretch; }.qr-options label, .image-studio-controls label, .image-format-controls label { flex: 1 1 110px; }.video-audio-workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(220px, 1fr) minmax(220px, 1fr); flex: 0 0 460px; }
   .cron-expression input { font-size: 14px; }
   .cron-summary { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .cron-summary > div { grid-column: 1 / -1; }

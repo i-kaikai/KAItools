@@ -4,7 +4,7 @@
 
 项目预览：[https://tools.imkai.top/](https://tools.imkai.top/)
 
-KAI · Keep Approaching Ideal · 始终靠近理想
+KAI · Keep Approaching Ideal
 
 KAITools 是面向开发者的本地工具箱，同时提供纯静态 Web 版和 Windows 10/11 x64
 免安装桌面版。桌面版使用 Python、pywebview 与 WebView2 承载 Vue 3 + TypeScript
@@ -26,32 +26,49 @@ KAITools 是面向开发者的本地工具箱，同时提供纯静态 Web 版和
 - **YAML 美化**：YAML 校验、解析与格式化。
 - **XML 格式化**：XML 校验、格式化与压缩。
 
-### 编码转换
+### 编码与摘要
 
 - **Base64 文本**：UTF-8 文本编码、解码和 URL Safe 模式。
 - **Base64 图片**：图片文件、剪贴板图片、纯 Base64 与 Data URL 双向转换、预览和下载。
 - **Base64 文件**：任意文件与 Base64 双向转换、复制和下载还原。
 - **哈希摘要**：计算 UTF-8 文本的 MD5、SHA-1、SHA-256、SHA-384、SHA-512 摘要，支持大小写输出。
+
+### 媒体处理
+
 - **二维码工具**：本地生成带纠错级别的二维码，并从图片识别二维码内容。
 - **图片工作台**：在本地裁剪、缩放、压缩图片，转换 PNG、JPEG、WebP；可保持原文件字节无损复制。
+- **图片格式转换**：拖入、粘贴或选择图片，在本地转换为 PNG、JPEG 或 WebP；JPEG 自动使用白色背景。
 - **视频转音频**：本地提取视频音轨，输出浏览器支持的 WebM/Opus 或 Ogg/Opus 音频。
+
+### 文档转换
+
 - **HTML 转 PDF**：导入 HTML 或包含本地 CSS、字体和图片的 ZIP 资源包，安全预览并导出 PDF，不请求远程资源。
 - **Word 转 PDF**：Windows 桌面版优先调用本机 Microsoft Word、回退 LibreOffice；Web 版使用浏览器兼容渲染。
 - **PDF 转 Word**：安装 Microsoft Word 时使用桌面增强转换；Web 与无 Word 环境以文本兼容模式生成可编辑 DOCX。
+
+### 开发调试
+
+- **API 调试台**：发送 HTTP 请求并查看本地响应。
+- **JWT 分析器**：在本地解码 Token 的声明与有效期。
+- **正则工作台**：实时匹配高亮、捕获组明细、常用标志和替换预览。
+
+### 代码工具
+
+- **Java 转义**：字符串转义、反转义和可选 Unicode 转换。
+- **Mermaid 流程图**：编写并导出流程图与时序图。
 - **命名转换**：转换 camelCase、PascalCase、snake_case、kebab-case 等代码命名。
 - **UUID / ULID**：生成 UUID v4、UUID v7、ULID，并解析 UUID v7 和 ULID 的时间。
 
-### 开发辅助
+### 效率辅助
 
-- **Java 转义**：字符串转义、反转义和可选 Unicode 转换。
 - **日期转换**：自动识别时间戳、ISO 8601、常见日期、中文日期、RFC 和带时区格式，并输出本地、UTC、ISO 与指定 IANA 时区结果。
 - **Crontab 生成器**：表达式与字段双向编辑，支持字段模板、常用预设、中文语义、IANA 时区和未来 5/10/20 次执行时间。
-- **正则工作台**：实时匹配高亮、捕获组明细、常用标志和替换预览。
+- **轻量任务看板**：在本地管理待办、进行中和已完成任务。
 - **超级计算器**：科学函数、进制/位运算、单位换算、金融/日期以及矩阵、复数和统计计算。
-- **笔记**：笔记本、文件夹与 Markdown 笔记；桌面版使用受控 `data/notes/` 目录，Web 版使用 IndexedDB，首页展示置顶笔记。
 
 ### 文本与系统
 
+- **笔记**：笔记本、文件夹与 Markdown 笔记；桌面版使用受控 `data/notes/` 目录，Web 版使用 IndexedDB，首页展示置顶笔记。
 - **文本比较**：按行或字符比较文本并高亮差异。
 - **文本统计**：统计字符、单词、行数、段落和 UTF-8 字节数。
 - **Hosts**：桌面版直接编辑系统 Hosts 文件，支持差异预览、源文件摘要校验、UAC 保存和完整文件备份恢复；Web 版明确显示桌面限定状态。

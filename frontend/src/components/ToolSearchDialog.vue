@@ -26,6 +26,7 @@ const legacySearchNames: Record<string, string> = {
   'base64-file': 'Base64 文件转换',
   qrcode: '二维码生成与图片解码',
   'image-studio': '图片裁剪压缩与格式转换',
+  'image-format': '图片格式转换 PNG JPEG WebP',
   'video-audio': '视频转音频',
   'html-pdf': 'HTML 转 PDF',
   'word-pdf': 'Word 转 PDF',

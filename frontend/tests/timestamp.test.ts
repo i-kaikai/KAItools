@@ -9,7 +9,9 @@ describe('timestamp tools', () => {
   })
 
   it('formats a timestamp in an IANA zone', () => {
-    expect(parseTimestamp('0', 'seconds', 'Asia/Shanghai').zoned).toContain('1970-01-01 08:00:00')
+    const result = parseTimestamp('0', 'seconds', 'Asia/Shanghai')
+    expect(result.zoned).toContain('1970-01-01 08:00:00')
+    expect(result.dateTime).toBe('1970-01-01 08:00:00')
   })
 
   it('converts a zoned date to epoch', () => {
