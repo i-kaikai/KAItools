@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Download, FileArchive, FileText, LoaderCircle, Trash2, Upload } from '@lucide/vue'
+import { Download, FileArchive, FileText, LoaderCircle, Printer, Trash2, Upload } from '@lucide/vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 
 import { desktopApi } from '@/api/desktopApi'
@@ -18,11 +18,13 @@ import {
   extractPdfText,
   extractedTextToDocx,
   fileToBase64,
-  htmlElementToPdf,
+  pdfPagesToImageDocx,
+  printHtmlDocument,
   renderDocx,
+  renderPdfLayoutPreview,
   replaceExtension,
-  waitForDocumentResources,
   type ExtractedPdfText,
+  type PdfLayoutPreviewController,
   type PdfExportOptions,
 } from '@/utils/documentConversion'
 import { createStandaloneHtmlPackage, loadHtmlPackage, type HtmlPackage } from '@/utils/documentPackage'
@@ -38,6 +40,9 @@ interface DocumentState extends Record<string, unknown> {
   margin: number
   orientation: 'portrait' | 'landscape'
   pageCount: number
+  pdfMode: 'editable' | 'layout'
+  printViewport: 'desktop' | 'paper'
+  printWidth: number
   sourceName: string
   split: number
 }
@@ -72,6 +77,9 @@ const model = useToolState<DocumentState>(props.state, {
   margin: 36,
   orientation: 'portrait',
   pageCount: 0,
+  pdfMode: 'editable',
+  printViewport: 'desktop',
+  printWidth: 1440,
   sourceName: '',
   split: 48,
 }, (value) => emit('update:state', value))
@@ -80,13 +88,16 @@ const sourceFile = shallowRef<File | null>(null)
 const extracted = shallowRef<ExtractedPdfText | null>(null)
 const previewFrame = ref<HTMLIFrameElement | null>(null)
 const docxPreview = ref<HTMLElement | null>(null)
+const pdfLayoutPreview = ref<HTMLElement | null>(null)
 const previewHtml = ref('')
 const packageWarnings = ref<string[]>([])
 const processing = ref(false)
 const errorMessage = ref('')
 const capabilities = ref<DocumentConversionCapabilities | null>(null)
+const wordLongPageDetected = ref(false)
 let htmlPackage: HtmlPackage = createStandaloneHtmlPackage(model.html)
 let docxPages: HTMLElement[] = []
+let pdfPreviewController: PdfLayoutPreviewController | null = null
 
 const title = computed(() => t(`document.${kind}.title`))
 const isHtml = computed(() => kind === 'html-pdf')
@@ -113,21 +124,50 @@ const nativeEngine = computed<DocumentConversionEngine | null>(() => isWord.valu
 const engineKey = computed(() => {
   if (nativeEngine.value === 'microsoft-word') return 'document.engine.word'
   if (nativeEngine.value === 'libreoffice') return 'document.engine.libreoffice'
+  if (kind === 'pdf-word' && model.pdfMode === 'layout') return 'document.engine.layout'
   return isWord.value || isHtml.value ? 'document.engine.browser' : 'document.engine.text'
 })
 const notice = computed(() => nativeEngine.value
   ? `${t('document.status.ready')} · ${t(engineKey.value)}`
-  : t(isWord.value || isHtml.value ? 'document.status.browserNotice' : 'document.status.textNotice'))
+  : t(isHtml.value
+    ? 'document.status.printNotice'
+    : isWord.value
+      ? wordLongPageDetected.value ? 'document.status.wordLongPageNotice' : 'document.status.browserNotice'
+      : model.pdfMode === 'layout' ? 'document.status.layoutNotice' : 'document.status.textNotice'))
 const status = computed(() => errorMessage.value
   || (processing.value ? t('document.status.processing')
     : packageWarnings.value.length ? t('document.packageWarnings', { count: packageWarnings.value.length })
       : model.sourceName ? `${model.sourceName} · ${t(engineKey.value)}` : t('document.status.ready')))
 const canExport = computed(() => !processing.value && (isHtml.value ? Boolean(model.html.trim()) : Boolean(sourceFile.value)))
 const exportOptions = computed<PdfExportOptions>(() => ({
+  desktopLayout: isHtml.value && model.printViewport === 'desktop',
+  desktopWidth: Number(model.printWidth) || 1440,
   format: model.format,
   orientation: model.orientation,
   margin: Number(model.margin) || 0,
 }))
+
+function disposePdfPreview(): void {
+  pdfPreviewController?.destroy()
+  pdfPreviewController = null
+}
+
+async function showPdfLayoutPreview(file: File): Promise<void> {
+  disposePdfPreview()
+  await nextTick()
+  if (!pdfLayoutPreview.value) throw new Error('PDF 版式预览区域尚未就绪')
+  pdfPreviewController = await renderPdfLayoutPreview(file, pdfLayoutPreview.value)
+  model.pageCount = pdfPreviewController.sourcePages
+  model.lineCount = 0
+  model.characterCount = 0
+}
+
+async function extractSelectedPdf(file: File): Promise<void> {
+  extracted.value = await extractPdfText(file)
+  model.pageCount = extracted.value.pages.length
+  model.lineCount = extracted.value.lineCount
+  model.characterCount = extracted.value.characterCount
+}
 
 function refreshHtmlPreview(): void {
   if (!isHtml.value) return
@@ -168,18 +208,25 @@ async function importFile(file: File): Promise<void> {
       return
     }
     await validateDocumentFile(file)
+    disposePdfPreview()
+    extracted.value = null
     sourceFile.value = file
     model.sourceName = file.name
     if (isWord.value) {
       await nextTick()
       if (!docxPreview.value) throw new Error('Word 预览区域尚未就绪')
       docxPages = await renderDocx(file, docxPreview.value)
+      wordLongPageDetected.value = docxPages.some((page) => {
+        const bounds = page.getBoundingClientRect()
+        return bounds.width > 0 && bounds.height / bounds.width > 2
+      })
       return
     }
-    extracted.value = await extractPdfText(file)
-    model.pageCount = extracted.value.pages.length
-    model.lineCount = extracted.value.lineCount
-    model.characterCount = extracted.value.characterCount
+    if (model.pdfMode === 'layout') {
+      await showPdfLayoutPreview(file)
+    } else {
+      await extractSelectedPdf(file)
+    }
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '无法读取文档'
     if (!isHtml.value) clear(false)
@@ -191,19 +238,46 @@ async function importFile(file: File): Promise<void> {
 function clear(resetError = true): void {
   if (resetError) errorMessage.value = ''
   packageWarnings.value = []
+  disposePdfPreview()
   sourceFile.value = null
   extracted.value = null
   docxPages = []
+  wordLongPageDetected.value = false
   model.sourceName = ''
   model.pageCount = 0
   model.lineCount = 0
   model.characterCount = 0
   if (docxPreview.value) docxPreview.value.replaceChildren()
+  if (pdfLayoutPreview.value) pdfLayoutPreview.value.replaceChildren()
   if (isHtml.value) {
     htmlPackage.dispose()
     htmlPackage = createStandaloneHtmlPackage(defaultHtml)
     model.html = defaultHtml
     refreshHtmlPreview()
+  }
+}
+
+async function changePdfMode(): Promise<void> {
+  if (kind !== 'pdf-word') return
+  const file = sourceFile.value
+  if (!file) {
+    disposePdfPreview()
+    return
+  }
+  errorMessage.value = ''
+  processing.value = true
+  try {
+    if (model.pdfMode === 'layout') {
+      await showPdfLayoutPreview(file)
+    } else {
+      disposePdfPreview()
+      if (!extracted.value) await extractSelectedPdf(file)
+    }
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '无法生成 PDF 版式预览'
+    toast.show(errorMessage.value, 'error')
+  } finally {
+    processing.value = false
   }
 }
 
@@ -225,12 +299,10 @@ async function exportDocument(): Promise<void> {
   processing.value = true
   try {
     if (isHtml.value) {
-      const documentValue = previewFrame.value?.contentDocument
-      const body = documentValue?.body
-      if (!documentValue || !body) throw new Error('HTML 预览尚未就绪')
-      await waitForDocumentResources(documentValue)
-      downloadBlob(await htmlElementToPdf(body, exportOptions.value), outputName.value)
-      toast.show(t('document.toast.pdfDownloaded'), 'success')
+      const frame = previewFrame.value
+      if (!frame) throw new Error('HTML 预览尚未就绪')
+      await printHtmlDocument(frame, exportOptions.value, outputName.value)
+      toast.show(t('document.toast.printOpened'), 'success')
       return
     }
     const file = sourceFile.value
@@ -242,8 +314,12 @@ async function exportDocument(): Promise<void> {
       toast.show(t('document.toast.pdfDownloaded'), 'success')
       return
     }
-    if (!extracted.value) throw new Error('PDF 中没有可导出的文本')
-    downloadBlob(await extractedTextToDocx(replaceExtension(file.name, '', 'converted-document').replace(/\.$/, ''), extracted.value), outputName.value)
+    if (model.pdfMode === 'layout') {
+      downloadBlob(await pdfPagesToImageDocx(file), outputName.value)
+    } else {
+      if (!extracted.value) throw new Error('PDF 中没有可导出的文本')
+      downloadBlob(await extractedTextToDocx(replaceExtension(file.name, '', 'converted-document').replace(/\.$/, ''), extracted.value), outputName.value)
+    }
     toast.show(t('document.toast.docxDownloaded'), 'success')
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '文档转换失败'
@@ -259,7 +335,10 @@ onMounted(async () => {
   if (result.ok) capabilities.value = result.data
 })
 
-onBeforeUnmount(() => htmlPackage.dispose())
+onBeforeUnmount(() => {
+  htmlPackage.dispose()
+  disposePdfPreview()
+})
 </script>
 
 <template>
@@ -272,10 +351,13 @@ onBeforeUnmount(() => htmlPackage.dispose())
       <div class="toolbar">
         <template v-if="kind !== 'pdf-word'">
           <select v-model="model.format" class="compact-select" :aria-label="t('document.format')"><option value="a4">A4</option><option value="letter">Letter</option></select>
+          <select v-if="isHtml" v-model="model.printViewport" class="compact-select" :aria-label="t('document.printLayout')"><option value="desktop">{{ t('document.printDesktop') }}</option><option value="paper">{{ t('document.printPaper') }}</option></select>
+          <label v-if="isHtml && model.printViewport === 'desktop'" class="document-margin-control"><span>{{ t('document.printWidth') }}</span><input v-model.number="model.printWidth" class="compact-input document-print-width" type="number" min="800" max="2560" step="80" /></label>
           <select v-model="model.orientation" class="compact-select" :aria-label="t('document.orientation')"><option value="portrait">{{ t('document.portrait') }}</option><option value="landscape">{{ t('document.landscape') }}</option></select>
           <label class="document-margin-control"><span>{{ t('document.margin') }}</span><input v-model.number="model.margin" class="compact-input" type="number" min="0" max="72" step="1" /></label>
         </template>
-        <IconButton :icon="Download" :label="t(kind === 'pdf-word' ? 'document.action.exportDocx' : 'document.action.exportPdf')" :disabled="!canExport" @click="exportDocument" />
+        <select v-else v-model="model.pdfMode" class="compact-select" :aria-label="t('document.pdfMode')" :disabled="processing" @change="changePdfMode"><option value="editable">{{ t('document.pdfEditable') }}</option><option value="layout">{{ t('document.pdfLayout') }}</option></select>
+        <IconButton :icon="isHtml ? Printer : Download" :label="t(kind === 'pdf-word' ? 'document.action.exportDocx' : isHtml ? 'document.action.printPdf' : 'document.action.exportPdf')" :disabled="!canExport" @click="exportDocument" />
         <IconButton :icon="Trash2" :label="t('document.action.clear')" :disabled="processing || (isHtml ? !model.sourceName && model.html === defaultHtml : !sourceFile)" danger @click="clear()" />
       </div>
     </header>
@@ -298,7 +380,7 @@ onBeforeUnmount(() => htmlPackage.dispose())
           <div v-if="sourceFile" class="document-file-summary">
             <component :is="isWord ? FileText : FileArchive" :size="34" />
             <strong>{{ sourceFile.name }}</strong>
-            <small>{{ sourceFile.size.toLocaleString() }} B<span v-if="kind === 'pdf-word'"> · {{ model.pageCount }} 页 · {{ model.lineCount }} 行</span></small>
+            <small>{{ sourceFile.size.toLocaleString() }} B<span v-if="kind === 'pdf-word'"> · {{ model.pageCount }} 页<span v-if="model.pdfMode === 'editable'"> · {{ model.lineCount }} 行</span></span></small>
             <button class="file-replace-action" type="button" :disabled="processing" @click="clear()"><Upload :size="15" />{{ t('document.action.reselect') }}</button>
           </div>
           <FileDropzone v-else :accept="accept" :label="sourceLabel" :prompt="dropPrompt" :detail="dropDetail" :disabled="processing" @file="importFile" />
@@ -306,14 +388,18 @@ onBeforeUnmount(() => htmlPackage.dispose())
       </template>
 
       <template #right>
-        <div v-if="kind === 'pdf-word'" class="editor-panel document-text-panel" :class="{ invalid: !!errorMessage }">
+        <div v-if="kind === 'pdf-word' && model.pdfMode === 'editable'" class="editor-panel document-text-panel" :class="{ invalid: !!errorMessage }">
           <div class="panel-label">{{ t('document.extractedText') }}</div>
           <CodeEditor :model-value="extractedText" readonly label="PDF 提取文本" @update:model-value="() => undefined" />
           <footer><small>{{ t('document.status.textNotice') }}</small></footer>
         </div>
+        <div v-else-if="kind === 'pdf-word'" class="document-preview-panel" :class="{ invalid: !!errorMessage }">
+          <div class="panel-label"><span>{{ t('document.layoutPreview') }}</span><span class="document-file-name">{{ outputName }}</span></div>
+          <div ref="pdfLayoutPreview" class="document-pdf-preview"><div v-if="!sourceFile" class="empty-state"><FileText :size="30" /><span>{{ dropPrompt }}</span></div></div>
+        </div>
         <div v-else class="document-preview-panel" :class="{ invalid: !!errorMessage }">
           <div class="panel-label"><span>{{ t('document.preview') }}</span><span class="document-file-name">{{ outputName }}</span></div>
-          <iframe v-if="isHtml" ref="previewFrame" :srcdoc="previewHtml" sandbox="allow-same-origin" :title="t('document.preview')" />
+          <iframe v-if="isHtml" ref="previewFrame" :srcdoc="previewHtml" sandbox="allow-modals allow-same-origin" :title="t('document.preview')" />
           <div v-else ref="docxPreview" class="document-docx-preview"><div v-if="!sourceFile" class="empty-state"><FileText :size="30" /><span>{{ dropPrompt }}</span></div></div>
         </div>
       </template>

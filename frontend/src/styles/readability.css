@@ -1,0 +1,56 @@
+/* Shared contrast guardrails for compact workspace information. */
+.app-sidebar .nav-section-label { color: #a9b3bd; }
+.app-sidebar .tool-nav-main small { color: #a5afba; }
+.app-sidebar .tool-nav-row > .icon-button { color: #a6b0ba; }
+.app-sidebar .runtime-copy > small { color: #a8b2bd; }
+
+.home-orbit-copy > small,
+.home-orbit-telemetry,
+.home-card-manager small,
+.home-header-stats,
+.home-section-heading > small { color: #b5c1ca; }
+
+.home-next .home-launchpad-copy > p,
+.home-local-mode-card span,
+.home-card-topline,
+.home-tool-copy small,
+.home-card-footer,
+.home-active-module-topline,
+.home-active-module-main p,
+.home-shortcut-grid small,
+.home-tab-list button > small,
+.home-system-list dt,
+.home-custom-card-grid small,
+.home-custom-card-empty,
+.home-category-group > header small,
+.home-category-group button small,
+.home-overview-stat-grid small,
+.home-session-tools > header small,
+.home-session-tool-grid small { color: #b4c0c9; }
+
+.home-next .home-shortcut-grid button,
+.home-next .home-tab-list button,
+.home-next .home-category-group button { color: #c6d0d7; }
+
+.home-next .home-system-list dd { color: #e3ecea; }
+.home-next .system-status-header > div > small,
+.home-next .system-status-metrics em { color: #b5c2c7; }
+
+/* The home screen contains dense metadata; keep every visible line at a usable reading size. */
+.home-next small { font-size: 11px !important; line-height: 1.45; }
+.home-next .home-card-topline em,
+.home-next .home-card-footer :is(small, b),
+.home-next .home-active-module-topline,
+.home-next .home-category-group > header > span,
+.home-next .home-local-mode-card em { font-size: 11px !important; }
+.home-next .home-local-mode-card span,
+.home-next .home-category-group button strong { font-size: 12px !important; }
+.home-next .home-system-list :is(dt, dd),
+.home-next .system-status-service,
+.home-next .system-status-details :is(dt, dd) { font-size: 12px !important; }
+
+/* Tools are dense, but labels, controls, and state hints remain readable at normal desktop scale. */
+.tool-page :is(label, small, .panel-label, input:not([type='checkbox']):not([type='radio']), select, textarea, button:not(.icon-button), summary) { font-size: 12px !important; line-height: 1.45; }
+.tool-page :is(.hint, [class*='-hint'], [class*='-status'], [class*='-meta'], [class*='-label']) { font-size: 12px !important; }
+[role='dialog'] :is(label, small, input:not([type='checkbox']):not([type='radio']), select, textarea, button:not(.icon-button), summary) { font-size: 12px !important; line-height: 1.45; }
+button:disabled { opacity: .64; }

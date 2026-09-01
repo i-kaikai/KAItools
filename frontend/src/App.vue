@@ -25,6 +25,7 @@ import ShortcutManagerDialog from '@/components/ShortcutManagerDialog.vue'
 import AccountSyncDialog from '@/components/AccountSyncDialog.vue'
 import DeveloperPanelDialog from '@/components/DeveloperPanelDialog.vue'
 import ApplicationSettingsDialog from '@/components/ApplicationSettingsDialog.vue'
+import ReleaseNotesDialog from '@/components/ReleaseNotesDialog.vue'
 import { desktopApi } from '@/api/desktopApi'
 import { logoutLocalAccount } from '@/api/remoteApi'
 import { isWebRuntime } from '@/runtime'
@@ -48,6 +49,7 @@ const accountSyncOpen = ref(false)
 const languageMenuOpen = ref(false)
 const developerPanelOpen = ref(false)
 const applicationSettingsOpen = ref(false)
+const releaseNotesOpen = ref(false)
 let developerUnlockClicks = 0
 let developerUnlockTimer: number | undefined
 const tabMenu = ref({ visible: false, x: 0, y: 0, tabId: '' })
@@ -73,7 +75,15 @@ async function signOut(): Promise<void> {
   app.clearSession()
 }
 
-async function handleVersionClick(): Promise<void> {
+function handleVersionClick(event: MouseEvent): void {
+  if (event.altKey) {
+    void handleDeveloperVersionClick()
+    return
+  }
+  releaseNotesOpen.value = true
+}
+
+async function handleDeveloperVersionClick(): Promise<void> {
   if (developerModeActive.value) {
     developerPanelOpen.value = true
     return
@@ -181,6 +191,11 @@ async function minimizeApplication(): Promise<void> {
 
 function onKeydown(event: KeyboardEvent): void {
   if (event.defaultPrevented) return
+  if (event.key === 'Escape' && releaseNotesOpen.value) {
+    event.preventDefault()
+    releaseNotesOpen.value = false
+    return
+  }
   if (event.key === 'Escape' && searchOpen.value) {
     event.preventDefault()
     closeSearch()
@@ -267,7 +282,10 @@ onBeforeUnmount(() => {
           />
         </div>
         <div v-if="!app.settings.sidebarCollapsed" class="runtime-copy sidebar-runtime">
-          <button class="runtime-version" type="button" @click="handleVersionClick"><span>v{{ app.runtime?.version ?? APP_VERSION }}</span><small v-if="developerModeActive">DEV</small></button>
+          <div class="runtime-actions">
+            <button class="runtime-version" type="button" aria-haspopup="dialog" :aria-expanded="releaseNotesOpen" :aria-label="t('shell.releaseNotes')" @click="handleVersionClick"><span>v{{ app.runtime?.version ?? APP_VERSION }}</span></button>
+            <button v-if="developerModeActive" class="runtime-developer" type="button" aria-haspopup="dialog" :aria-expanded="developerPanelOpen" :aria-label="t('shell.developerPanel')" @click="developerPanelOpen = true">DEV</button>
+          </div>
           <small v-if="isWebRuntime">{{ t('shell.browserStorage') }}</small>
           <small v-else :title="`WebView2 ${app.runtime?.webview2 ?? t('shell.detecting')}`">WebView2 {{ app.runtime?.webview2 ?? t('shell.detecting') }}</small>
         </div>
@@ -439,6 +457,7 @@ onBeforeUnmount(() => {
       @retry-shortcut-sync="app.retryShortcutSync"
     />
     <DeveloperPanelDialog :open="developerPanelOpen && developerModeActive" @close="developerPanelOpen = false" />
+    <Teleport to="body"><ReleaseNotesDialog :open="releaseNotesOpen" :version="app.runtime?.version ?? APP_VERSION" @close="releaseNotesOpen = false" /></Teleport>
     <Teleport to="body"><ApplicationSettingsDialog :open="applicationSettingsOpen" @close="applicationSettingsOpen = false" /></Teleport>
     <ToastViewport />
   </div>

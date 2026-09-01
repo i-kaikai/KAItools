@@ -286,7 +286,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     category: 'encoding',
     icon: FileOutput,
     ...lazyTool(() => import('./documentConversion/DocumentConversionTool.vue')),
-    initialState: () => ({ kind: 'html-pdf', html: '', sourceName: '', format: 'a4', orientation: 'portrait', margin: 36, split: 48 }),
+    initialState: () => ({ kind: 'html-pdf', html: '', sourceName: '', format: 'a4', orientation: 'portrait', margin: 36, printViewport: 'desktop', printWidth: 1440, split: 48 }),
   },
   {
     id: 'word-pdf',
@@ -301,12 +301,12 @@ const workspaceToolDefinitions: ToolDefinition[] = [
   {
     id: 'pdf-word',
     name: 'PDF 转 Word',
-    description: '桌面增强转换与本地文本兼容模式',
+    description: '可编辑文字、版式优先与桌面增强转换',
     keywords: ['pdf', 'word', 'docx', 'office', '文本提取', '转 word', '文档'],
     category: 'encoding',
     icon: FileInput,
     ...lazyTool(() => import('./documentConversion/DocumentConversionTool.vue')),
-    initialState: () => ({ kind: 'pdf-word', sourceName: '', pageCount: 0, lineCount: 0, characterCount: 0, split: 48 }),
+    initialState: () => ({ kind: 'pdf-word', sourceName: '', pageCount: 0, lineCount: 0, characterCount: 0, pdfMode: 'editable', split: 48 }),
   },
   {
     id: 'cron',
@@ -320,13 +320,13 @@ const workspaceToolDefinitions: ToolDefinition[] = [
   },
   {
     id: 'sql',
-    name: 'SQL 美化',
-    description: '多方言 SQL 格式化',
-    keywords: ['sql', 'mysql', 'postgresql', 'format', '美化', '格式化'],
+    name: 'SQL 美化与转换',
+    description: '多数据库 SQL 格式化与方言转换',
+    keywords: ['sql', 'mysql', 'mariadb', 'postgresql', 'oracle', 'sql server', 'sqlite', 'format', 'convert', '美化', '格式化', '转换'],
     category: 'data',
     icon: Database,
     ...lazyTool(() => import('./sql/SqlTool.vue')),
-    initialState: () => ({ input: 'select id,name from users where enabled=1 order by id desc;', dialect: 'sql', keywordCase: 'upper', tabWidth: 2 }),
+    initialState: () => ({ input: 'select id,name from users where enabled=1 order by id desc;', sourceDialect: 'standard', targetDialect: 'standard', keywordCase: 'upper', tabWidth: 2 }),
     chainInput: (value) => ({ input: value }),
   },
   {

@@ -976,6 +976,37 @@ test('formatted JSON output remains editable and drives tree and graph views', a
   await page.screenshot({ path: resolve(qaDir, 'json-graph-desktop-dark.png'), fullPage: true })
 })
 
+test('JSON graph node editor scrolls long content and drags without selecting text', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'JSON', exact: true }).click()
+  const fields = Object.fromEntries(Array.from({ length: 80 }, (_, index) => [`field${index}`, `value${index}`]))
+  await page.getByLabel('JSON 格式化结果').fill(JSON.stringify({ payload: fields }))
+  await page.getByRole('button', { name: '关系图' }).click()
+
+  const graph = page.getByLabel('JSON 关系图')
+  const rootCard = graph.locator('.json-graph-node').first()
+  await expect(rootCard).toBeVisible()
+  const rootBox = await rootCard.boundingBox()
+  expect(rootBox).not.toBeNull()
+  if (!rootBox) throw new Error('JSON root node is not measurable')
+
+  await page.mouse.move(rootBox.x + 48, rootBox.y + 26)
+  await page.mouse.down()
+  await page.mouse.move(rootBox.x + 120, rootBox.y + 68)
+  await page.mouse.up()
+  await expect(page.getByRole('dialog', { name: '节点内容' })).toHaveCount(0)
+  expect(await page.evaluate(() => window.getSelection()?.toString())).toBe('')
+
+  await rootCard.click()
+  const nodeDialog = page.getByRole('dialog', { name: '节点内容' })
+  const scroller = nodeDialog.locator('.json-node-editor .cm-scroller')
+  const scrollSize = await scroller.evaluate((element) => ({ clientHeight: element.clientHeight, scrollHeight: element.scrollHeight }))
+  expect(scrollSize.scrollHeight).toBeGreaterThan(scrollSize.clientHeight)
+  await scroller.evaluate((element) => { element.scrollTop = element.scrollHeight })
+  await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+})
+
 test('new conversion, formatting and analysis tools produce results', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto('/')
@@ -984,7 +1015,7 @@ test('new conversion, formatting and analysis tools produce results', async ({ p
   await page.getByLabel('Base64 文本输入').fill('你好')
   await expect(page.getByLabel('Base64 文本结果')).toContainText('5L2g5aW9')
 
-  await openWorkspaceTool(page, 'SQL 美化')
+  await openWorkspaceTool(page, 'SQL 美化与转换')
   await page.getByLabel('SQL 输入').fill('select id,name from users where enabled=1')
   await expect(page.getByLabel('SQL 格式化结果')).toContainText('SELECT')
 
@@ -1154,7 +1185,7 @@ test('all generated outputs remain editable and split panes can be resized', asy
     { tool: 'Base64 文本', inputLabel: 'Base64 文本输入', outputLabel: 'Base64 文本结果', input: 'hello', generated: 'aGVsbG8=' },
     { tool: 'Java 转义', inputLabel: 'Java 转义输入', outputLabel: 'Java 转义结果', input: 'hello\nworld', generated: '\\n' },
     { tool: 'JSON / JavaBean', inputLabel: 'JSON 转 JavaBean 输入', outputLabel: 'JSON JavaBean 转换结果', input: '{"name":"Kai"}', generated: 'class RootBean' },
-    { tool: 'SQL 美化', inputLabel: 'SQL 输入', outputLabel: 'SQL 格式化结果', input: 'select id from users', generated: 'SELECT' },
+    { tool: 'SQL 美化与转换', inputLabel: 'SQL 输入', outputLabel: 'SQL 格式化结果', input: 'select id from users', generated: 'SELECT' },
     { tool: 'YAML 美化', inputLabel: 'YAML 输入', outputLabel: 'YAML 格式化结果', input: 'name: KAITools', generated: 'name' },
     { tool: 'XML 格式化', inputLabel: 'XML 输入', outputLabel: 'XML 格式化结果', input: '<root><name>kai</name></root>', generated: '<root>' },
   ]
@@ -1514,6 +1545,33 @@ test('account entry remains fixed at the top right and detects the configured se
   await assertViewportIntegrity(page)
 })
 
+test('expanded sidebar version opens release notes without a footer duplicate', async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 640 })
+  await page.goto('/')
+
+  await expect(page.locator('.sidebar-footer-actions').getByRole('button', { name: '版本说明' })).toHaveCount(0)
+  await page.getByRole('button', { name: '展开侧栏' }).click()
+  const versionButton = page.locator('.runtime-version')
+  await expect(versionButton).toBeVisible()
+  await versionButton.click()
+  const dialog = page.getByRole('dialog', { name: 'KAITools 版本说明' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByText(`v${appVersion}`, { exact: true }).first()).toBeVisible()
+  await expect(dialog.getByText('更新内容')).toBeVisible()
+  await expect(dialog.getByText('本版本内容将在发布时补充。')).toBeVisible()
+
+  const bounds = await dialog.evaluate((element) => element.getBoundingClientRect())
+  expect(bounds.left).toBeGreaterThanOrEqual(0)
+  expect(bounds.right).toBeLessThanOrEqual(960)
+  expect(bounds.top).toBeGreaterThanOrEqual(0)
+  expect(bounds.bottom).toBeLessThanOrEqual(640)
+
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+  await expect(versionButton).toBeFocused()
+  await assertViewportIntegrity(page)
+})
+
 test('developer mode unlocks from the version and exposes local service tools', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.route('**/api/health', (route) => route.fulfill({
@@ -1526,11 +1584,11 @@ test('developer mode unlocks from the version and exposes local service tools', 
   await expect(version).toBeVisible()
   if (testInfo.project.name === 'web') {
     await expect(version).not.toContainText('DEV')
-    for (let click = 0; click < 6; click += 1) await version.click()
+    for (let click = 0; click < 6; click += 1) await version.click({ modifiers: ['Alt'] })
     await expect(page.getByRole('dialog', { name: '开发者模式' })).toHaveCount(0)
-    await version.click()
+    await version.click({ modifiers: ['Alt'] })
   } else {
-    await version.click()
+    await page.getByRole('button', { name: '开发者模式' }).click()
   }
   const dialog = page.getByRole('dialog', { name: '开发者模式' })
   await expect(dialog).toBeVisible()
@@ -1543,7 +1601,7 @@ test('developer mode unlocks from the version and exposes local service tools', 
     await page.reload()
     const expandSidebar = page.getByRole('button', { name: '展开侧栏' })
     if (await expandSidebar.count()) await expandSidebar.click()
-    await expect(page.locator('.runtime-version')).toContainText('DEV')
+    await expect(page.getByRole('button', { name: '开发者模式' })).toContainText('DEV')
   } else {
     await expect(dialog).toContainText('打开 WebView2 DevTools')
   }
@@ -1693,7 +1751,13 @@ test('local account panel connects and registers against the test service', asyn
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto('/')
   await page.getByRole('button', { name: '展开侧栏' }).click()
-  await page.locator('.runtime-version').click()
+  const developerButton = page.getByRole('button', { name: '开发者模式' })
+  if (await developerButton.count()) {
+    await developerButton.click()
+  } else {
+    const version = page.locator('.runtime-version')
+    for (let click = 0; click < 7; click += 1) await version.click({ modifiers: ['Alt'] })
+  }
   const developerDialog = page.getByRole('dialog', { name: '开发者模式' })
   await developerDialog.getByLabel('使用本机服务覆盖服务器').check()
   await developerDialog.getByRole('button', { name: '测试连接' }).click()

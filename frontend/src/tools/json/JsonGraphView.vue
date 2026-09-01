@@ -22,6 +22,11 @@ let resizeObserver: ResizeObserver | null = null
 let activePointerId: number | null = null
 let pointerX = 0
 let pointerY = 0
+let pointerStartX = 0
+let pointerStartY = 0
+let dragged = false
+
+const dragThreshold = 4
 
 function edgePath(edge: { fromX: number; fromY: number; toX: number; toY: number }): string {
   const controlOffset = Math.max(36, (edge.toX - edge.fromX) * 0.48)
@@ -109,16 +114,25 @@ function onWheel(event: WheelEvent): void {
 }
 
 function onPointerDown(event: PointerEvent): void {
-  if (!host.value || event.button !== 0 || (event.target as HTMLElement).closest('button, .json-graph-node')) return
+  if (!host.value || event.button !== 0 || (event.target as Element).closest('button')) return
   activePointerId = event.pointerId
   pointerX = event.clientX
   pointerY = event.clientY
-  dragging.value = true
-  host.value.setPointerCapture(event.pointerId)
+  pointerStartX = event.clientX
+  pointerStartY = event.clientY
+  dragged = false
 }
 
 function onPointerMove(event: PointerEvent): void {
   if (event.pointerId !== activePointerId) return
+  if (!dragging.value) {
+    const distance = Math.hypot(event.clientX - pointerStartX, event.clientY - pointerStartY)
+    if (distance < dragThreshold) return
+    dragging.value = true
+    dragged = true
+    host.value?.setPointerCapture(event.pointerId)
+  }
+  event.preventDefault()
   panX.value += event.clientX - pointerX
   panY.value += event.clientY - pointerY
   pointerX = event.clientX
@@ -134,6 +148,17 @@ function finishPointer(event: PointerEvent): void {
   } catch {
     // Pointer capture may already be released by the browser.
   }
+}
+
+function onNodeClick(item: JsonTreeItem, event: MouseEvent): void {
+  if (dragged) {
+    event.preventDefault()
+    event.stopPropagation()
+    return
+  }
+  const node = event.currentTarget as HTMLElement
+  node.focus()
+  openNode(item)
 }
 
 watch(
@@ -199,7 +224,7 @@ onBeforeUnmount(() => resizeObserver?.disconnect())
         :title="displayPath(node.item, node.isRoot)"
         :aria-label="`${node.isRoot ? '根节点' : node.item.key} ${nodeSummary(node.item)}`"
         tabindex="0"
-        @click="openNode(node.item)"
+        @click="onNodeClick(node.item, $event)"
         @keydown.enter="openNode(node.item)"
       >
         <header class="json-graph-node-header">

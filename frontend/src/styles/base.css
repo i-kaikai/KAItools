@@ -9,9 +9,9 @@
   --surface-raised: #ffffff;
   --surface-subtle: #f5f6f7;
   --surface-hover: #eceef0;
-  --text-primary: #191b1f;
-  --text-secondary: #5f646d;
-  --text-faint: #90959d;
+  --text-primary: #16191d;
+  --text-secondary: #4f5862;
+  --text-faint: #68737e;
   --border: #d5d8dc;
   --border-subtle: #e8eaed;
   --accent: #118469;
@@ -38,8 +38,8 @@
   --sidebar-active-border: #7354a7;
   --sidebar-active-text: #f3edff;
   --sidebar-active-muted: #c1b2da;
-  --sidebar-text: #f2f3f4;
-  --sidebar-muted: #8f969f;
+  --sidebar-text: #f6f7f8;
+  --sidebar-muted: #a9b2bc;
   --scrollbar-track: transparent;
   --scrollbar-thumb: #aab0b7;
   --scrollbar-thumb-hover: #858d96;
@@ -53,9 +53,9 @@
   --surface-raised: #25272b;
   --surface-subtle: #25272a;
   --surface-hover: #2d3034;
-  --text-primary: #edf0f2;
-  --text-secondary: #aeb5bd;
-  --text-faint: #7e8791;
+  --text-primary: #f4f6f8;
+  --text-secondary: #c4ccd5;
+  --text-faint: #a8b3bf;
   --border: #3a3d42;
   --border-subtle: #2e3135;
   --accent: #54b89f;
@@ -106,7 +106,7 @@
 *::-webkit-scrollbar-thumb:hover { background-color: var(--scrollbar-thumb-hover); }
 html, body, #app { width: 100%; height: var(--app-viewport-height); margin: 0; overflow: hidden; }
 #app { position: fixed; top: 0; left: 0; }
-body { color: var(--text-primary); background: var(--bg); font-size: 13px; -webkit-font-smoothing: antialiased; }
+body { color: var(--text-primary); background: var(--bg); font-size: 14px; font-weight: 400; line-height: 1.5; -webkit-font-smoothing: auto; text-rendering: optimizeLegibility; }
 button, input, textarea, select { font: inherit; letter-spacing: 0; }
 button { color: inherit; }
 button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }

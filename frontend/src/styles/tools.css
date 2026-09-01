@@ -92,7 +92,7 @@ html.is-resizing-rows, html.is-resizing-rows * { cursor: row-resize !important; 
 .tree-row .icon-button { margin-left: auto; opacity: 0; }
 .tree-row:hover .icon-button { opacity: 1; }
 
-.json-graph { position: relative; flex: 1; min-height: 0; background-color: var(--surface); background-image: radial-gradient(circle, color-mix(in srgb, var(--text-faint) 20%, transparent) 1px, transparent 1px); background-size: 18px 18px; cursor: grab; overflow: hidden; touch-action: none; }
+.json-graph { position: relative; flex: 1; min-height: 0; background-color: var(--surface); background-image: radial-gradient(circle, color-mix(in srgb, var(--text-faint) 20%, transparent) 1px, transparent 1px); background-size: 18px 18px; cursor: grab; overflow: hidden; touch-action: none; user-select: none; }
 .json-graph.is-dragging { cursor: grabbing; }
 .json-graph-stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
 .json-graph-edges { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
@@ -132,7 +132,9 @@ html.is-resizing-rows, html.is-resizing-rows * { cursor: row-resize !important; 
 .json-node-modal header p.error { color: var(--danger); }
 .json-node-content { display: grid; grid-template-rows: 34px minmax(220px, 1fr) 34px 48px; min-height: 0; flex: 1; padding: 14px 16px 0; }
 .json-node-section-label { display: flex; align-items: center; justify-content: space-between; color: var(--text-secondary); font-size: 11px; font-weight: 650; }
-.json-node-editor { min-height: 0; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); overflow: hidden; }
+.json-node-editor { display: flex; min-height: 0; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); overflow: hidden; }
+.json-node-editor .code-editor { min-height: 0; }
+.json-node-editor .cm-scroller { overflow-y: scroll !important; scrollbar-gutter: stable; }
 .json-node-editor.invalid { border-color: color-mix(in srgb, var(--danger) 65%, var(--border)); }
 .json-node-path { display: flex; align-items: center; min-width: 0; padding: 0 12px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); }
 .json-node-path code { overflow: hidden; color: var(--text-primary); font: 12px/1.4 "Cascadia Code", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
@@ -187,10 +189,16 @@ html.is-resizing-rows, html.is-resizing-rows * { cursor: row-resize !important; 
 .document-file-summary small { color: var(--text-faint); font: 10px "Cascadia Code", monospace; }
 .document-file-summary .file-replace-action { margin: 10px 0 0; }
 .document-preview-panel iframe { width: 100%; min-height: 0; flex: 1; border: 0; background: #fff; }
-.document-docx-preview { min-height: 0; flex: 1; padding: 14px; background: #dfe3e6; overflow: auto; }
+.document-docx-preview, .document-pdf-preview { min-height: 0; flex: 1; padding: 14px; background: #dfe3e6; overflow: auto; }
 .document-docx-preview .empty-state { min-height: 100%; color: #53616b; }
 .document-docx-preview .docx-wrapper { padding: 18px !important; background: transparent !important; }
 .document-docx-preview .docx-wrapper > section.docx { margin: 0 auto 14px !important; box-shadow: 0 5px 18px rgb(18 24 31 / 16%) !important; }
+.document-pdf-preview { display: flex; height: 0; align-items: stretch; gap: 14px; flex: 1 1 0; flex-direction: column; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.document-pdf-preview .empty-state { min-height: 100%; color: #53616b; }
+.document-pdf-page { position: relative; width: min(100%, 760px); margin-inline: auto; flex: 0 0 auto; background: #fff; box-shadow: 0 5px 18px rgb(18 24 31 / 16%); }
+.document-pdf-page.loading::after { position: absolute; top: 50%; left: 50%; width: 18px; height: 18px; border: 2px solid #c6cdd2; border-top-color: #53616b; border-radius: 50%; animation: spin 700ms linear infinite; content: ''; transform: translate(-50%, -50%); }
+.document-pdf-page.invalid { background: #fff3f3; }
+.document-pdf-page canvas { display: block; width: 100%; height: auto; }
 .document-text-panel footer small { padding: 0 10px; color: var(--text-faint); font-size: 9px; }
 .hash-result-panel .panel-label { justify-content: space-between; }.hash-result-panel .panel-label .icon-button { margin-left: auto; }
 .hash-result-actions { display: flex; align-items: center; justify-content: flex-end; gap: 5px; flex: 0 0 42px; margin-top: 10px; }

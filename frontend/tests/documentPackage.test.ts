@@ -50,6 +50,21 @@ describe('HTML document packages', () => {
     expect(prepared.warnings).toContain('已移除不可用的样式表：https://example.com/site.css')
   })
 
+  it('preserves a style block containing an inline SVG data URL', () => {
+    const source = `<!doctype html><html><head><style>
+      body { color: rgb(230, 237, 243); background: rgb(13, 17, 23); }
+      header::before { content: ''; background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" fill="none"/></svg>'); }
+    </style></head><body><header>Styled report</header></body></html>`
+    const prepared = createStandaloneHtmlPackage(source).render()
+    const documentValue = new DOMParser().parseFromString(prepared.html, 'text/html')
+    const styles = [...documentValue.querySelectorAll('style')].map((style) => style.textContent ?? '')
+
+    expect(styles[0]).toContain('body{color:rgb(230,237,243);background:rgb(13,17,23)}')
+    expect(styles[0]).toContain('data:image/svg+xml')
+    expect(styles.at(-1)).toContain(':where(body)')
+    expect(prepared.warnings).toEqual([])
+  })
+
   it('loads a local ZIP package and rewrites nested CSS, image and font references', async () => {
     const zip = new JSZip()
     zip.file('index.html', '<!doctype html><html><head><link rel="stylesheet" href="assets/main.css"></head><body><img src="assets/logo.png"><h1>Title</h1></body></html>')

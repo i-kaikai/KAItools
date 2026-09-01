@@ -8,6 +8,7 @@ const MAX_EXPANDED_BYTES = 200 * 1024 * 1024
 const MAX_ARCHIVE_ENTRIES = 500
 const ZIP_CENTRAL_SIGNATURE = 0x02014b50
 const ZIP_END_SIGNATURE = 0x06054b50
+const PRESERVED_STYLE_ATTRIBUTE = 'data-kaitools-preserved-style'
 
 const forbiddenElements = ['script', 'iframe', 'object', 'embed', 'base', 'form', 'input', 'textarea', 'select', 'meta']
 const mimeTypes: Record<string, string> = {
@@ -189,6 +190,18 @@ function safeLink(value: string): string | null {
   }
 }
 
+function preserveStyleContents(source: string): { html: string; styles: string[] } {
+  const documentValue = new DOMParser().parseFromString(source, 'text/html')
+  const styles: string[] = []
+  documentValue.querySelectorAll<HTMLStyleElement>('style').forEach((style) => {
+    style.removeAttribute(PRESERVED_STYLE_ATTRIBUTE)
+    const index = styles.push(style.textContent ?? '') - 1
+    style.setAttribute(PRESERVED_STYLE_ATTRIBUTE, String(index))
+    style.textContent = ''
+  })
+  return { html: `<!doctype html>${documentValue.documentElement.outerHTML}`, styles }
+}
+
 function srcsetParts(value: string): Array<{ descriptor: string; source: string }> {
   return value.split(',').map((part) => {
     const [source = '', ...descriptor] = part.trim().split(/\s+/)
@@ -287,9 +300,10 @@ function createPackage(
 
   function render(value = source): PreparedHtmlDocument {
     const warnings = new Set<string>()
-    const sanitized = DOMPurify.sanitize(value, {
+    const preserved = preserveStyleContents(value)
+    const sanitized = DOMPurify.sanitize(preserved.html, {
       WHOLE_DOCUMENT: true,
-      ADD_ATTR: ['href', 'rel'],
+      ADD_ATTR: ['href', 'rel', PRESERVED_STYLE_ATTRIBUTE],
       ADD_TAGS: ['link', 'style'],
       FORBID_TAGS: forbiddenElements,
       FORBID_ATTR: ['srcdoc'],
@@ -314,7 +328,13 @@ function createPackage(
     })
 
     documentValue.querySelectorAll<HTMLStyleElement>('style').forEach((style) => {
-      style.textContent = rewriteCss(style.textContent ?? '', basePath, warnings)
+      const rawIndex = style.getAttribute(PRESERVED_STYLE_ATTRIBUTE)
+      const index = rawIndex === null ? -1 : Number(rawIndex)
+      const css = Number.isInteger(index) && index >= 0 && index < preserved.styles.length
+        ? preserved.styles[index]!
+        : style.textContent ?? ''
+      style.removeAttribute(PRESERVED_STYLE_ATTRIBUTE)
+      style.textContent = rewriteCss(css, basePath, warnings)
     })
     documentValue.querySelectorAll<HTMLElement>('[style]').forEach((element) => {
       const value = rewriteCss(element.getAttribute('style') ?? '', basePath, warnings, 'declarationList')
@@ -358,7 +378,7 @@ function createPackage(
     if (!documentValue.querySelector('style[data-kaitools-document-base]')) {
       const baseStyle = documentValue.createElement('style')
       baseStyle.dataset.kaitoolsDocumentBase = ''
-      baseStyle.textContent = ':root{color-scheme:light}html{background:#f0f3f5}body{min-width:0;margin:0;background:#fff;color:#17212b}*,*::before,*::after{box-sizing:border-box}img,svg,canvas{max-width:100%;height:auto}table{max-width:100%;border-collapse:collapse}pre{overflow-wrap:anywhere;white-space:pre-wrap}'
+      baseStyle.textContent = ':root{color-scheme:light}:where(html){background:#f0f3f5}:where(body){min-width:0;margin:0;background:#fff;color:#17212b}:where(*,*::before,*::after){box-sizing:border-box}:where(img,svg,canvas){max-width:100%;height:auto}:where(table){max-width:100%;border-collapse:collapse}:where(pre){overflow-wrap:anywhere;white-space:pre-wrap}'
       documentValue.head.append(baseStyle)
     }
     return {

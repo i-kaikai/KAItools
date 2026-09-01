@@ -14,7 +14,7 @@ Python, pywebview, WebView2, Vue 3, and TypeScript. Extract the ZIP and launch
 - **JSON**: strict validation, formatting, minification, editable syntax-colored output, tree view, relationship graph, and JSONPath queries. Graph cards group fields by level, and node content can be edited and applied back to the result.
 - **JSON Diff**: semantic comparison with optional object-key order normalization and highlighted changes.
 - **JSON / JavaBean**: two-way conversion with class name and Lombok options.
-- **SQL Formatter**: multiple SQL dialects, keyword casing, and indentation controls.
+- **SQL Formatter & Converter**: cross-database SQL dialect conversion, keyword casing, and indentation controls.
 - **YAML Formatter**: validation, parsing, and formatting.
 - **XML Formatter**: validation, formatting, and minification.
 
@@ -95,7 +95,8 @@ script blocks maintained version copies from entering a build.
 
 Setting a new version prepends a draft entry to `RELEASE_NOTES.md`. Before publishing, the releaser
 fills in the release date and changes. Portable packaging rejects a current-version entry that still
-contains `TBD` and includes the completed release notes in the package.
+contains `TBD` and includes the completed release notes in the package. Web and desktop clients expose
+the compiled release history by clicking the version in the expanded sidebar.
 
 The portable directory is written to `dist/KAITools`; the ZIP and SHA-256 files
 are written to `release`.
