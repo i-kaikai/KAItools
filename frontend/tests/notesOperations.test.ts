@@ -4,6 +4,12 @@ import { defaultNotesState } from '@/api/notesStorage'
 import { createFolder, createNote, deleteNode, moveNote, noteTree, togglePinnedNote } from '@/tools/notes/notesOperations'
 
 describe('notes operations', () => {
+  it('uses the current product note as the default pinned Markdown document', () => {
+    expect(defaultNotesState().notes.find((note) => note.id === 'about-kaitools')?.content).toBe(
+      '# KAI Keep Approaching Ideal\n\n始终靠近理想\nKAITools 是面向开发者的本地优先工具空间。JSON、编码、时间、系统配置和笔记都先在当前设备完成处理；只有你主动登录并启用同步时，笔记、偏好与快捷方式才会进入服务端工作区。\n把这里当作产品说明、开发备忘录，或你的下一条想法。\n',
+    )
+  })
+
   it('creates a selected-folder note with a stable sibling sort order', () => {
     const initial = defaultNotesState()
     const withFolder = createFolder(initial, 'folder-api', 'kaitools-notebook', null, '接口')

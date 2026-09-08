@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from devtoolkit.paths import AppPaths
-from devtoolkit.storage import AppStorage, StorageError
+from devtoolkit.storage import AppStorage, DEFAULT_NOTE_CONTENT, LEGACY_DEFAULT_NOTE_CONTENT, StorageError
 
 
 def paths(tmp_path: Path) -> AppPaths:
@@ -361,6 +361,22 @@ def test_notes_are_confined_to_managed_markdown_files(tmp_path: Path) -> None:
     assert loaded["notes"][0]["content"] == "# 本地笔记\n\n内容"
     assert (storage.paths.notes_dir / "about-kaitools.md").is_file()
     assert not any(path.suffix == ".md" and path.parent != storage.paths.notes_dir for path in storage.paths.data_root.rglob("*.md"))
+
+
+def test_default_about_note_uses_the_current_markdown_without_overwriting_user_content(tmp_path: Path) -> None:
+    storage = AppStorage(paths(tmp_path))
+    storage.ensure_directories()
+
+    notes = storage.load_notes()
+    assert notes["notes"][0]["content"] == DEFAULT_NOTE_CONTENT
+
+    notes["notes"][0]["content"] = LEGACY_DEFAULT_NOTE_CONTENT
+    storage.save_notes(notes)
+    assert storage.load_notes()["notes"][0]["content"] == DEFAULT_NOTE_CONTENT
+
+    notes["notes"][0]["content"] = "# 自定义笔记\n\n保留内容"
+    storage.save_notes(notes)
+    assert storage.load_notes()["notes"][0]["content"] == "# 自定义笔记\n\n保留内容"
 
 
 def test_notes_reject_unmanaged_identifiers(tmp_path: Path) -> None:

@@ -287,7 +287,7 @@ onBeforeUnmount(() => {
             <button v-if="developerModeActive" class="runtime-developer" type="button" aria-haspopup="dialog" :aria-expanded="developerPanelOpen" :aria-label="t('shell.developerPanel')" @click="developerPanelOpen = true">DEV</button>
           </div>
           <small v-if="isWebRuntime">{{ t('shell.browserStorage') }}</small>
-          <small v-else :title="`WebView2 ${app.runtime?.webview2 ?? t('shell.detecting')}`">WebView2 {{ app.runtime?.webview2 ?? t('shell.detecting') }}</small>
+          <small v-else :title="`WebView2 ${app.runtime?.webview2 ?? t('shell.detecting')}`"><span>WebView2 {{ app.runtime?.webview2 ?? t('shell.detecting') }}</span></small>
         </div>
       </div>
 

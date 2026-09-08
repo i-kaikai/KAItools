@@ -65,7 +65,8 @@ kbd { padding: 2px 4px; border: 1px solid #3a3e44; border-bottom-width: 2px; bor
 .sidebar-footer .tooltip-anchor[data-tooltip]::after { left: calc(100% + 7px); top: 50%; transform: translate(-2px, -50%) scale(.97); transform-origin: 0 50%; }
 .sidebar-footer .tooltip-anchor[data-tooltip]:focus-visible::after { transform: translate(0, -50%) scale(1); transition: none; }
 .runtime-copy { display: flex; width: 100%; min-width: 0; align-items: center; justify-content: space-between; gap: 8px; color: #b3b8bf; font-size: 12px; line-height: 1.35; }
-.runtime-copy > small { min-width: 0; margin: 0; color: #747b84; overflow: hidden; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.runtime-copy > small { display: block; min-width: 0; margin: 0; color: #747b84; text-align: right; }
+.runtime-copy > small > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-runtime { flex: 1 0 22px; padding-inline: 2px; }
 .runtime-actions { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 5px; }
 .runtime-version, .runtime-developer { display: inline-flex; width: fit-content; flex: 0 0 auto; align-items: center; padding: 0; border: 0; color: #b3b8bf; background: transparent; cursor: pointer; text-align: left; transition: transform 140ms var(--ease-out), color 120ms ease; }

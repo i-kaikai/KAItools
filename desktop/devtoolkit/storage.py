@@ -141,7 +141,8 @@ DEFAULT_NOTES: dict[str, Any] = {
         }
     ],
 }
-DEFAULT_NOTE_CONTENT = """# KAI\n\n## Keep Approaching Ideal\n\n始终靠近理想\n\nKAITools 是面向开发者的本地优先工具空间。JSON、编码、时间、系统配置和笔记都先在当前设备完成处理；只有你主动登录并启用同步时，笔记、偏好与快捷方式才会进入服务端工作区。\n\n把这里当作产品说明、开发备忘录，或你的下一条想法。\n"""
+LEGACY_DEFAULT_NOTE_CONTENT = """# KAI\n\n## Keep Approaching Ideal\n\n始终靠近理想\n\nKAITools 是面向开发者的本地优先工具空间。JSON、编码、时间、系统配置和笔记都先在当前设备完成处理；只有你主动登录并启用同步时，笔记、偏好与快捷方式才会进入服务端工作区。\n\n把这里当作产品说明、开发备忘录，或你的下一条想法。\n"""
+DEFAULT_NOTE_CONTENT = """# KAI Keep Approaching Ideal\n\n始终靠近理想\nKAITools 是面向开发者的本地优先工具空间。JSON、编码、时间、系统配置和笔记都先在当前设备完成处理；只有你主动登录并启用同步时，笔记、偏好与快捷方式才会进入服务端工作区。\n把这里当作产品说明、开发备忘录，或你的下一条想法。\n"""
 NOTE_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$")
 
 
@@ -653,6 +654,8 @@ class AppStorage:
                 note["content"] = DEFAULT_NOTE_CONTENT
             else:
                 note["content"] = ""
+            if note_id == "about-kaitools" and note["content"] == LEGACY_DEFAULT_NOTE_CONTENT:
+                note["content"] = DEFAULT_NOTE_CONTENT
         return loaded
 
     def save_notes(self, payload: dict[str, Any]) -> None:

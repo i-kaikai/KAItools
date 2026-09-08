@@ -169,6 +169,8 @@ test('application stays anchored when the browser restores root scrolling', asyn
 
   const drifted = await page.evaluate(() => {
     document.documentElement.style.setProperty('--app-viewport-height', `${window.innerHeight + 48}px`)
+    document.documentElement.style.setProperty('height', `${window.innerHeight + 48}px`)
+    document.body.style.setProperty('height', `${window.innerHeight + 48}px`)
     window.scrollTo(0, 24)
     const app = document.querySelector('#app')?.getBoundingClientRect()
     const topbar = document.querySelector('.workspace-topbar')?.getBoundingClientRect()
@@ -183,7 +185,11 @@ test('application stays anchored when the browser restores root scrolling', asyn
   expect(drifted.appTop).toBe(0)
   expect(drifted.topbarTop).toBe(0)
 
-  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow')))
+  await page.evaluate(() => {
+    document.documentElement.style.removeProperty('height')
+    document.body.style.removeProperty('height')
+    window.dispatchEvent(new PageTransitionEvent('pageshow'))
+  })
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0)
   await expect.poll(() => page.evaluate(() => document.querySelector('#app')?.getBoundingClientRect().top)).toBe(0)
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--app-viewport-height').trim())).toBe('800px')
@@ -850,7 +856,7 @@ test('calculator and system status remain usable in the local workbench', async 
   await page.evaluate(() => {
     document.documentElement.dataset.theme = 'light'
   })
-  await expect(page.getByRole('button', { name: '清空', exact: true })).toHaveCSS('color', 'rgb(25, 27, 31)')
+  await expect(page.getByRole('button', { name: '清空', exact: true })).toHaveCSS('color', 'rgb(22, 25, 29)')
   mkdirSync(qaDir, { recursive: true })
   await page.screenshot({ path: resolve(qaDir, 'calculator-workbench-light.png'), fullPage: true })
 })
@@ -1143,15 +1149,15 @@ test('lightweight task board manages local task flow', async ({ page }) => {
   await page.getByLabel('任务名称').fill('整理项目周报')
   await page.getByLabel('优先级').selectOption('high')
   await page.getByLabel('截止日').fill('2030-01-02')
-  await page.getByRole('button', { name: '添加任务' }).click()
-  await expect(page.getByLabel('待办')).toContainText('整理项目周报')
+  await page.getByRole('button', { name: '添加任务', exact: true }).click()
+  await expect(page.getByRole('list', { name: '待办', exact: true })).toContainText('整理项目周报')
 
   await page.getByRole('button', { name: '将 整理项目周报 移到下一列' }).click()
-  await expect(page.getByLabel('进行中')).toContainText('整理项目周报')
+  await expect(page.getByRole('list', { name: '进行中', exact: true })).toContainText('整理项目周报')
   await page.getByRole('button', { name: '编辑任务：整理项目周报' }).click()
   await page.getByLabel('备注').fill('等待数据汇总')
   await page.getByRole('button', { name: '保存修改' }).click()
-  await expect(page.getByLabel('进行中')).toContainText('等待数据汇总')
+  await expect(page.getByRole('list', { name: '进行中', exact: true })).toContainText('等待数据汇总')
 
   await page.setViewportSize({ width: 390, height: 844 })
   await expect(page.getByRole('heading', { name: '轻量任务看板', exact: true })).toBeVisible()
@@ -1430,7 +1436,7 @@ test('tool search is localized, keyboard friendly and available while collapsed'
   await input.fill('定时')
   await expect(page.getByRole('option')).toHaveCount(1)
   await expect(page.getByRole('option')).toContainText('生成并校验 Cron 表达式')
-  await expect(page.getByRole('option')).toContainText('开发辅助')
+  await expect(page.getByRole('option')).toContainText('效率辅助')
   await page.screenshot({ path: resolve(qaDir, 'tool-search-desktop-light.png'), fullPage: true })
   await input.press('Enter')
   await expect(page.getByRole('heading', { name: 'Crontab 生成器' })).toBeVisible()
@@ -1617,8 +1623,8 @@ test('expanded sidebar version opens release notes without a footer duplicate', 
   const dialog = page.getByRole('dialog', { name: 'KAITools 版本说明' })
   await expect(dialog).toBeVisible()
   await expect(dialog.getByText(`v${appVersion}`, { exact: true }).first()).toBeVisible()
-  await expect(dialog.getByText('更新内容')).toBeVisible()
-  await expect(dialog.getByText('本版本内容将在发布时补充。')).toBeVisible()
+  await expect(dialog.getByRole('heading', { name: '更新内容' }).first()).toBeVisible()
+  await expect(dialog.getByText('更新内置“关于 KAITools”笔记的默认排版，使产品说明更紧凑易读。')).toBeVisible()
 
   const bounds = await dialog.evaluate((element) => element.getBoundingClientRect())
   expect(bounds.left).toBeGreaterThanOrEqual(0)
