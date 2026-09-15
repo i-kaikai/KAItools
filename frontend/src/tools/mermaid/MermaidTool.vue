@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ClipboardCopy, Download, FileImage, RefreshCw, Trash2 } from '@lucide/vue'
+import { ClipboardCopy, Download, FileImage, Maximize, RefreshCw, Trash2, ZoomIn, ZoomOut } from '@lucide/vue'
 import mermaid from 'mermaid'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
 import CodeEditor from '@/components/CodeEditor.vue'
 import IconButton from '@/components/IconButton.vue'
@@ -40,15 +40,27 @@ const svgMarkup = ref('')
 const error = ref('')
 const rendering = ref(false)
 const exporting = ref(false)
+const canvasHost = ref<HTMLDivElement | null>(null)
+const canvasZoom = ref(1)
+const canvasPan = reactive({ x: 0, y: 0 })
+const draggingCanvas = ref(false)
 let renderTimer = 0
 let renderGeneration = 0
 let themeObserver: MutationObserver | null = null
+let activePointerId: number | null = null
+let previousPointerX = 0
+let previousPointerY = 0
+let pointerStartX = 0
+let pointerStartY = 0
+
+const dragThreshold = 4
 
 const currentTheme = computed<'default' | 'dark'>(() => {
   if (model.theme === 'dark') return 'dark'
   if (model.theme === 'light') return 'default'
   return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'default'
 })
+const renderedSize = computed(() => svgMarkup.value ? svgSize(svgMarkup.value) : null)
 
 function scheduleRender(): void {
   window.clearTimeout(renderTimer)
@@ -74,8 +86,10 @@ async function renderDiagram(): Promise<void> {
     })
     const result = await mermaid.render(`kaitools-mermaid-${generation}`, source)
     if (generation !== renderGeneration) return
+    const needsInitialFit = !svgMarkup.value
     svgMarkup.value = result.svg
     error.value = ''
+    if (needsInitialFit) await nextTick(fitCanvas)
   } catch (cause) {
     if (generation !== renderGeneration) return
     svgMarkup.value = ''
@@ -104,9 +118,88 @@ function svgSize(source: string): { width: number; height: number } {
   const viewBox = svg.getAttribute('viewBox')?.trim().split(/\s+/).map(Number)
   const viewBoxWidth = viewBox?.[2]
   const viewBoxHeight = viewBox?.[3]
-  const width = Number.parseFloat(svg.getAttribute('width') ?? '') || (typeof viewBoxWidth === 'number' && Number.isFinite(viewBoxWidth) ? viewBoxWidth : 1200)
-  const height = Number.parseFloat(svg.getAttribute('height') ?? '') || (typeof viewBoxHeight === 'number' && Number.isFinite(viewBoxHeight) ? viewBoxHeight : 800)
+  const widthAttribute = svg.getAttribute('width') ?? ''
+  const heightAttribute = svg.getAttribute('height') ?? ''
+  const width = (!widthAttribute.includes('%') && Number.parseFloat(widthAttribute)) || (typeof viewBoxWidth === 'number' && Number.isFinite(viewBoxWidth) ? viewBoxWidth : 1200)
+  const height = (!heightAttribute.includes('%') && Number.parseFloat(heightAttribute)) || (typeof viewBoxHeight === 'number' && Number.isFinite(viewBoxHeight) ? viewBoxHeight : 800)
   return { width: Math.max(1, Math.min(2048, Math.ceil(width))), height: Math.max(1, Math.min(2048, Math.ceil(height))) }
+}
+
+function fitCanvas(): void {
+  const host = canvasHost.value
+  const size = renderedSize.value
+  if (!host || !size) return
+  const padding = 48
+  const availableWidth = Math.max(1, host.clientWidth - padding)
+  const availableHeight = Math.max(1, host.clientHeight - padding)
+  canvasZoom.value = Math.max(0.18, Math.min(1.4, availableWidth / size.width, availableHeight / size.height))
+  canvasPan.x = (host.clientWidth - size.width * canvasZoom.value) / 2
+  canvasPan.y = (host.clientHeight - size.height * canvasZoom.value) / 2
+}
+
+function setCanvasZoom(nextZoom: number, clientX?: number, clientY?: number): void {
+  const host = canvasHost.value
+  if (!host || !renderedSize.value) return
+  const zoom = Math.max(0.18, Math.min(3, nextZoom))
+  const rect = host.getBoundingClientRect()
+  const anchorX = (clientX ?? rect.left + rect.width / 2) - rect.left
+  const anchorY = (clientY ?? rect.top + rect.height / 2) - rect.top
+  const diagramX = (anchorX - canvasPan.x) / canvasZoom.value
+  const diagramY = (anchorY - canvasPan.y) / canvasZoom.value
+  canvasPan.x = anchorX - diagramX * zoom
+  canvasPan.y = anchorY - diagramY * zoom
+  canvasZoom.value = zoom
+}
+
+function onCanvasWheel(event: WheelEvent): void {
+  setCanvasZoom(canvasZoom.value * Math.exp(-event.deltaY * 0.0012), event.clientX, event.clientY)
+}
+
+function onCanvasPointerDown(event: PointerEvent): void {
+  if (!canvasHost.value || event.button !== 0 || (event.target as Element).closest('button')) return
+  activePointerId = event.pointerId
+  previousPointerX = event.clientX
+  previousPointerY = event.clientY
+  pointerStartX = event.clientX
+  pointerStartY = event.clientY
+}
+
+function onCanvasPointerMove(event: PointerEvent): void {
+  if (event.pointerId !== activePointerId) return
+  if (!draggingCanvas.value) {
+    if (Math.hypot(event.clientX - pointerStartX, event.clientY - pointerStartY) < dragThreshold) return
+    draggingCanvas.value = true
+    canvasHost.value?.setPointerCapture(event.pointerId)
+  }
+  event.preventDefault()
+  canvasPan.x += event.clientX - previousPointerX
+  canvasPan.y += event.clientY - previousPointerY
+  previousPointerX = event.clientX
+  previousPointerY = event.clientY
+}
+
+function finishCanvasPointer(event: PointerEvent): void {
+  if (event.pointerId !== activePointerId) return
+  activePointerId = null
+  draggingCanvas.value = false
+  try {
+    canvasHost.value?.releasePointerCapture(event.pointerId)
+  } catch {
+    // Pointer capture may already be released by the browser.
+  }
+}
+
+function onCanvasKeydown(event: KeyboardEvent): void {
+  const panStep = event.shiftKey ? 72 : 28
+  if (event.key === '+' || event.key === '=') setCanvasZoom(canvasZoom.value * 1.2)
+  else if (event.key === '-' || event.key === '_') setCanvasZoom(canvasZoom.value / 1.2)
+  else if (event.key === '0') fitCanvas()
+  else if (event.key === 'ArrowLeft') canvasPan.x += panStep
+  else if (event.key === 'ArrowRight') canvasPan.x -= panStep
+  else if (event.key === 'ArrowUp') canvasPan.y += panStep
+  else if (event.key === 'ArrowDown') canvasPan.y -= panStep
+  else return
+  event.preventDefault()
 }
 
 async function exportPng(): Promise<void> {
@@ -145,6 +238,9 @@ async function exportPng(): Promise<void> {
 
 function clear(): void {
   model.source = ''
+  canvasZoom.value = 1
+  canvasPan.x = 0
+  canvasPan.y = 0
 }
 
 watch(() => [model.source, model.theme, currentTheme.value], scheduleRender)
@@ -193,9 +289,39 @@ onBeforeUnmount(() => {
       </template>
       <template #right>
         <div class="editor-panel mermaid-preview-panel" :class="{ invalid: !!error }">
-          <div class="panel-label"><span>图表预览</span><small>{{ svgMarkup ? '可滚动查看' : '等待输入' }}</small></div>
-          <div v-if="svgMarkup" class="mermaid-canvas" data-scroll-sync-target v-html="svgMarkup" />
-          <div v-else class="mermaid-empty"><FileImage :size="28" aria-hidden="true" /><span>{{ error || '输入 Mermaid 代码后自动生成预览' }}</span></div>
+          <div class="panel-label"><span>图表预览</span><small>{{ svgMarkup ? '拖拽查看，滚轮缩放' : '等待输入' }}</small></div>
+          <div
+            ref="canvasHost"
+            class="mermaid-canvas"
+            :class="{ 'is-dragging': draggingCanvas }"
+            data-scroll-sync-target
+            tabindex="0"
+            aria-label="Mermaid 图表预览"
+            @wheel.prevent="onCanvasWheel"
+            @pointerdown="onCanvasPointerDown"
+            @pointermove="onCanvasPointerMove"
+            @pointerup="finishCanvasPointer"
+            @pointercancel="finishCanvasPointer"
+            @keydown="onCanvasKeydown"
+          >
+            <div v-if="svgMarkup" class="mermaid-canvas-toolbar" aria-label="Mermaid 预览工具栏">
+              <IconButton :icon="ZoomOut" label="缩小 Mermaid 预览" size="small" @click="setCanvasZoom(canvasZoom / 1.2)" />
+              <span>{{ Math.round(canvasZoom * 100) }}%</span>
+              <IconButton :icon="ZoomIn" label="放大 Mermaid 预览" size="small" @click="setCanvasZoom(canvasZoom * 1.2)" />
+              <IconButton :icon="Maximize" label="适配 Mermaid 预览" size="small" @click="fitCanvas" />
+            </div>
+            <div
+              v-if="svgMarkup && renderedSize"
+              class="mermaid-canvas-stage"
+              :style="{
+                width: `${renderedSize.width}px`,
+                height: `${renderedSize.height}px`,
+                transform: `translate3d(${canvasPan.x}px, ${canvasPan.y}px, 0) scale(${canvasZoom})`,
+              }"
+              v-html="svgMarkup"
+            />
+            <div v-else class="mermaid-empty"><FileImage :size="28" aria-hidden="true" /><span>{{ error || '输入 Mermaid 代码后自动生成预览' }}</span></div>
+          </div>
         </div>
       </template>
     </ResizableSplit>

@@ -19,6 +19,7 @@ export type ToolId =
   | 'api-client'
   | 'jwt'
   | 'mermaid'
+  | 'flowchart'
   | 'kanban'
   | 'java'
   | 'timestamp'

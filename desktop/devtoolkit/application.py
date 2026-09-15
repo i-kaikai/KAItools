@@ -25,6 +25,7 @@ from .single_instance import SingleInstance
 from .storage import AppStorage, StorageError
 from .tray import TrayController, TrayError
 from .version import APP_VERSION
+from .webview_cache import invalidate_webview_asset_cache
 
 LOGGER = logging.getLogger(__name__)
 APP_TITLE = "KAITools"
@@ -170,6 +171,9 @@ def main() -> int:
             LOGGER.exception("resource_validation_failed")
             show_startup_error(str(exc))
             return 4
+
+        if not dev_url:
+            invalidate_webview_asset_cache(paths, APP_VERSION)
 
         import webview
 

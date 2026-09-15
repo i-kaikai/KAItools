@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { CheckCircle2, Copy, Trash2, TriangleAlert } from '@lucide/vue'
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, watch } from 'vue'
 
 import CodeEditor from '@/components/CodeEditor.vue'
 import IconButton from '@/components/IconButton.vue'
@@ -8,12 +8,46 @@ import ResizableSplit from '@/components/ResizableSplit.vue'
 import { useToolState } from '@/composables/useToolState'
 import { useToastStore } from '@/stores/toast'
 import { copyText } from '@/utils/clipboard'
+import { formatJson } from '@/utils/json'
 import { compareJson } from '@/utils/jsonDiff'
 
 const props = defineProps<{ state: Record<string, unknown> }>()
 const emit = defineEmits<{ 'update:state': [state: Record<string, unknown>] }>()
 const toast = useToastStore()
-const model = useToolState(props.state, { left: '', right: '', split: 50 }, (state) => emit('update:state', state))
+const model = useToolState(props.state, { left: '', right: '', split: 50, autoFormat: true }, (state) => emit('update:state', state))
+type JsonSide = 'left' | 'right'
+const autoFormatTimers: Record<JsonSide, number> = { left: 0, right: 0 }
+
+function formatSide(side: JsonSide): void {
+  if (!model.autoFormat || !model[side].trim()) return
+  try {
+    const formatted = formatJson(model[side], 2)
+    if (formatted !== model[side]) model[side] = formatted
+  } catch {
+    // Keep incomplete JSON editable until it becomes valid.
+  }
+}
+
+function scheduleAutoFormat(side: JsonSide): void {
+  window.clearTimeout(autoFormatTimers[side])
+  if (!model.autoFormat) return
+  autoFormatTimers[side] = window.setTimeout(() => formatSide(side), 260)
+}
+
+watch(() => model.left, () => scheduleAutoFormat('left'), { immediate: true })
+watch(() => model.right, () => scheduleAutoFormat('right'), { immediate: true })
+watch(() => model.autoFormat, (enabled) => {
+  window.clearTimeout(autoFormatTimers.left)
+  window.clearTimeout(autoFormatTimers.right)
+  if (!enabled) return
+  scheduleAutoFormat('left')
+  scheduleAutoFormat('right')
+})
+
+onBeforeUnmount(() => {
+  window.clearTimeout(autoFormatTimers.left)
+  window.clearTimeout(autoFormatTimers.right)
+})
 const comparison = computed(() => {
   try { return { result: compareJson(model.left, model.right), error: '' } }
   catch (error) { return { result: null, error: error instanceof Error ? error.message : 'JSON 对比失败' } }
@@ -38,6 +72,7 @@ async function copyResult(): Promise<void> {
         </p>
       </div>
       <div class="toolbar">
+        <label class="toggle-label"><input v-model="model.autoFormat" type="checkbox" /><span>自动格式化</span></label>
         <IconButton :icon="Copy" label="复制差异" :disabled="!diffText" @click="copyResult" />
         <IconButton :icon="Trash2" label="清空" :disabled="!model.left && !model.right" @click="model.left = ''; model.right = ''" />
       </div>

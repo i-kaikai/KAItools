@@ -56,6 +56,7 @@ KAITools 是面向开发者的本地工具箱，同时提供纯静态 Web 版和
 
 - **Java 转义**：字符串转义、反转义和可选 Unicode 转换。
 - **Mermaid 流程图**：编写并导出流程图与时序图。
+- **流程图画板**：提供 15 种基础流程、数据、连接和注释图形；支持节点与连线样式、路径和标签、复制对齐、模板、本地图纸库，以及 JSON、SVG、PNG 导入导出。
 - **命名转换**：转换 camelCase、PascalCase、snake_case、kebab-case 等代码命名。
 - **UUID / ULID**：生成 UUID v4、UUID v7、ULID，并解析 UUID v7 和 ULID 的时间。
 

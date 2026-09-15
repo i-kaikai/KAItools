@@ -53,6 +53,16 @@ class AppPaths:
         return self.data_root / "webview-profile"
 
     @property
+    def webview_default_profile_dir(self) -> Path:
+        """The Edge WebView2 default profile stored beneath pywebview's configured profile root."""
+        return self.webview_profile_dir / "EBWebView" / "Default"
+
+    @property
+    def webview_cache_version_file(self) -> Path:
+        """Records which packaged frontend version last invalidated the WebView HTTP cache."""
+        return self.data_root / "webview-cache-version.txt"
+
+    @property
     def hosts_profiles_file(self) -> Path:
         return self.data_root / "hosts-profiles.json"
 
