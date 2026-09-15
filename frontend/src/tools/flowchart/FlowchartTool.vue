@@ -53,12 +53,32 @@ const historyRevision = ref(0)
 const savedFlowcharts = ref<SavedFlowchart[]>([])
 const selectedSavedId = ref('')
 const model = reactive<FlowchartState>(normalizeFlowchartState(props.state))
+const touchPanningCanvas = ref(false)
+const pendingPaletteShape = ref<FlowShape | null>(null)
+const paletteTouchDragging = ref(false)
 
 let graph: Graph | null = null
 let dnd: Dnd | null = null
 let resizeObserver: ResizeObserver | null = null
 let syncTimer = 0
 let fitTimer = 0
+let activeCanvasTouchId: number | null = null
+let previousCanvasTouchX = 0
+let previousCanvasTouchY = 0
+let canvasTouchStartX = 0
+let canvasTouchStartY = 0
+let canvasTouchMoved = false
+let canvasTouchIntent: 'pan' | 'place' = 'pan'
+let paletteTouchShape: FlowShape | null = null
+let paletteTouchId: number | null = null
+let paletteTouchStartX = 0
+let paletteTouchStartY = 0
+let paletteTouchSource: HTMLElement | null = null
+let paletteTouchTimer = 0
+let paletteTouchGhost: HTMLDivElement | null = null
+
+const touchPanThreshold = 4
+const paletteLongPressDelay = 360
 
 const selectedNode = computed(() => model.nodes.find((node) => node.id === selectedNodeId.value) ?? null)
 const selectedEdge = computed(() => model.edges.find((edge) => edge.id === selectedEdgeId.value) ?? null)
@@ -363,6 +383,112 @@ function startPaletteDrag(shape: FlowShape, event: MouseEvent): void {
   dnd.start(graph.createNode(graphNode(createFlowNode(shape, 0, 0))), event)
 }
 
+function clearPaletteTouch(): void {
+  window.clearTimeout(paletteTouchTimer)
+  paletteTouchTimer = 0
+  paletteTouchShape = null
+  paletteTouchId = null
+  paletteTouchSource = null
+  paletteTouchDragging.value = false
+  paletteTouchGhost?.remove()
+  paletteTouchGhost = null
+}
+
+function movePaletteTouchGhost(clientX: number, clientY: number): void {
+  if (!paletteTouchGhost) return
+  paletteTouchGhost.style.transform = `translate(${Math.round(clientX)}px, ${Math.round(clientY)}px) translate(-50%, -50%)`
+}
+
+function beginPaletteTouchDrag(): void {
+  const shape = paletteTouchShape
+  const source = paletteTouchSource
+  if (!shape || !source) return
+  pendingPaletteShape.value = null
+  paletteTouchDragging.value = true
+  const ghost = document.createElement('div')
+  ghost.className = 'flowchart-palette-drag-ghost'
+  ghost.setAttribute('aria-hidden', 'true')
+  const preview = source.querySelector('.flowchart-shape-preview')?.cloneNode(true)
+  if (preview) ghost.append(preview)
+  else ghost.textContent = shapeDefinition(shape).label
+  document.body.append(ghost)
+  paletteTouchGhost = ghost
+  movePaletteTouchGhost(paletteTouchStartX, paletteTouchStartY)
+}
+
+function startPaletteTouch(shape: FlowShape, event: TouchEvent): void {
+  if (event.touches.length !== 1) return
+  const touch = event.changedTouches[0]
+  if (!touch) return
+  clearPaletteTouch()
+  paletteTouchShape = shape
+  paletteTouchId = touch.identifier
+  paletteTouchStartX = touch.clientX
+  paletteTouchStartY = touch.clientY
+  paletteTouchSource = event.currentTarget as HTMLElement
+  paletteTouchTimer = window.setTimeout(beginPaletteTouchDrag, paletteLongPressDelay)
+}
+
+function movePaletteTouch(event: TouchEvent): void {
+  if (paletteTouchId === null) return
+  const touch = touchWithId(event.touches, paletteTouchId)
+  if (!touch) return
+  if (!paletteTouchDragging.value) {
+    if (Math.hypot(touch.clientX - paletteTouchStartX, touch.clientY - paletteTouchStartY) >= touchPanThreshold) {
+      window.clearTimeout(paletteTouchTimer)
+      paletteTouchTimer = 0
+      paletteTouchShape = null
+    }
+    return
+  }
+  movePaletteTouchGhost(touch.clientX, touch.clientY)
+  event.preventDefault()
+  event.stopPropagation()
+}
+
+function isCanvasDropPoint(clientX: number, clientY: number): boolean {
+  const viewport = canvasViewport.value
+  const target = document.elementFromPoint(clientX, clientY)
+  return Boolean(viewport && target && viewport.contains(target) && !isCanvasControlTarget(target))
+}
+
+function finishPaletteTouch(shape: FlowShape, event: TouchEvent): void {
+  const touch = paletteTouchId === null ? undefined : touchWithId(event.changedTouches, paletteTouchId)
+  const wasDragging = paletteTouchDragging.value
+  const wasTap = paletteTouchShape === shape && touch && Math.hypot(touch.clientX - paletteTouchStartX, touch.clientY - paletteTouchStartY) < touchPanThreshold
+  if (wasDragging) {
+    if (touch && isCanvasDropPoint(touch.clientX, touch.clientY)) placePaletteNode(shape, touch.clientX, touch.clientY)
+    clearPaletteTouch()
+    event.preventDefault()
+    event.stopPropagation()
+    return
+  }
+  clearPaletteTouch()
+  if (!wasTap) return
+  pendingPaletteShape.value = pendingPaletteShape.value === shape ? null : shape
+  if (pendingPaletteShape.value) {
+    setToolMode('select')
+    toast.show(`已选择${shapeDefinition(shape).label}，点按画板空白处放置`, 'success')
+  }
+  event.preventDefault()
+}
+
+function cancelPaletteTouch(): void {
+  clearPaletteTouch()
+}
+
+function placePaletteNode(shape: FlowShape, clientX: number, clientY: number): void {
+  if (!graph) return
+  const position = graph.clientToLocal(clientX, clientY)
+  const node = createFlowNode(shape, Math.round(position.x), Math.round(position.y))
+  node.x -= Math.round(node.width / 2)
+  node.y -= Math.round(node.height / 2)
+  graph.addNode(graphNode(node))
+  syncFromGraph()
+  selectNode(node.id)
+  scheduleSync()
+}
+
 function setToolMode(mode: ToolMode): void {
   activeMode.value = mode
   connectingSourceId.value = ''
@@ -518,6 +644,68 @@ function exportSvg(): void { graph?.exportSVG(safeFileName()); toast.show('SVG �
 function exportPng(): void { graph?.exportPNG(safeFileName(), { padding: 24 }); toast.show('PNG 已开始下载', 'success') }
 function requestImport(): void { importInput.value?.click() }
 
+function isCanvasControlTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && Boolean(target.closest('.flowchart-minimap, .x6-node, .x6-edge, .x6-widget-selection, .x6-widget-transform'))
+}
+
+function touchWithId(touches: TouchList, identifier: number): Touch | undefined {
+  return Array.from(touches).find((touch) => touch.identifier === identifier)
+}
+
+function startTouchPan(event: TouchEvent): void {
+  if (activeCanvasTouchId !== null || event.touches.length !== 1 || isCanvasControlTarget(event.target)) return
+  const touch = event.changedTouches[0]
+  if (!touch) return
+  activeCanvasTouchId = touch.identifier
+  previousCanvasTouchX = touch.clientX
+  previousCanvasTouchY = touch.clientY
+  canvasTouchStartX = touch.clientX
+  canvasTouchStartY = touch.clientY
+  canvasTouchMoved = false
+  canvasTouchIntent = pendingPaletteShape.value ? 'place' : 'pan'
+  event.preventDefault()
+  event.stopPropagation()
+}
+
+function moveTouchPan(event: TouchEvent): void {
+  if (activeCanvasTouchId === null) return
+  const touch = touchWithId(event.touches, activeCanvasTouchId)
+  if (!touch) return
+  if (!canvasTouchMoved && Math.hypot(touch.clientX - canvasTouchStartX, touch.clientY - canvasTouchStartY) < touchPanThreshold) {
+    event.preventDefault()
+    event.stopPropagation()
+    return
+  }
+  canvasTouchMoved = true
+  if (canvasTouchIntent === 'place') pendingPaletteShape.value = null
+  canvasTouchIntent = 'pan'
+  touchPanningCanvas.value = true
+  graph?.translateBy(touch.clientX - previousCanvasTouchX, touch.clientY - previousCanvasTouchY)
+  previousCanvasTouchX = touch.clientX
+  previousCanvasTouchY = touch.clientY
+  event.preventDefault()
+  event.stopPropagation()
+}
+
+function finishTouchPan(event: TouchEvent): void {
+  if (activeCanvasTouchId === null) return
+  if (touchWithId(event.touches, activeCanvasTouchId)) return
+  const endedTouch = touchWithId(event.changedTouches, activeCanvasTouchId)
+  const selectedShape = pendingPaletteShape.value
+  if (event.type !== 'touchcancel' && canvasTouchIntent === 'place' && !canvasTouchMoved && selectedShape && endedTouch) {
+    placePaletteNode(selectedShape, endedTouch.clientX, endedTouch.clientY)
+    pendingPaletteShape.value = null
+  } else if (event.type !== 'touchcancel' && !canvasTouchMoved) {
+    clearSelection()
+  }
+  activeCanvasTouchId = null
+  touchPanningCanvas.value = false
+  canvasTouchMoved = false
+  canvasTouchIntent = 'pan'
+  event.preventDefault()
+  event.stopPropagation()
+}
+
 async function importJson(event: Event): Promise<void> {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
@@ -598,6 +786,9 @@ onBeforeUnmount(() => {
   window.clearTimeout(syncTimer)
   window.clearTimeout(fitTimer)
   resizeObserver?.disconnect()
+  activeCanvasTouchId = null
+  canvasTouchMoved = false
+  clearPaletteTouch()
   dnd?.dispose()
   graph?.dispose()
 })
@@ -652,7 +843,7 @@ onBeforeUnmount(() => {
         <IconButton :icon="SendToBack" label="置于底层" size="small" @click="sendSelectedToBack" />
       </div>
       <div class="flowchart-view-tools">
-        <span class="flowchart-pan-hint">右键拖动画板</span>
+        <span class="flowchart-pan-hint">右键或触摸拖动空白处</span>
         <IconButton :icon="ZoomOut" label="缩小画板" size="small" @click="zoom(-0.15)" />
         <IconButton :icon="ZoomIn" label="放大画板" size="small" @click="zoom(0.15)" />
         <IconButton :icon="Maximize" label="适配画板内容" size="small" @click="fitGraph" />
@@ -662,10 +853,18 @@ onBeforeUnmount(() => {
     <div class="flowchart-workbench" :class="`mode-${activeMode}`">
       <aside class="flowchart-palette" aria-label="流程图形状库">
         <div class="flowchart-palette-header"><div><strong>形状库</strong><small>{{ paletteItems.length }} 个图形</small></div><select v-model="activePaletteGroup" aria-label="形状分类"><option v-for="group in flowShapeGroups" :key="group.id" :value="group.id">{{ group.label }}</option></select></div>
-        <div class="flowchart-shape-list"><button v-for="item in paletteItems" :key="item.id" type="button" :class="['flowchart-shape', `shape-${item.id}`]" :aria-label="`拖拽添加${item.label}`" :title="item.label" @mousedown.prevent="startPaletteDrag(item.id, $event)"><span class="flowchart-shape-preview"><FlowShapePreview :shape="item.id" /></span><span class="flowchart-shape-label">{{ item.label }}</span></button></div>
+        <div class="flowchart-shape-list"><button v-for="item in paletteItems" :key="item.id" type="button" :class="['flowchart-shape', `shape-${item.id}`, { 'is-pending': pendingPaletteShape === item.id, 'is-touch-dragging': paletteTouchDragging && paletteTouchShape === item.id }]" :aria-label="`拖拽添加${item.label}`" :aria-pressed="pendingPaletteShape === item.id" :title="item.label" @mousedown.prevent="startPaletteDrag(item.id, $event)" @touchstart="startPaletteTouch(item.id, $event)" @touchmove="movePaletteTouch" @touchend="finishPaletteTouch(item.id, $event)" @touchcancel="cancelPaletteTouch"><span class="flowchart-shape-preview"><FlowShapePreview :shape="item.id" /></span><span class="flowchart-shape-label">{{ item.label }}</span></button></div>
       </aside>
 
-      <div ref="canvasViewport" class="flowchart-canvas-wrap"><div ref="canvasHost" class="flowchart-canvas" aria-label="流程图编辑画板" /><div ref="minimapHost" class="flowchart-minimap" aria-label="流程图小地图" /></div>
+      <div
+        ref="canvasViewport"
+        class="flowchart-canvas-wrap"
+        :class="{ 'is-touch-panning': touchPanningCanvas }"
+        @touchstart.capture="startTouchPan"
+        @touchmove.capture="moveTouchPan"
+        @touchend.capture="finishTouchPan"
+        @touchcancel.capture="finishTouchPan"
+      ><div ref="canvasHost" class="flowchart-canvas" aria-label="流程图编辑画板" /><div ref="minimapHost" class="flowchart-minimap" aria-label="流程图小地图" /></div>
 
       <aside class="flowchart-inspector" aria-label="图形属性">
         <template v-if="selectedNode">

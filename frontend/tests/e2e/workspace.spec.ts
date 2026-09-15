@@ -1210,6 +1210,124 @@ async function assertFlowchartSegmentDrag(page: Page, offsetY: number): Promise<
   await assertViewportIntegrity(page)
 }
 
+test('flowchart canvas pans with a one-finger drag', async ({ page }) => {
+  const session = await page.context().newCDPSession(page)
+  await session.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 })
+  try {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto('/')
+    await openWorkspaceTool(page, '流程图画板')
+
+    const canvas = page.getByLabel('流程图编辑画板')
+    const viewport = canvas.locator('.x6-graph-svg-viewport')
+    const start = await canvas.evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      const candidates = [[.14, .16], [.82, .16], [.15, .8], [.52, .84]]
+      for (const [xRatio, yRatio] of candidates) {
+        const x = rect.left + rect.width * xRatio!
+        const y = rect.top + rect.height * yRatio!
+        const target = document.elementFromPoint(x, y)
+        if (target && !target.closest('.x6-node, .x6-edge, .flowchart-minimap')) return { x, y }
+      }
+      return null
+    })
+    expect(start).not.toBeNull()
+    if (!start) throw new Error('找不到可拖动的空白画布区域')
+
+    const transformBefore = await viewport.getAttribute('transform')
+    await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: start.x, y: start.y, id: 1 }] })
+    await session.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: start.x + 48, y: start.y + 36, id: 1 }] })
+    await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+
+    await expect.poll(() => viewport.getAttribute('transform')).not.toBe(transformBefore)
+    await expect(canvas.locator('.x6-node')).toHaveCount(6)
+  } finally {
+    await session.detach()
+  }
+})
+
+test('flowchart palette selects and places a shape with touch', async ({ page }) => {
+  const session = await page.context().newCDPSession(page)
+  await session.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 })
+  try {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto('/')
+    await openWorkspaceTool(page, '流程图画板')
+
+    const processPalette = page.getByRole('button', { name: '拖拽添加处理' })
+    const paletteBox = await processPalette.boundingBox()
+    expect(paletteBox).not.toBeNull()
+    if (!paletteBox) throw new Error('找不到处理图形')
+    const palettePoint = { x: paletteBox.x + paletteBox.width / 2, y: paletteBox.y + paletteBox.height / 2 }
+    await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ ...palettePoint, id: 1 }] })
+    await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+    await expect(processPalette).toHaveAttribute('aria-pressed', 'true')
+
+    const canvas = page.getByLabel('流程图编辑画板')
+    const placement = await canvas.evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      const candidates = [[.14, .16], [.82, .16], [.15, .8], [.52, .84]]
+      for (const [xRatio, yRatio] of candidates) {
+        const x = rect.left + rect.width * xRatio!
+        const y = rect.top + rect.height * yRatio!
+        const target = document.elementFromPoint(x, y)
+        if (target && !target.closest('.x6-node, .x6-edge, .flowchart-minimap')) return { x, y }
+      }
+      return null
+    })
+    expect(placement).not.toBeNull()
+    if (!placement) throw new Error('找不到可放置图形的空白画布区域')
+
+    await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ ...placement, id: 1 }] })
+    await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+    await expect(canvas.locator('.x6-node')).toHaveCount(7)
+    await expect(processPalette).toHaveAttribute('aria-pressed', 'false')
+  } finally {
+    await session.detach()
+  }
+})
+
+test('flowchart palette long press drags a shape onto the canvas', async ({ page }) => {
+  const session = await page.context().newCDPSession(page)
+  await session.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 })
+  try {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto('/')
+    await openWorkspaceTool(page, '流程图画板')
+
+    const processPalette = page.getByRole('button', { name: '拖拽添加处理' })
+    const paletteBox = await processPalette.boundingBox()
+    expect(paletteBox).not.toBeNull()
+    if (!paletteBox) throw new Error('找不到处理图形')
+    const palettePoint = { x: paletteBox.x + paletteBox.width / 2, y: paletteBox.y + paletteBox.height / 2 }
+    await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ ...palettePoint, id: 1 }] })
+    await page.waitForTimeout(420)
+    await expect(page.locator('.flowchart-palette-drag-ghost')).toBeVisible()
+
+    const canvas = page.getByLabel('流程图编辑画板')
+    const placement = await canvas.evaluate((element) => {
+      const rect = element.getBoundingClientRect()
+      const candidates = [[.14, .16], [.82, .16], [.15, .8], [.52, .84]]
+      for (const [xRatio, yRatio] of candidates) {
+        const x = rect.left + rect.width * xRatio!
+        const y = rect.top + rect.height * yRatio!
+        const target = document.elementFromPoint(x, y)
+        if (target && !target.closest('.x6-node, .x6-edge, .flowchart-minimap')) return { x, y }
+      }
+      return null
+    })
+    expect(placement).not.toBeNull()
+    if (!placement) throw new Error('找不到可放置图形的空白画布区域')
+
+    await session.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ ...placement, id: 1 }] })
+    await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+    await expect(canvas.locator('.x6-node')).toHaveCount(7)
+    await expect(page.locator('.flowchart-palette-drag-ghost')).toHaveCount(0)
+  } finally {
+    await session.detach()
+  }
+})
+
 test('flowchart horizontal segment drags downward without a loop', async ({ page }) => {
   await assertFlowchartSegmentDrag(page, 130)
 })
