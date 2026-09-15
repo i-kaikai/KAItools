@@ -1328,6 +1328,45 @@ test('flowchart palette long press drags a shape onto the canvas', async ({ page
   }
 })
 
+test('flowchart connects nodes and selects edges with touch', async ({ page }) => {
+  const session = await page.context().newCDPSession(page)
+  await session.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 })
+  try {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto('/')
+    await openWorkspaceTool(page, '流程图画板')
+
+    const canvas = page.getByLabel('流程图编辑画板')
+    const nodePoints = await canvas.locator('.x6-node').evaluateAll((nodes) => nodes.slice(0, 2).map((node) => {
+      const rect = node.getBoundingClientRect()
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+    }))
+    expect(nodePoints).toHaveLength(2)
+    await page.getByRole('button', { name: '连线工具' }).click()
+    for (const point of nodePoints) {
+      await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ ...point, id: 1 }] })
+      await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+    }
+    await expect(canvas.locator('.x6-edge')).toHaveCount(7)
+
+    await page.getByRole('button', { name: '选择工具' }).click()
+    const path = canvas.locator('.x6-edge').last().locator('path').first()
+    const point = await path.evaluate((element) => {
+      const svgPath = element as SVGPathElement
+      const position = svgPath.getPointAtLength(svgPath.getTotalLength() / 2)
+      const matrix = svgPath.getScreenCTM()
+      return matrix ? new DOMPoint(position.x, position.y).matrixTransform(matrix) : null
+    })
+    expect(point).not.toBeNull()
+    if (!point) throw new Error('找不到连线触摸位置')
+    await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: point.x, y: point.y, id: 1 }] })
+    await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+    await expect(canvas.locator('.x6-edge-tool-segment')).toBeVisible()
+  } finally {
+    await session.detach()
+  }
+})
+
 test('flowchart horizontal segment drags downward without a loop', async ({ page }) => {
   await assertFlowchartSegmentDrag(page, 130)
 })

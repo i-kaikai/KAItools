@@ -33,6 +33,7 @@ import {
 } from './flowchartModel'
 
 type ToolMode = 'select' | 'connect'
+type CanvasTouchIntent = 'pan' | 'place' | 'node' | 'edge'
 
 const props = defineProps<{ state: Record<string, unknown> }>()
 const emit = defineEmits<{ 'update:state': [state: Record<string, unknown>] }>()
@@ -68,7 +69,12 @@ let previousCanvasTouchY = 0
 let canvasTouchStartX = 0
 let canvasTouchStartY = 0
 let canvasTouchMoved = false
-let canvasTouchIntent: 'pan' | 'place' = 'pan'
+let canvasTouchIntent: CanvasTouchIntent = 'pan'
+let canvasTouchCellId = ''
+let canvasTouchNodeOriginX = 0
+let canvasTouchNodeOriginY = 0
+let canvasTouchStartLocalX = 0
+let canvasTouchStartLocalY = 0
 let paletteTouchShape: FlowShape | null = null
 let paletteTouchId: number | null = null
 let paletteTouchStartX = 0
@@ -449,7 +455,7 @@ function movePaletteTouch(event: TouchEvent): void {
 function isCanvasDropPoint(clientX: number, clientY: number): boolean {
   const viewport = canvasViewport.value
   const target = document.elementFromPoint(clientX, clientY)
-  return Boolean(viewport && target && viewport.contains(target) && !isCanvasControlTarget(target))
+  return Boolean(viewport && target && viewport.contains(target) && !isCanvasPlacementBlockedTarget(target))
 }
 
 function finishPaletteTouch(shape: FlowShape, event: TouchEvent): void {
@@ -644,25 +650,57 @@ function exportSvg(): void { graph?.exportSVG(safeFileName()); toast.show('SVG �
 function exportPng(): void { graph?.exportPNG(safeFileName(), { padding: 24 }); toast.show('PNG 已开始下载', 'success') }
 function requestImport(): void { importInput.value?.click() }
 
-function isCanvasControlTarget(target: EventTarget | null): boolean {
+function isCanvasPlacementBlockedTarget(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest('.flowchart-minimap, .x6-node, .x6-edge, .x6-widget-selection, .x6-widget-transform'))
+}
+
+function isNativeCanvasControlTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && Boolean(target.closest('.flowchart-minimap, .x6-widget-selection, .x6-widget-transform, .x6-widget-tools'))
+}
+
+function touchCellAt(target: EventTarget | null): { id: string; type: 'node' | 'edge' } | null {
+  if (!graph || !(target instanceof Element)) return null
+  const cell = graph.findViewByElem(target)?.cell
+  if (cell?.isNode()) return { id: cell.id, type: 'node' }
+  if (cell?.isEdge()) return { id: cell.id, type: 'edge' }
+  return null
 }
 
 function touchWithId(touches: TouchList, identifier: number): Touch | undefined {
   return Array.from(touches).find((touch) => touch.identifier === identifier)
 }
 
-function startTouchPan(event: TouchEvent): void {
-  if (activeCanvasTouchId !== null || event.touches.length !== 1 || isCanvasControlTarget(event.target)) return
-  const touch = event.changedTouches[0]
-  if (!touch) return
+function beginCanvasTouch(touch: Touch, intent: CanvasTouchIntent): void {
   activeCanvasTouchId = touch.identifier
   previousCanvasTouchX = touch.clientX
   previousCanvasTouchY = touch.clientY
   canvasTouchStartX = touch.clientX
   canvasTouchStartY = touch.clientY
+  const local = graph?.clientToLocal(touch.clientX, touch.clientY)
+  canvasTouchStartLocalX = local?.x ?? 0
+  canvasTouchStartLocalY = local?.y ?? 0
   canvasTouchMoved = false
-  canvasTouchIntent = pendingPaletteShape.value ? 'place' : 'pan'
+  canvasTouchIntent = intent
+}
+
+function startTouchPan(event: TouchEvent): void {
+  if (activeCanvasTouchId !== null || event.touches.length !== 1 || isNativeCanvasControlTarget(event.target)) return
+  const touch = event.changedTouches[0]
+  if (!touch) return
+  const touchedCell = touchCellAt(event.target)
+  if (touchedCell) {
+    beginCanvasTouch(touch, touchedCell.type)
+    canvasTouchCellId = touchedCell.id
+    if (touchedCell.type === 'node') {
+      const node = graph?.getCellById(touchedCell.id)
+      const position = node?.isNode() ? node.position() : null
+      canvasTouchNodeOriginX = position?.x ?? 0
+      canvasTouchNodeOriginY = position?.y ?? 0
+    }
+  } else {
+    if (isCanvasPlacementBlockedTarget(event.target)) return
+    beginCanvasTouch(touch, pendingPaletteShape.value ? 'place' : 'pan')
+  }
   event.preventDefault()
   event.stopPropagation()
 }
@@ -671,12 +709,25 @@ function moveTouchPan(event: TouchEvent): void {
   if (activeCanvasTouchId === null) return
   const touch = touchWithId(event.touches, activeCanvasTouchId)
   if (!touch) return
+  if (canvasTouchIntent === 'edge') {
+    event.preventDefault()
+    event.stopPropagation()
+    return
+  }
   if (!canvasTouchMoved && Math.hypot(touch.clientX - canvasTouchStartX, touch.clientY - canvasTouchStartY) < touchPanThreshold) {
     event.preventDefault()
     event.stopPropagation()
     return
   }
   canvasTouchMoved = true
+  if (canvasTouchIntent === 'node') {
+    const node = graph?.getCellById(canvasTouchCellId)
+    const local = graph?.clientToLocal(touch.clientX, touch.clientY)
+    if (node?.isNode() && local) node.position(canvasTouchNodeOriginX + local.x - canvasTouchStartLocalX, canvasTouchNodeOriginY + local.y - canvasTouchStartLocalY)
+    event.preventDefault()
+    event.stopPropagation()
+    return
+  }
   if (canvasTouchIntent === 'place') pendingPaletteShape.value = null
   canvasTouchIntent = 'pan'
   touchPanningCanvas.value = true
@@ -692,9 +743,16 @@ function finishTouchPan(event: TouchEvent): void {
   if (touchWithId(event.touches, activeCanvasTouchId)) return
   const endedTouch = touchWithId(event.changedTouches, activeCanvasTouchId)
   const selectedShape = pendingPaletteShape.value
-  if (event.type !== 'touchcancel' && canvasTouchIntent === 'place' && !canvasTouchMoved && selectedShape && endedTouch) {
+  if (event.type !== 'touchcancel' && canvasTouchIntent === 'node' && !canvasTouchMoved) {
+    if (activeMode.value === 'connect') connectByNodeClick(canvasTouchCellId)
+    else selectNode(canvasTouchCellId)
+  } else if (event.type !== 'touchcancel' && canvasTouchIntent === 'edge') {
+    selectEdge(canvasTouchCellId)
+  } else if (event.type !== 'touchcancel' && canvasTouchIntent === 'place' && !canvasTouchMoved && selectedShape && endedTouch) {
     placePaletteNode(selectedShape, endedTouch.clientX, endedTouch.clientY)
     pendingPaletteShape.value = null
+  } else if (event.type !== 'touchcancel' && canvasTouchIntent === 'node' && canvasTouchMoved) {
+    scheduleSync()
   } else if (event.type !== 'touchcancel' && !canvasTouchMoved) {
     clearSelection()
   }
@@ -702,6 +760,7 @@ function finishTouchPan(event: TouchEvent): void {
   touchPanningCanvas.value = false
   canvasTouchMoved = false
   canvasTouchIntent = 'pan'
+  canvasTouchCellId = ''
   event.preventDefault()
   event.stopPropagation()
 }
