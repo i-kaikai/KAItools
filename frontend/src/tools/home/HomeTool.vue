@@ -6,7 +6,7 @@ import giteeLogo from '@/assets/gitee-g-red.svg'
 import githubLogo from '@/assets/github-invertocat-white.svg'
 import { formatDate, t } from '@/i18n'
 import { useAppStore } from '@/stores/app'
-import { toolCategories, workspaceTools, type ToolDefinition } from '@/tools/registry'
+import { toolCategories, toolsById, workspaceTools, type ToolDefinition } from '@/tools/registry'
 import type { DashboardCard, DashboardCards } from '@/types'
 import { markdownCardPreview } from '@/utils/markdownPreview'
 import DashboardCardManagerDialog from '@/components/DashboardCardManagerDialog.vue'
@@ -20,6 +20,13 @@ const ParticleField = defineAsyncComponent(() => import('./ParticleField.vue'))
 const particleField = ref<InstanceType<typeof ParticleFieldComponent> | null>(null)
 const particleFieldMounted = ref(false)
 let particleFieldTimer: number | undefined
+let particleFieldIdleCallback: number | undefined
+let homeDisposed = false
+
+type IdleWindow = Window & {
+  requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number
+  cancelIdleCallback?: (handle: number) => void
+}
 const openTabs = computed(() => app.tabs.filter((tab) => tab.toolId !== 'home'))
 const pinnedTabs = computed(() => openTabs.value.filter((tab) => tab.pinned))
 const categorizedTools = computed(() => toolCategories.map((category) => ({
@@ -29,7 +36,7 @@ const categorizedTools = computed(() => toolCategories.map((category) => ({
 const pinnedNote = computed(() => app.notes.notes.find((note) => note.pinned) ?? app.notes.notes[0])
 const pinnedNotePreview = computed(() => markdownCardPreview(pinnedNote.value?.content ?? t('home.localDescription')))
 const sessionTools = computed(() => openTabs.value.flatMap((tab) => {
-  const tool = workspaceTools.find((item) => item.id === tab.toolId)
+  const tool = toolsById[tab.toolId]
   return tool ? [{ tab, tool }] : []
 }).slice(0, 4))
 const dashboardCardManagerOpen = ref(false)
@@ -37,7 +44,7 @@ const dashboardCardSaving = ref(false)
 const carouselItems = computed(() => [...app.dashboardCards.cards]
   .filter((card) => card.enabled)
   .sort((left, right) => left.sortOrder - right.sortOrder)
-  .map((card) => ({ card, tool: workspaceTools.find((tool) => tool.id === card.toolId) }))
+  .map((card) => ({ card, tool: toolsById[card.toolId] }))
   .filter((item): item is { card: DashboardCard; tool: ToolDefinition } => Boolean(item.tool)))
 
 const toolColors: Record<string, string> = {
@@ -97,10 +104,23 @@ const todayDateTime = [
 
 onMounted(() => {
   // Keep the first interactive Home paint independent from the optional Three.js scene.
-  particleFieldTimer = window.setTimeout(() => { particleFieldMounted.value = true }, 180)
+  const idleWindow = window as IdleWindow
+  if (idleWindow.requestIdleCallback) {
+    particleFieldIdleCallback = idleWindow.requestIdleCallback(() => {
+      particleFieldIdleCallback = undefined
+      if (homeDisposed) return
+      particleFieldMounted.value = true
+    }, { timeout: 800 })
+  } else {
+    particleFieldTimer = window.setTimeout(() => { particleFieldMounted.value = true }, 300)
+  }
 })
 
-onBeforeUnmount(() => window.clearTimeout(particleFieldTimer))
+onBeforeUnmount(() => {
+  homeDisposed = true
+  window.clearTimeout(particleFieldTimer)
+  if (particleFieldIdleCallback !== undefined) (window as IdleWindow).cancelIdleCallback?.(particleFieldIdleCallback)
+})
 
 function openTool(tool: ToolDefinition): void {
   void tool.preload().catch(() => undefined)
@@ -125,7 +145,7 @@ function releaseCard(): void {
 }
 
 function openNotes(): void {
-  const notes = workspaceTools.find((tool) => tool.id === 'notes')
+  const notes = toolsById.notes
   if (notes) openTool(notes)
 }
 

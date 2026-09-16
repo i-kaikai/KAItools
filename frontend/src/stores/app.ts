@@ -33,12 +33,34 @@ function id(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+function unproxyState<T>(value: T, seen = new WeakMap<object, unknown>()): T {
+  if (!value || typeof value !== 'object') return value
+  const raw = toRaw(value as object) as object
+  if (raw instanceof Date) return raw as T
+  const previous = seen.get(raw)
+  if (previous) return previous as T
+  if (Array.isArray(raw)) {
+    const copy: unknown[] = []
+    seen.set(raw, copy)
+    raw.forEach((item, index) => { copy[index] = unproxyState(item, seen) })
+    return copy as T
+  }
+  const copy: Record<string, unknown> = {}
+  seen.set(raw, copy)
+  for (const [key, item] of Object.entries(raw)) copy[key] = unproxyState(item, seen)
+  return copy as T
+}
+
+function cloneState<T extends object>(value: T): T {
+  return structuredClone(unproxyState(value))
+}
+
 function copyLocalFileManager(value: FileManagerState): FileManagerState {
-  return JSON.parse(JSON.stringify(value)) as FileManagerState
+  return cloneState(value)
 }
 
 function archiveEditableState(toolId: ToolId, state: Record<string, unknown>): Record<string, unknown> {
-  const snapshot = JSON.parse(JSON.stringify(state)) as Record<string, unknown>
+  const snapshot = cloneState(state)
   delete snapshot.__fileManagerAttachments
   if (toolId === 'qrcode') delete snapshot.output
   if (toolId === 'calculator') delete snapshot.expressionResult

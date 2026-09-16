@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import {
   calculateDate,
@@ -9,11 +9,13 @@ import {
   convertProgrammerInput,
   convertUnit,
   evaluateCalculatorExpression,
+  loadCalculatorEngine,
   loadCalculatorHistory,
   saveCalculatorHistory,
 } from '@/utils/calculator'
 
 describe('super calculator', () => {
+  beforeAll(() => loadCalculatorEngine())
   beforeEach(() => localStorage.clear())
 
   it('evaluates scientific expressions with BigNumber precision', () => {

@@ -1,8 +1,26 @@
-import { all, create, type MathJsStatic } from 'mathjs'
+import type { MathJsStatic } from 'mathjs'
 import { DateTime } from 'luxon'
 
-const math = create(all!, { number: 'BigNumber', precision: 64, predictable: true, matrix: 'Matrix' }) as MathJsStatic
 const FORBIDDEN_EXPRESSION = /\b(?:import|createUnit|evaluate|parse|compile|help)\b/i
+let math: MathJsStatic | undefined
+let mathModulePromise: Promise<void> | undefined
+
+export function loadCalculatorEngine(): Promise<void> {
+  mathModulePromise ??= import('mathjs')
+    .then(({ all, create }) => {
+      math = create(all!, { number: 'BigNumber', precision: 64, predictable: true, matrix: 'Matrix' }) as MathJsStatic
+    })
+    .catch((error: unknown) => {
+      mathModulePromise = undefined
+      throw error
+    })
+  return mathModulePromise
+}
+
+function calculatorMath(): MathJsStatic {
+  if (!math) throw new Error('计算引擎尚未加载')
+  return math
+}
 
 export interface CalculatorHistoryEntry {
   id: string
@@ -12,6 +30,7 @@ export interface CalculatorHistoryEntry {
 }
 
 export function evaluateCalculatorExpression(expression: string): string {
+  const math = calculatorMath()
   const source = expression.trim()
   if (!source) return ''
   if (source.length > 4_096 || FORBIDDEN_EXPRESSION.test(source)) throw new Error('表达式包含不支持的函数')
@@ -19,6 +38,7 @@ export function evaluateCalculatorExpression(expression: string): string {
 }
 
 export function convertUnit(value: string, targetUnit: string): string {
+  const math = calculatorMath()
   if (!value.trim() || !targetUnit.trim()) return ''
   // Math.js follows SI's lowercase kilo prefix (kB), while developers commonly type KB.
   const normalizedTarget = targetUnit.trim().replace(/\bKB\b/g, 'kB')
@@ -76,6 +96,7 @@ export function calculateProgrammerOperation(left: string, right: string, operat
 }
 
 export function calculateFinance(kind: 'simple' | 'compound' | 'loan' | 'tax', principal: string, annualRate: string, periods: string, taxRate = '0'): string {
+  const math = calculatorMath()
   const amount = math.bignumber(principal || 0)
   const rate = math.divide(math.bignumber(annualRate || 0), 100)
   const count = Math.max(0, Number(periods || 0))
@@ -108,6 +129,7 @@ export function calculateDate(start: string, end: string, amount: string, unit: 
 }
 
 export function calculateEngineering(kind: 'matrix' | 'complex' | 'statistics', source: string, operation: string): string {
+  const math = calculatorMath()
   if (kind === 'matrix') {
     const matrix = math.evaluate(source)
     const result = operation === 'transpose' ? math.transpose(matrix) : operation === 'det' ? math.det(matrix) : operation === 'inv' ? math.inv(matrix) : math.multiply(matrix, matrix)

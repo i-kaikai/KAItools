@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Atom, Binary, Calculator, Copy, Delete, History, Pi, RotateCcw, Sigma, Trash2, WalletCards } from '@lucide/vue'
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 
 import IconButton from '@/components/IconButton.vue'
 import SegmentedControl from '@/components/SegmentedControl.vue'
@@ -16,6 +16,7 @@ import {
   convertProgrammerInput,
   convertUnit,
   evaluateCalculatorExpression,
+  loadCalculatorEngine,
   loadCalculatorHistory,
   saveCalculatorHistory,
   type CalculatorHistoryEntry,
@@ -33,6 +34,7 @@ const model = useToolState(props.state, {
 }, (state) => emit('update:state', state))
 const error = ref('')
 const history = ref<CalculatorHistoryEntry[]>(loadCalculatorHistory())
+const calculatorReady = ref(false)
 
 const sectionOptions = [
   { value: 'scientific', label: '科学' }, { value: 'programmer', label: '程序员' }, { value: 'finance', label: '金融/日期' }, { value: 'engineering', label: '工程' },
@@ -62,12 +64,14 @@ const bitOperationOutput = computed(() => {
   }
 })
 const financeResult = computed(() => {
+  if (!calculatorReady.value) return '正在加载计算引擎'
   try { return calculateFinance(model.financeKind as 'simple' | 'compound' | 'loan' | 'tax', model.principal, model.annualRate, model.periods, model.taxRate) } catch (cause) { return cause instanceof Error ? cause.message : '计算失败' }
 })
 const dateResult = computed(() => {
   try { return calculateDate(model.dateStart, model.dateEnd, model.dateOffset, model.dateUnit as 'days' | 'months' | 'years') } catch (cause) { return { difference: cause instanceof Error ? cause.message : '计算失败', shifted: '' } }
 })
 const engineeringResult = computed(() => {
+  if (!calculatorReady.value) return '正在加载计算引擎'
   try { return calculateEngineering(model.engineeringKind as 'matrix' | 'complex' | 'statistics', model.engineeringSource, model.engineeringOperation) } catch (cause) { return cause instanceof Error ? cause.message : '计算失败' }
 })
 
@@ -86,6 +90,7 @@ watch(() => Number(model.baseFrom), (nextBase, previousBase) => {
 })
 
 function evaluateExpression(): void {
+  if (!calculatorReady.value) return
   try {
     error.value = ''
     model.expressionResult = evaluateCalculatorExpression(model.expression)
@@ -104,14 +109,21 @@ function insertKey(key: string): void {
 
 function backspace(): void { model.expression = model.expression.slice(0, -1) }
 function clearExpression(): void { model.expression = ''; model.expressionResult = ''; error.value = '' }
-function unitResult(): string { try { return convertUnit(model.unitValue, model.unitTarget) } catch (cause) { return cause instanceof Error ? cause.message : '单位换算失败' } }
+const unitResult = computed(() => {
+  if (!calculatorReady.value) return '正在加载计算引擎'
+  try { return convertUnit(model.unitValue, model.unitTarget) } catch (cause) { return cause instanceof Error ? cause.message : '单位换算失败' }
+})
 async function copy(value: string): Promise<void> { if (value) { await copyText(value); toast.show('结果已复制') } }
 function restoreHistory(item: CalculatorHistoryEntry): void { model.section = 'scientific'; model.expression = item.expression; model.expressionResult = item.result }
 function clearHistory(): void { history.value = []; saveCalculatorHistory([]) }
+
+onMounted(() => {
+  void loadCalculatorEngine().then(() => { calculatorReady.value = true }).catch(() => { error.value = '计算引擎加载失败' })
+})
 </script>
 
 <template>
-  <section class="tool-page calculator-tool" :data-section="model.section">
+  <section class="tool-page calculator-tool" :data-section="model.section" :aria-busy="!calculatorReady">
     <header class="calculator-header">
       <div class="calculator-brand"><span><Calculator :size="18" /></span><div><small>LOCAL COMPUTE ENGINE</small><h1>超级计算器</h1><p>科学、程序员、金融、日期与工程计算均在本地完成</p></div></div>
       <div class="calculator-header-actions"><span><Pi :size="14" />BigNumber</span><IconButton :icon="Trash2" label="清空计算历史" :disabled="!history.length" danger @click="clearHistory" /></div>
@@ -124,12 +136,12 @@ function clearHistory(): void { history.value = []; saveCalculatorHistory([]) }
         <div class="calculator-console-topline"><span>EXPRESSION</span><small>Enter 计算</small></div>
         <label class="calculator-expression"><input v-model="model.expression" aria-label="科学计算表达式" spellcheck="false" @keydown.enter.prevent="evaluateExpression" /><button type="button" aria-label="退格" @click="backspace"><Delete :size="16" /></button></label>
         <div class="calculator-keypad"><button v-for="key in calculatorKeys.flat()" :key="key" type="button" :class="{ operator: ['/', '*', '-', '+', '^', '!'].includes(key), function: key.includes('(') || key === 'π' }" @click="insertKey(key)">{{ key }}</button></div>
-        <div class="calculator-console-actions"><button class="command-button secondary" type="button" @click="clearExpression"><RotateCcw :size="15" />清空</button><button class="command-button primary" type="button" @click="evaluateExpression"><Calculator :size="16" />计算</button></div>
+        <div class="calculator-console-actions"><button class="command-button secondary" type="button" @click="clearExpression"><RotateCcw :size="15" />清空</button><button class="command-button primary" type="button" :disabled="!calculatorReady" @click="evaluateExpression"><Calculator :size="16" />计算</button></div>
         <p v-if="error" class="calculator-error">{{ error }}</p>
       </section>
       <aside class="calculator-output-stack">
         <section class="calculator-result-stage"><header><span>RESULT</span><small>{{ model.expressionResult ? 'LOCAL' : 'READY' }}</small></header><code>{{ model.expressionResult || '等待计算' }}</code><button type="button" aria-label="复制科学计算结果" :disabled="!model.expressionResult" @click="copy(model.expressionResult)"><Copy :size="16" /></button></section>
-        <section class="calculator-unit-card"><header><span>UNIT CONVERTER</span><Atom :size="15" /></header><label>数值与单位<input v-model="model.unitValue" aria-label="单位换算数值" /></label><label>目标单位<input v-model="model.unitTarget" aria-label="目标单位" /></label><output><span>{{ unitResult() }}</span><IconButton :icon="Copy" label="复制单位换算结果" size="small" @click="copy(unitResult())" /></output></section>
+        <section class="calculator-unit-card"><header><span>UNIT CONVERTER</span><Atom :size="15" /></header><label>数值与单位<input v-model="model.unitValue" aria-label="单位换算数值" /></label><label>目标单位<input v-model="model.unitTarget" aria-label="目标单位" /></label><output><span>{{ unitResult }}</span><IconButton :icon="Copy" label="复制单位换算结果" size="small" @click="copy(unitResult)" /></output></section>
       </aside>
     </div>
 

@@ -22,6 +22,7 @@ const search = ref('')
 const toolFilter = ref('all')
 const selectedNewToolId = ref<ToolId>('json')
 const dialog = ref<Dialog | null>(null)
+const fileDateFormatter = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' })
 
 function uid(prefix: string): string {
   return `${prefix}-${crypto.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`}`
@@ -30,6 +31,7 @@ function uid(prefix: string): string {
 const archiveTools = computed(() => workspaceTools.filter((tool) => isArchivableTool(tool.id)))
 const folders = computed(() => [...app.fileManager.folders].sort((left, right) => left.name.localeCompare(right.name, 'zh-CN')))
 const folderById = computed(() => new Map(folders.value.map((folder) => [folder.id, folder])))
+const unfiledFileCount = computed(() => app.fileManager.files.reduce((count, file) => count + (file.folderId ? 0 : 1), 0))
 const folderOptions = computed(() => folders.value.map((folder) => {
   const names = [folder.name]
   const seen = new Set([folder.id])
@@ -149,7 +151,7 @@ function toolName(file: FileManagerFile): string {
 
 function formatTime(value: string): string {
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '未知时间' : new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(date)
+  return Number.isNaN(date.getTime()) ? '未知时间' : fileDateFormatter.format(date)
 }
 </script>
 
@@ -173,7 +175,7 @@ function formatTime(value: string): string {
     <div class="file-manager-workspace">
       <aside class="file-manager-tree" aria-label="文件夹">
         <button type="button" :class="{ active: selectedFolderId === 'all' }" @click="selectedFolderId = 'all'"><FolderOpen :size="16" />全部文件<small>{{ app.fileManager.files.length }}</small></button>
-        <button type="button" :class="{ active: selectedFolderId === 'unfiled' }" @click="selectedFolderId = 'unfiled'"><Folder :size="16" />未分类<small>{{ app.fileManager.files.filter((file) => !file.folderId).length }}</small></button>
+        <button type="button" :class="{ active: selectedFolderId === 'unfiled' }" @click="selectedFolderId = 'unfiled'"><Folder :size="16" />未分类<small>{{ unfiledFileCount }}</small></button>
         <div class="file-manager-folder-list">
           <div v-for="folder in folderOptions" :key="folder.id" class="file-manager-folder-row">
             <button type="button" :class="{ active: selectedFolderId === folder.id }" :style="{ paddingLeft: `${12 + Math.max(0, folder.path.split(' / ').length - 1) * 14}px` }" @click="selectedFolderId = folder.id"><Folder :size="16" /><span>{{ folder.name }}</span></button>

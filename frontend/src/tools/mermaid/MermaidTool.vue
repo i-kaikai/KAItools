@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ClipboardCopy, Download, FileImage, Maximize, RefreshCw, Trash2, ZoomIn, ZoomOut } from '@lucide/vue'
-import mermaid from 'mermaid'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
 import CodeEditor from '@/components/CodeEditor.vue'
@@ -46,6 +45,7 @@ const canvasPan = reactive({ x: 0, y: 0 })
 const draggingCanvas = ref(false)
 let renderTimer = 0
 let renderGeneration = 0
+let mermaidModulePromise: Promise<typeof import('mermaid')> | undefined
 let themeObserver: MutationObserver | null = null
 let activePointerId: number | null = null
 let previousPointerX = 0
@@ -62,6 +62,11 @@ const currentTheme = computed<'default' | 'dark'>(() => {
 })
 const renderedSize = computed(() => svgMarkup.value ? svgSize(svgMarkup.value) : null)
 
+function loadMermaid(): Promise<typeof import('mermaid')> {
+  mermaidModulePromise ??= import('mermaid')
+  return mermaidModulePromise
+}
+
 function scheduleRender(): void {
   window.clearTimeout(renderTimer)
   renderTimer = window.setTimeout(() => { void renderDiagram() }, 180)
@@ -77,6 +82,7 @@ async function renderDiagram(): Promise<void> {
   }
   rendering.value = true
   try {
+    const { default: mermaid } = await loadMermaid()
     mermaid.initialize({
       startOnLoad: false,
       securityLevel: 'strict',

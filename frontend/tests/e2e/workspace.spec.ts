@@ -468,6 +468,33 @@ test('notes use one collapsible tree and leave the editor available by default',
   await assertViewportIntegrity(page)
 })
 
+test('archiving the default Markdown note leaves the workspace responsive', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await openWorkspaceTool(page, '笔记')
+
+  await page.getByRole('button', { name: '保存当前内容到文件管理器' }).click()
+  await expect(page.locator('.toast')).toContainText('已保存到文件管理器：关于 KAITools')
+  await openWorkspaceTool(page, '文件管理器')
+  await expect(page.getByRole('heading', { name: '文件管理器' })).toBeVisible()
+  await expect(page.locator('.file-manager-list')).toContainText('关于 KAITools')
+  await assertViewportIntegrity(page)
+})
+
+test('archiving the default flowchart leaves the workspace responsive', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await openWorkspaceTool(page, '流程图画板')
+  await expect(page.getByLabel('流程图编辑画板')).toBeVisible()
+
+  await page.getByRole('button', { name: '保存当前内容到文件管理器' }).click()
+  await expect(page.locator('.toast')).toContainText('已保存到文件管理器：审批流程')
+  await openWorkspaceTool(page, '文件管理器')
+  await expect(page.getByRole('heading', { name: '文件管理器' })).toBeVisible()
+  await expect(page.locator('.file-manager-list')).toContainText('审批流程')
+  await assertViewportIntegrity(page)
+})
+
 test('restores an account from the persistent refresh cookie after reload', async ({ page }) => {
   await page.context().addCookies([{
     name: 'KAITOOLS_REFRESH',

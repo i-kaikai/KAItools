@@ -16,6 +16,7 @@ const snapshot = ref<ClipboardHistorySnapshot | null>(null)
 const query = ref('')
 const loading = ref(false)
 let refreshTimer: number | undefined
+const clipboardDateFormatter = new Intl.DateTimeFormat()
 
 const items = computed(() => {
   const normalized = query.value.trim().toLocaleLowerCase()
@@ -33,6 +34,28 @@ async function refresh(): Promise<void> {
   if (result.ok) snapshot.value = result.data
   else toast.show(result.error.message, 'error')
   loading.value = false
+}
+
+function formatCreatedAt(value: string): string {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : clipboardDateFormatter.format(date)
+}
+
+function stopPolling(): void {
+  window.clearInterval(refreshTimer)
+  refreshTimer = undefined
+}
+
+function startPolling(): void {
+  stopPolling()
+  if (isWebRuntime || document.hidden) return
+  void refresh()
+  refreshTimer = window.setInterval(() => { void refresh() }, 750)
+}
+
+function onVisibilityChange(): void {
+  if (document.hidden) stopPolling()
+  else startPolling()
 }
 
 async function copy(item: { text: string }): Promise<void> {
@@ -61,10 +84,13 @@ async function toggleMonitoring(): Promise<void> {
 
 onMounted(() => {
   if (isWebRuntime) return
-  void refresh()
-  refreshTimer = window.setInterval(() => { void refresh() }, 750)
+  document.addEventListener('visibilitychange', onVisibilityChange)
+  startPolling()
 })
-onBeforeUnmount(() => window.clearInterval(refreshTimer))
+onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', onVisibilityChange)
+  stopPolling()
+})
 </script>
 
 <template>
@@ -84,7 +110,7 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer))
       <div v-if="items.length" class="clipboard-history-list">
         <article v-for="(item, index) in items" :key="item.id">
           <span class="clipboard-history-index">{{ String(index + 1).padStart(2, '0') }}</span>
-          <div class="clipboard-history-content"><strong>{{ preview(item.text) || '空白文本' }}</strong><small>{{ new Date(item.createdAt).toLocaleString() }} · {{ item.text.length.toLocaleString() }} 字符{{ item.truncated ? ' · 已截断' : '' }}</small></div>
+          <div class="clipboard-history-content"><strong>{{ preview(item.text) || '空白文本' }}</strong><small>{{ formatCreatedAt(item.createdAt) }} · {{ item.text.length.toLocaleString() }} 字符{{ item.truncated ? ' · 已截断' : '' }}</small></div>
           <div><IconButton :icon="Copy" label="复制此条记录" size="small" @click="copy(item)" /><IconButton :icon="Trash2" label="删除此条记录" size="small" danger @click="remove(item.id)" /></div>
         </article>
       </div>

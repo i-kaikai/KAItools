@@ -5,7 +5,7 @@ export function useToolState<T extends Record<string, unknown>>(
   defaults: T,
   emit: (value: T) => void,
 ): T {
-  const state = reactive({ ...structuredClone(toRaw(defaults)), ...structuredClone(toRaw(initial)) }) as T
+  const state = reactive(structuredClone({ ...toRaw(defaults), ...toRaw(initial) })) as T
   watch(
     state,
     () => emit(structuredClone(toRaw(state))),

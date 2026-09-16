@@ -191,8 +191,9 @@ function render(time: number): void {
   satellite.rotation.y = -satelliteAngle * 0.45
   renderer.render(scene, camera)
   if (host.value) {
-    host.value.dataset.ready = 'true'
-    host.value.dataset.static = String(props.reducedMotion)
+    if (host.value.dataset.ready !== 'true') host.value.dataset.ready = 'true'
+    const staticMode = String(props.reducedMotion)
+    if (host.value.dataset.static !== staticMode) host.value.dataset.static = staticMode
   }
   scheduleRender()
 }
@@ -252,6 +253,7 @@ function initializeScene(): void {
   const profile = particleProfileFor(props.quality)
   host.value.dataset.ready = 'false'
   host.value.dataset.quality = props.quality
+  // Keep the default framebuffer readable for the visual smoke checks and canvas consumers.
   renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: profile.powerPreference, preserveDrawingBuffer: true })
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, profile.pixelRatioMax))
   renderer.outputColorSpace = THREE.SRGBColorSpace
@@ -316,15 +318,15 @@ onMounted(() => {
   resizeObserver = new ResizeObserver(resize)
   resizeObserver.observe(host.value)
   document.addEventListener('visibilitychange', onVisibilityChange)
-  window.addEventListener('pointermove', onPointerMove, { passive: true })
-  window.addEventListener('pointerleave', onPointerLeave)
+  host.value.addEventListener('pointermove', onPointerMove, { passive: true })
+  host.value.addEventListener('pointerleave', onPointerLeave)
   initializeScene()
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('visibilitychange', onVisibilityChange)
-  window.removeEventListener('pointermove', onPointerMove)
-  window.removeEventListener('pointerleave', onPointerLeave)
+  host.value?.removeEventListener('pointermove', onPointerMove)
+  host.value?.removeEventListener('pointerleave', onPointerLeave)
   resizeObserver?.disconnect()
   disposeScene()
 })

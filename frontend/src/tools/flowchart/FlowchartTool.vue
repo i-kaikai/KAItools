@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Clipboard, Dnd, Export, Graph, History, Keyboard, MiniMap, Selection, Snapline, Transform, type Edge } from '@antv/x6'
+import type { Dnd as X6Dnd, Edge, Graph as X6Graph } from '@antv/x6'
 import { AlignCenterHorizontal, AlignLeft, AlignRight, ArrowRight, BringToFront, ClipboardPaste, Copy, Download, FileJson, FileOutput, FileText, FolderOpen, GitBranch, Hand, Maximize2, MousePointer2, Redo2, Save, Scan, SendToBack, Shapes, Trash2, Undo2, Upload, ZoomIn, ZoomOut } from '@lucide/vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
@@ -69,8 +69,9 @@ const extensionPreview = ref<{ left: number; top: number; width: number; height:
 const edgeEndpointAnchors = ref<{ terminal: 'source' | 'target'; left: number; top: number }[]>([])
 const hoveredConnectionNodeId = ref('')
 
-let graph: Graph | null = null
-let dnd: Dnd | null = null
+let graph: X6Graph | null = null
+let dnd: X6Dnd | null = null
+let disposed = false
 let resizeObserver: ResizeObserver | null = null
 let syncTimer = 0
 let fitTimer = 0
@@ -86,6 +87,8 @@ let canvasTouchNodeOriginX = 0
 let canvasTouchNodeOriginY = 0
 let canvasTouchStartLocalX = 0
 let canvasTouchStartLocalY = 0
+let pendingTouchPanX = 0
+let pendingTouchPanY = 0
 let paletteTouchShape: FlowShape | null = null
 let paletteTouchId: number | null = null
 let paletteTouchStartX = 0
@@ -109,12 +112,15 @@ let pendingClickLine: { previewId: string } | null = null
 let suppressConnectorChoice = false
 let endpointDrag: { pointerId: number; terminal: 'source' | 'target'; startX: number; startY: number; moved: boolean } | null = null
 let preserveSelectionUntil = 0
+let pendingDiagram: FlowchartState | null = null
 
 const touchPanThreshold = 4
 const paletteLongPressDelay = 360
 
-const selectedNode = computed(() => model.nodes.find((node) => node.id === selectedNodeId.value) ?? null)
-const selectedEdge = computed(() => model.edges.find((edge) => edge.id === selectedEdgeId.value) ?? null)
+const nodeById = computed(() => new Map(model.nodes.map((node) => [node.id, node])))
+const edgeById = computed(() => new Map(model.edges.map((edge) => [edge.id, edge])))
+const selectedNode = computed(() => nodeById.value.get(selectedNodeId.value) ?? null)
+const selectedEdge = computed(() => edgeById.value.get(selectedEdgeId.value) ?? null)
 const paletteItems = computed(() => flowShapeDefinitions)
 const canUndo = computed(() => {
   historyRevision.value
@@ -128,7 +134,7 @@ const validationItems = computed(() => {
   const items: string[] = []
   if (model.nodes.length && !model.nodes.some((node) => node.shape === 'terminator')) items.push('缺少开始或结束节点')
   if (model.nodes.length > 1 && !model.edges.length) items.push('尚未连接流程节点')
-  if (model.edges.some((edge) => !edge.label && model.nodes.find((node) => node.id === edge.source)?.shape === 'decision')) items.push('判断分支建议填写连线标签')
+  if (model.edges.some((edge) => !edge.label && nodeById.value.get(edge.source)?.shape === 'decision')) items.push('判断分支建议填写连线标签')
   return items
 })
 
@@ -1217,7 +1223,10 @@ function fitGraph(): void {
 }
 
 function replaceDiagram(next: FlowchartState): void {
-  if (!graph) return
+  if (!graph) {
+    pendingDiagram = next
+    return
+  }
   graph.fromJSON({ nodes: next.nodes.map(graphNode), edges: next.edges.map(graphEdge) })
   graph.cleanHistory()
   model.title = next.title
@@ -1245,8 +1254,21 @@ function currentState(): FlowchartState {
   syncFromGraph()
   return {
     title: model.title,
-    nodes: model.nodes.map((node) => ({ ...node })),
-    edges: model.edges.map((edge) => ({ ...edge, sourcePoint: edge.sourcePoint ? { ...edge.sourcePoint } : undefined, targetPoint: edge.targetPoint ? { ...edge.targetPoint } : undefined, vertices: edge.vertices.map((vertex) => ({ ...vertex })) })),
+    nodes: model.nodes.map(copyFlowNode),
+    edges: model.edges.map(copyFlowEdge),
+  }
+}
+
+function copyFlowNode(node: FlowNodeState): FlowNodeState {
+  return { ...node }
+}
+
+function copyFlowEdge(edge: FlowEdgeState): FlowEdgeState {
+  return {
+    ...edge,
+    sourcePoint: edge.sourcePoint ? { ...edge.sourcePoint } : undefined,
+    targetPoint: edge.targetPoint ? { ...edge.targetPoint } : undefined,
+    vertices: edge.vertices.map((vertex) => ({ ...vertex })),
   }
 }
 
@@ -1464,7 +1486,13 @@ function moveTouchPan(event: TouchEvent): void {
   if (canvasTouchIntent === 'place') pendingPaletteShape.value = null
   canvasTouchIntent = 'pan'
   touchPanningCanvas.value = true
-  graph?.translateBy(touch.clientX - previousCanvasTouchX, touch.clientY - previousCanvasTouchY)
+  const deltaX = touch.clientX - previousCanvasTouchX
+  const deltaY = touch.clientY - previousCanvasTouchY
+  if (graph) graph.translateBy(deltaX, deltaY)
+  else {
+    pendingTouchPanX += deltaX
+    pendingTouchPanY += deltaY
+  }
   requestAnimationFrame(updateExtensionControl)
   previousCanvasTouchX = touch.clientX
   previousCanvasTouchY = touch.clientY
@@ -1516,13 +1544,15 @@ async function importJson(event: Event): Promise<void> {
 
 watch(model, () => emit('update:state', {
   title: model.title,
-  nodes: model.nodes.map((node) => ({ ...node })),
-  edges: model.edges.map((edge) => ({ ...edge, sourcePoint: edge.sourcePoint ? { ...edge.sourcePoint } : undefined, targetPoint: edge.targetPoint ? { ...edge.targetPoint } : undefined, vertices: edge.vertices.map((vertex) => ({ ...vertex })) })),
+  nodes: model.nodes.map(copyFlowNode),
+  edges: model.edges.map(copyFlowEdge),
   ...(fileManagerFileId ? { __fileManagerFileId: fileManagerFileId } : {}),
 }), { deep: true, immediate: true })
 
 onMounted(async () => {
   if (!canvasHost.value || !canvasViewport.value || !minimapHost.value) return
+  const { Clipboard, Dnd, Export, Graph, History, Keyboard, MiniMap, Selection, Snapline, Transform } = await import('@antv/x6')
+  if (disposed || !canvasHost.value || !canvasViewport.value || !minimapHost.value) return
   graph = new Graph({
     container: canvasHost.value,
     grid: { visible: true, type: 'dot', size: 16, args: { color: '#c9d4df', thickness: 1 } },
@@ -1554,6 +1584,9 @@ onMounted(async () => {
   dnd = new Dnd({ target: graph })
   savedFlowcharts.value = loadFlowchartLibrary()
   graph.fromJSON({ nodes: model.nodes.map(graphNode), edges: model.edges.map(graphEdge) })
+  const queuedDiagram = pendingDiagram
+  pendingDiagram = null
+  if (queuedDiagram) replaceDiagram(queuedDiagram)
   graph.on('node:click', ({ node, e }) => {
     if (Date.now() < preserveSelectionUntil) return
     const portId = portIdFromTarget(e.target)
@@ -1589,15 +1622,24 @@ onMounted(async () => {
   document.addEventListener('fullscreenchange', syncCanvasFullscreen)
   await nextTick()
   fitGraph()
+  if (pendingTouchPanX || pendingTouchPanY) {
+    graph.translateBy(pendingTouchPanX, pendingTouchPanY)
+    pendingTouchPanX = 0
+    pendingTouchPanY = 0
+  }
 })
 
 onBeforeUnmount(() => {
+  disposed = true
   window.clearTimeout(syncTimer)
   window.clearTimeout(fitTimer)
   resizeObserver?.disconnect()
   document.removeEventListener('fullscreenchange', syncCanvasFullscreen)
   activeCanvasTouchId = null
   canvasPointerId = null
+  pendingDiagram = null
+  pendingTouchPanX = 0
+  pendingTouchPanY = 0
   freeLineId = ''
   clearBasicLineDrag()
   canvasTouchMoved = false

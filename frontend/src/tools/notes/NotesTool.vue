@@ -25,6 +25,7 @@ const mobileTreeOpen = ref(false)
 const expandedKeys = ref(new Set<string>())
 const dialog = ref<{ mode: 'notebook' | 'folder' | 'rename' | 'delete'; value: string } | null>(null)
 const archivedNote = ref<NoteDocument | null>(null)
+const archivedFileId = ref('')
 
 function uid(prefix: string): string {
   return `${prefix}-${crypto.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`}`
@@ -78,10 +79,15 @@ function loadArchivedNote(state: Record<string, unknown>): void {
   const title = typeof state.title === 'string' ? state.title : ''
   const content = typeof state.content === 'string' ? state.content : ''
   if (!fileId || !title) {
+    archivedFileId.value = ''
     archivedNote.value = null
     return
   }
+  // A save updates the tab state for the same archive. Rehydrating it here would
+  // replace activeNote, whose watcher writes the tab state again indefinitely.
+  if (fileId === archivedFileId.value) return
   const now = new Date().toISOString()
+  archivedFileId.value = fileId
   archivedNote.value = {
     id: `file-manager-${fileId}`,
     notebookId: '',
@@ -97,7 +103,11 @@ function loadArchivedNote(state: Record<string, unknown>): void {
   }
 }
 
-watch(() => props.state, loadArchivedNote, { deep: true, immediate: true })
+watch(
+  () => typeof props.state.__fileManagerFileId === 'string' ? props.state.__fileManagerFileId : '',
+  () => loadArchivedNote(props.state),
+  { immediate: true },
+)
 watch(activeNote, (note) => {
   if (note) emit('update:state', archivedState(note))
 }, { deep: true, immediate: true })

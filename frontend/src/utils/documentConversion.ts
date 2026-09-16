@@ -1,14 +1,29 @@
-import { AlignmentType, Document as DocxDocument, ImageRun, Packer, Paragraph, TextRun } from 'docx'
-import { renderAsync } from 'docx-preview'
-import html2canvas from 'html2canvas'
-import { jsPDF } from 'jspdf'
-import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist'
+import type { Paragraph } from 'docx'
 import type { TextItem } from 'pdfjs-dist/types/src/display/api'
-import PdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?worker'
 
-function ensurePdfWorker(): void {
-  if (GlobalWorkerOptions.workerPort) return
-  GlobalWorkerOptions.workerPort = new PdfWorker()
+type DocxModule = typeof import('docx')
+type PdfModule = typeof import('pdfjs-dist/build/pdf.mjs')
+type DocxDocumentOptions = ConstructorParameters<DocxModule['Document']>[0]
+
+let docxModulePromise: Promise<DocxModule> | undefined
+let pdfModulePromise: Promise<PdfModule> | undefined
+let pdfWorkerPromise: Promise<{ default: new () => Worker }> | undefined
+
+function loadDocx(): Promise<DocxModule> {
+  docxModulePromise ??= import('docx')
+  return docxModulePromise
+}
+
+function loadPdf(): Promise<PdfModule> {
+  pdfModulePromise ??= import('pdfjs-dist/build/pdf.mjs')
+  return pdfModulePromise
+}
+
+async function ensurePdfWorker(pdf: PdfModule): Promise<void> {
+  if (pdf.GlobalWorkerOptions.workerPort) return
+  pdfWorkerPromise ??= import('pdfjs-dist/build/pdf.worker.min.mjs?worker')
+  const { default: PdfWorker } = await pdfWorkerPromise
+  if (!pdf.GlobalWorkerOptions.workerPort) pdf.GlobalWorkerOptions.workerPort = new PdfWorker()
 }
 
 export interface PdfExportOptions {
@@ -89,7 +104,8 @@ function pageLines(items: TextItem[]): string[] {
     .map((item) => ({ text: item.str, x: item.transform[4] ?? 0, y: item.transform[5] ?? 0, width: item.width ?? 0 }))
     .sort((left, right) => right.y - left.y || left.x - right.x)
   for (const item of sorted) {
-    let line = lines.find((candidate) => Math.abs(candidate.y - item.y) <= 3)
+    let line = lines[lines.length - 1]
+    if (line && Math.abs(line.y - item.y) > 3) line = undefined
     if (!line) {
       line = { y: item.y, items: [] }
       lines.push(line)
@@ -106,15 +122,16 @@ function pageLines(items: TextItem[]): string[] {
 }
 
 export async function extractPdfText(file: File): Promise<ExtractedPdfText> {
-  ensurePdfWorker()
-  const loadingTask = getDocument({ data: new Uint8Array(await file.arrayBuffer()) })
+  const pdfModule = await loadPdf()
+  await ensurePdfWorker(pdfModule)
+  const loadingTask = pdfModule.getDocument({ data: new Uint8Array(await file.arrayBuffer()) })
   const pdf = await loadingTask.promise
   const pages: string[][] = []
   try {
     for (let index = 1; index <= pdf.numPages; index += 1) {
       const page = await pdf.getPage(index)
       const content = await page.getTextContent()
-      pages.push(pageLines(content.items.filter((item): item is TextItem => 'str' in item && 'transform' in item)))
+      pages.push(pageLines(content.items.filter((item): item is TextItem => Boolean(item && typeof item === 'object' && 'str' in item && 'transform' in item))))
       page.cleanup()
     }
   } finally {
@@ -128,6 +145,7 @@ export async function extractPdfText(file: File): Promise<ExtractedPdfText> {
 }
 
 export async function extractedTextToDocx(title: string, extracted: ExtractedPdfText): Promise<Blob> {
+  const { Document: DocxDocument, Packer, Paragraph, TextRun } = await loadDocx()
   const children: Paragraph[] = [new Paragraph({ children: [new TextRun({ text: title, bold: true, size: 32 })] })]
   extracted.pages.forEach((page, pageIndex) => {
     if (pageIndex) children.push(new Paragraph({ children: [new TextRun({ text: `Page ${pageIndex + 1}`, bold: true, color: '6B7280' })], pageBreakBefore: true }))
@@ -167,10 +185,12 @@ function sliceRanges(total: number, nominalSize: number): Array<{ offset: number
 }
 
 export async function pdfPagesToImageDocx(file: File): Promise<Blob> {
-  ensurePdfWorker()
-  const loadingTask = getDocument({ data: new Uint8Array(await file.arrayBuffer()) })
+  const [pdfModule, docxModule] = await Promise.all([loadPdf(), loadDocx()])
+  await ensurePdfWorker(pdfModule)
+  const { AlignmentType, Document: DocxDocument, ImageRun, Packer, Paragraph } = docxModule
+  const loadingTask = pdfModule.getDocument({ data: new Uint8Array(await file.arrayBuffer()) })
   const pdf = await loadingTask.promise
-  const sections: ConstructorParameters<typeof DocxDocument>[0]['sections'][number][] = []
+  const sections: DocxDocumentOptions['sections'][number][] = []
   try {
     for (let index = 1; index <= pdf.numPages; index += 1) {
       const page = await pdf.getPage(index)
@@ -243,9 +263,10 @@ export interface PdfLayoutPreviewController {
 }
 
 export async function renderPdfLayoutPreview(file: File, container: HTMLElement): Promise<PdfLayoutPreviewController> {
-  ensurePdfWorker()
+  const pdfModule = await loadPdf()
+  await ensurePdfWorker(pdfModule)
   container.replaceChildren()
-  const loadingTask = getDocument({ data: new Uint8Array(await file.arrayBuffer()) })
+  const loadingTask = pdfModule.getDocument({ data: new Uint8Array(await file.arrayBuffer()) })
   const pdf = await loadingTask.promise
   const pageDetails: Array<{
     pageNumber: number
@@ -393,6 +414,7 @@ export function normalizeDocxTableWidths(container: HTMLElement): number {
 }
 
 export async function renderDocx(file: File, container: HTMLElement): Promise<HTMLElement[]> {
+  const { renderAsync } = await import('docx-preview')
   container.replaceChildren()
   await renderAsync(file, container, container, {
     breakPages: true,
@@ -458,6 +480,7 @@ export async function printHtmlDocument(frame: HTMLIFrameElement, options: PdfEx
 }
 
 export async function docxPagesToPdf(pages: HTMLElement[], options: PdfExportOptions): Promise<Blob> {
+  const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import('html2canvas'), import('jspdf')])
   const margin = Math.max(0, Math.min(72, options.margin))
   const pdf = new jsPDF({ orientation: options.orientation, unit: 'pt', format: options.format, compress: true })
   const contentWidth = pdf.internal.pageSize.getWidth() - margin * 2
