@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Activity, Braces, CircleDot, Copy, Plus, Save, Send, ShieldCheck, Square, Trash2, X } from '@lucide/vue'
+import { Activity, Braces, CircleDot, Copy, FolderArchive, Plus, Send, ShieldCheck, Square, Trash2 } from '@lucide/vue'
 import { computed, reactive, ref, watch } from 'vue'
 
 import CodeEditor from '@/components/CodeEditor.vue'
@@ -7,20 +7,10 @@ import IconButton from '@/components/IconButton.vue'
 import ResizableSplit from '@/components/ResizableSplit.vue'
 import ToolChainButton from '@/components/ToolChainButton.vue'
 import { useToastStore } from '@/stores/toast'
-import { buildRequestUrl, isSensitiveHeader, keyValuesToHeaders, normalizeApiKeyValues, readApiResponse, type ApiKeyValue, type ApiResponseSnapshot } from '@/utils/apiDebugger'
+import { buildRequestUrl, keyValuesToHeaders, normalizeApiKeyValues, readApiResponse, type ApiKeyValue, type ApiResponseSnapshot } from '@/utils/apiDebugger'
 import { copyText } from '@/utils/clipboard'
 
 type ApiMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD'
-
-interface SavedRequest {
-  id: string
-  name: string
-  method: ApiMethod
-  url: string
-  params: ApiKeyValue[]
-  headers: ApiKeyValue[]
-  body: string
-}
 
 interface ApiClientState {
   method: ApiMethod
@@ -28,11 +18,13 @@ interface ApiClientState {
   params: ApiKeyValue[]
   headers: ApiKeyValue[]
   split: number
-  savedRequests: SavedRequest[]
 }
 
 const props = defineProps<{ state: Record<string, unknown> }>()
-const emit = defineEmits<{ 'update:state': [state: Record<string, unknown>] }>()
+const emit = defineEmits<{
+  'update:state': [state: Record<string, unknown>]
+  archive: [payload: { title: string; state: Record<string, unknown> }]
+}>()
 const toast = useToastStore()
 const methods: ApiMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD']
 const validMethods = new Set<ApiMethod>(methods)
@@ -41,72 +33,37 @@ function apiMethod(value: unknown): ApiMethod {
   return typeof value === 'string' && validMethods.has(value as ApiMethod) ? value as ApiMethod : 'GET'
 }
 
-function requestId(): string {
-  return crypto.randomUUID?.() ?? `request-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-}
-
-function redactBody(value: string): string {
-  if (!value.trim()) return ''
-  try {
-    const redact = (item: unknown, key = ''): unknown => {
-      if (/^(?:access_?token|refresh_?token|id_?token|token|password|client_?secret)$/i.test(key)) return '<redacted>'
-      if (Array.isArray(item)) return item.map((entry) => redact(entry))
-      if (item && typeof item === 'object') return Object.fromEntries(Object.entries(item).map(([entryKey, entryValue]) => [entryKey, redact(entryValue, entryKey)]))
-      return item
-    }
-    return JSON.stringify(redact(JSON.parse(value)), null, 2)
-  } catch {
-    return value.replace(/((?:access_?token|refresh_?token|id_?token|token|password|client_?secret)\s*[=:]\s*)([^&\s,"}]+)/gi, '$1<redacted>')
-  }
-}
-
-function savedRequests(value: unknown): SavedRequest[] {
-  if (!Array.isArray(value)) return []
-  return value.slice(0, 20).flatMap((item) => {
-    if (!item || typeof item !== 'object') return []
-    const request = item as Partial<SavedRequest>
-    const name = typeof request.name === 'string' ? request.name.trim() : ''
-    const url = typeof request.url === 'string' ? request.url.trim() : ''
-    if (!name || !url) return []
-    return [{
-      id: typeof request.id === 'string' && request.id ? request.id : requestId(),
-      name,
-      method: apiMethod(request.method),
-      url,
-      params: normalizeApiKeyValues(request.params),
-      headers: normalizeApiKeyValues(request.headers),
-      body: redactBody(typeof request.body === 'string' ? request.body : ''),
-    }]
-  })
-}
-
 const model = reactive<ApiClientState>({
   method: apiMethod(props.state.method),
   url: typeof props.state.url === 'string' ? props.state.url : '',
   params: normalizeApiKeyValues(props.state.params, true),
-  headers: normalizeApiKeyValues(props.state.headers),
+  headers: normalizeApiKeyValues(props.state.headers, true),
   split: typeof props.state.split === 'number' ? props.state.split : 48,
-  savedRequests: savedRequests(props.state.savedRequests),
 })
 const body = ref(typeof props.state.body === 'string' ? props.state.body : '')
-const authorization = ref('')
-const authorizationScheme = ref<'bearer' | 'basic' | 'raw'>('bearer')
+const authorization = ref(typeof props.state.authorization === 'string' ? props.state.authorization : '')
+const authorizationScheme = ref<'bearer' | 'basic' | 'raw'>(props.state.authorizationScheme === 'basic' || props.state.authorizationScheme === 'raw' ? props.state.authorizationScheme : 'bearer')
+const fileManagerFileId = typeof props.state.__fileManagerFileId === 'string' ? props.state.__fileManagerFileId : ''
 const savedName = ref('')
-const selectedSavedRequest = ref('')
 const busy = ref(false)
 const error = ref('')
 const response = ref<ApiResponseSnapshot | null>(null)
 const responseBody = ref('')
 let controller: AbortController | null = null
 
-watch(model, () => {
-  emit('update:state', {
+function currentRequestState(): Record<string, unknown> {
+  return {
     ...model,
     params: normalizeApiKeyValues(model.params),
-    headers: normalizeApiKeyValues(model.headers),
-    savedRequests: model.savedRequests.map((request) => ({ ...request, params: normalizeApiKeyValues(request.params), headers: normalizeApiKeyValues(request.headers), body: redactBody(request.body) })),
-  })
-}, { deep: true, immediate: true })
+    headers: normalizeApiKeyValues(model.headers, true),
+    body: body.value,
+    authorization: authorization.value,
+    authorizationScheme: authorizationScheme.value,
+    ...(fileManagerFileId ? { __fileManagerFileId: fileManagerFileId } : {}),
+  }
+}
+
+watch([model, body, authorization, authorizationScheme], () => emit('update:state', currentRequestState()), { deep: true, immediate: true })
 
 const canSendBody = computed(() => !['GET', 'HEAD'].includes(model.method))
 const responseSummary = computed(() => response.value
@@ -188,41 +145,14 @@ function cancel(): void {
   controller?.abort()
 }
 
-function saveCurrent(): void {
+function saveToFileManager(): void {
   const name = savedName.value.trim() || `${model.method} ${model.url || '未命名请求'}`
-  const record: SavedRequest = {
-    id: requestId(),
-    name,
-    method: model.method,
-    url: model.url,
-    params: normalizeApiKeyValues(model.params),
-    headers: normalizeApiKeyValues(model.headers),
-    body: redactBody(body.value),
-  }
-  if (!record.url.trim()) {
+  if (!model.url.trim()) {
     toast.show('请先填写请求地址', 'error')
     return
   }
-  model.savedRequests = [record, ...model.savedRequests.filter((item) => item.name !== record.name)].slice(0, 20)
+  emit('archive', { title: name, state: currentRequestState() })
   savedName.value = ''
-  toast.show('请求已保存到当前工具工作区', 'success')
-}
-
-function loadSaved(value: string): void {
-  const record = model.savedRequests.find((item) => item.id === value)
-  selectedSavedRequest.value = ''
-  if (!record) return
-  model.method = record.method
-  model.url = record.url
-  model.params = record.params.map((item) => ({ ...item }))
-  model.headers = record.headers.map((item) => ({ ...item }))
-  body.value = record.body
-  authorization.value = ''
-  toast.show(`已载入 ${record.name}`, 'success')
-}
-
-function removeSaved(value: string): void {
-  model.savedRequests = model.savedRequests.filter((item) => item.id !== value)
 }
 
 async function copyResponse(): Promise<void> {
@@ -250,11 +180,10 @@ function clear(): void {
         <div>
           <div class="api-eyebrow"><span>HTTP WORKBENCH</span><i></i><span>LOCAL</span></div>
           <h1>API 调试台</h1>
-          <p :class="{ error }">{{ error || '仅在发送时访问目标地址；认证值与敏感 Header 不会保存到工作区。' }}</p>
+          <p :class="{ error }">{{ error || '仅在发送时访问目标地址；手动保存后可在文件管理器中恢复这份请求。' }}</p>
         </div>
       </div>
       <div class="toolbar api-header-actions">
-        <label class="api-saved-select">本地请求<select v-model="selectedSavedRequest" aria-label="载入本地请求" @change="loadSaved(selectedSavedRequest)"><option value="">选择已保存请求</option><option v-for="item in model.savedRequests" :key="item.id" :value="item.id">{{ item.name }}</option></select></label>
         <IconButton v-if="busy" :icon="Square" label="取消请求" danger @click="cancel" />
         <ToolChainButton :value="responseBody" source-name="API 响应" />
         <IconButton :icon="Trash2" label="清空当前请求" :disabled="!model.url && !body && !responseBody" @click="clear" />
@@ -274,15 +203,10 @@ function clear(): void {
     </div>
 
     <div class="api-save-strip">
+      <span class="api-archive-mark" title="将当前请求配置保存到文件管理器"><FolderArchive :size="15" /></span>
       <div class="api-save-form">
-        <input v-model="savedName" aria-label="保存请求名称" maxlength="80" placeholder="为当前请求命名（可选）" @keydown.enter.prevent="saveCurrent" />
-        <button class="command-button secondary" type="button" @click="saveCurrent"><Save :size="15" />保存请求</button>
-      </div>
-      <div v-if="model.savedRequests.length" class="api-saved-requests">
-        <span>已保存</span>
-        <div>
-          <div v-for="item in model.savedRequests" :key="item.id" class="api-saved-chip"><button type="button" @click="loadSaved(item.id)">{{ item.name }}</button><button type="button" :aria-label="`删除 ${item.name}`" @click="removeSaved(item.id)"><X :size="14" /></button></div>
-        </div>
+        <input v-model="savedName" aria-label="保存请求名称" maxlength="80" placeholder="为当前请求命名（可选）" @keydown.enter.prevent="saveToFileManager" />
+        <button class="command-button secondary api-archive-button" type="button" aria-label="归档到文件管理器" @click="saveToFileManager"><FolderArchive :size="15" />归档</button>
       </div>
     </div>
 
@@ -315,9 +239,8 @@ function clear(): void {
       </section>
 
       <section class="api-config-section api-authorization">
-        <header><div class="api-config-title"><ShieldCheck :size="14" /><div><strong>会话认证</strong><small>关闭或切换工具后清除</small></div></div></header>
-        <div><select v-model="authorizationScheme" aria-label="认证方式"><option value="bearer">Bearer Token</option><option value="basic">Basic</option><option value="raw">原始 Authorization</option></select><input v-model="authorization" aria-label="认证值" type="password" autocomplete="off" spellcheck="false" placeholder="仅保存在当前会话内" /></div>
-        <p v-if="model.headers.some((item) => isSensitiveHeader(item.key))">敏感 Header 的值不会随工具固定或保存。</p>
+        <header><div class="api-config-title"><ShieldCheck :size="14" /><div><strong>请求认证</strong><small>手动归档后可原样恢复</small></div></div></header>
+        <div><select v-model="authorizationScheme" aria-label="认证方式"><option value="bearer">Bearer Token</option><option value="basic">Basic</option><option value="raw">原始 Authorization</option></select><input v-model="authorization" aria-label="认证值" type="password" autocomplete="off" spellcheck="false" placeholder="认证值" /></div>
       </section>
       </aside>
 

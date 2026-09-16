@@ -306,6 +306,21 @@ class DesktopApi:
         except StorageError as exc:
             return _failure("NOTES_SAVE_FAILED", str(exc))
 
+    def load_file_manager(self) -> dict[str, Any]:
+        try:
+            return _success(self._storage.load_file_manager())
+        except StorageError as exc:
+            return _failure("FILE_MANAGER_LOAD_FAILED", str(exc))
+
+    def save_file_manager(self, payload: Any) -> dict[str, Any]:
+        try:
+            if not isinstance(payload, dict):
+                raise StorageError("文件管理器格式无效")
+            self._storage.save_file_manager(payload)
+            return _success()
+        except StorageError as exc:
+            return _failure("FILE_MANAGER_SAVE_FAILED", str(exc))
+
     def read_hosts(self) -> dict[str, Any]:
         try:
             raw = self._hosts_path.read_bytes()

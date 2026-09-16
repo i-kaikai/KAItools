@@ -51,8 +51,10 @@ export interface FlowEdgeState {
   id: string
   source: string
   sourcePort: string
+  sourcePoint?: FlowEdgeVertex
   target: string
   targetPort: string
+  targetPoint?: FlowEdgeVertex
   vertices: FlowEdgeVertex[]
   route: EdgeRoute
   label: string
@@ -169,8 +171,10 @@ export function createFlowEdge(source: FlowNodeState, target: FlowNodeState, ove
     id: createId('edge'),
     source: source.id,
     sourcePort: 'right',
+    sourcePoint: undefined,
     target: target.id,
     targetPort: 'left',
+    targetPoint: undefined,
     vertices: [],
     route: 'orthogonal',
     label: '',
@@ -290,6 +294,16 @@ function vertices(value: unknown): FlowEdgeVertex[] {
   })
 }
 
+function point(value: unknown): FlowEdgeVertex | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const candidate = value as Partial<FlowEdgeVertex>
+  if (typeof candidate.x !== 'number' || !Number.isFinite(candidate.x) || typeof candidate.y !== 'number' || !Number.isFinite(candidate.y)) return undefined
+  return {
+    x: numberInRange(candidate.x, 0, -20_000, 20_000),
+    y: numberInRange(candidate.y, 0, -20_000, 20_000),
+  }
+}
+
 function readNode(value: unknown): FlowNodeState | null {
   if (!value || typeof value !== 'object') return null
   const source = value as Partial<FlowNodeState>
@@ -322,14 +336,20 @@ function readNode(value: unknown): FlowNodeState | null {
 function readEdge(value: unknown, ids: Set<string>): FlowEdgeState | null {
   if (!value || typeof value !== 'object') return null
   const source = value as Partial<FlowEdgeState>
-  if (typeof source.id !== 'string' || !source.id || typeof source.source !== 'string' || typeof source.target !== 'string') return null
-  if (!ids.has(source.source) || !ids.has(source.target)) return null
+  if (typeof source.id !== 'string' || !source.id) return null
+  const sourceId = typeof source.source === 'string' && ids.has(source.source) ? source.source : ''
+  const targetId = typeof source.target === 'string' && ids.has(source.target) ? source.target : ''
+  const sourcePoint = sourceId ? undefined : point(source.sourcePoint)
+  const targetPoint = targetId ? undefined : point(source.targetPoint)
+  if ((!sourceId && !sourcePoint) || (!targetId && !targetPoint)) return null
   return {
     id: source.id,
-    source: source.source,
-    sourcePort: typeof source.sourcePort === 'string' && portIds.includes(source.sourcePort as typeof portIds[number]) ? source.sourcePort : 'right',
-    target: source.target,
-    targetPort: typeof source.targetPort === 'string' && portIds.includes(source.targetPort as typeof portIds[number]) ? source.targetPort : 'left',
+    source: sourceId,
+    sourcePort: sourceId && typeof source.sourcePort === 'string' && portIds.includes(source.sourcePort as typeof portIds[number]) ? source.sourcePort : '',
+    sourcePoint,
+    target: targetId,
+    targetPort: targetId && typeof source.targetPort === 'string' && portIds.includes(source.targetPort as typeof portIds[number]) ? source.targetPort : '',
+    targetPoint,
     vertices: vertices(source.vertices),
     route: route(source.route),
     label: typeof source.label === 'string' ? source.label.slice(0, 120) : '',

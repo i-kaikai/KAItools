@@ -4,6 +4,7 @@ import type {
   BackendConnection,
   BootstrapState,
   DashboardCards,
+  FileManagerState,
   DocumentConversionCapabilities,
   DocumentConversionPayload,
   DocumentConversionResult,
@@ -20,6 +21,7 @@ import type {
 } from '@/types'
 import { isWebRuntime } from '@/runtime'
 import { loadBrowserNotes, saveBrowserNotes } from '@/api/notesStorage'
+import { loadBrowserFileManager, saveBrowserFileManager } from '@/api/fileManagerStorage'
 import { defaultDashboardCards } from '@/tools/home/dashboardCards'
 import { DEFAULT_LOCAL_API_ORIGIN, resolveLocalServiceOrigin } from '@/api/remoteApi'
 import { APP_VERSION } from '@/version'
@@ -120,7 +122,7 @@ function defaultBrowserState(): BootstrapState {
       activationHotkey: 'Ctrl+Alt+K',
     },
     backendConnection: { schemaVersion: 1, localApiOrigin: DEFAULT_LOCAL_API_ORIGIN, useLocalApi: false },
-    sidebarShortcuts: { schemaVersion: 1, toolIds: ['notes', 'json', 'calculator', 'java', 'timestamp', 'base64-text', 'cron', 'hosts', 'clipboard-history', 'md5'] },
+    sidebarShortcuts: { schemaVersion: 1, toolIds: ['file-manager', 'notes', 'json', 'calculator', 'java', 'timestamp', 'base64-text', 'cron', 'hosts', 'clipboard-history', 'md5'] },
     shortcutSync: { schemaVersion: 1, accountId: null, mode: 'pending', revision: null, pendingToolIds: null },
     dashboardCards: defaultDashboardCards(),
     workspace: { schemaVersion: 1, tabs: [] },
@@ -312,6 +314,21 @@ async function browserInvoke<T>(method: string, args: unknown[]): Promise<ApiRes
       return { ok: false, error: { code: 'BROWSER_NOTES_SAVE_FAILED', message: error instanceof Error ? error.message : String(error) } }
     }
   }
+  if (method === 'load_file_manager') {
+    try {
+      return { ok: true, data: await loadBrowserFileManager() as T }
+    } catch (error) {
+      return { ok: false, error: { code: 'BROWSER_FILE_MANAGER_LOAD_FAILED', message: error instanceof Error ? error.message : String(error) } }
+    }
+  }
+  if (method === 'save_file_manager') {
+    try {
+      await saveBrowserFileManager(args[0] as FileManagerState)
+      return { ok: true, data: undefined as T }
+    } catch (error) {
+      return { ok: false, error: { code: 'BROWSER_FILE_MANAGER_SAVE_FAILED', message: error instanceof Error ? error.message : String(error) } }
+    }
+  }
   if (method === 'save_workspace') {
     try {
       const payload = args[0] as { tabs: ToolTab[] }
@@ -416,6 +433,8 @@ export const desktopApi = {
   saveWorkspace: (tabs: ToolTab[]) => invoke<void>('save_workspace', { tabs }),
   loadNotes: () => invoke<NotesState>('load_notes'),
   saveNotes: (notes: NotesState) => invoke<void>('save_notes', notes),
+  loadFileManager: () => invoke<FileManagerState>('load_file_manager'),
+  saveFileManager: (state: FileManagerState) => invoke<void>('save_file_manager', state),
   readHosts: () => invoke<HostsSnapshot>('read_hosts'),
   applyHosts: (content: string, sourceSha256: string, previewOnly: boolean) =>
     invoke<HostsPreview>('apply_hosts', { content, sourceSha256, previewOnly }),

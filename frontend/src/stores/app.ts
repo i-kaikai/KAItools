@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { toRaw } from 'vue'
 
 import { desktopApi } from '@/api/desktopApi'
+import { defaultFileManagerState, isArchivableTool } from '@/api/fileManagerStorage'
 import { defaultNotesState } from '@/api/notesStorage'
 import {
   getRemoteShortcuts,
@@ -17,18 +18,37 @@ import {
 import { useToastStore } from '@/stores/toast'
 import { setActiveLocale, translateForLocale } from '@/i18n'
 import { defaultDashboardCards, localizeSystemDashboardCards } from '@/tools/home/dashboardCards'
-import type { AppLocale, AppSettings, BackendConnection, DashboardCards, HostsProfiles, NotesState, RuntimeInfo, ShortcutSyncState, SidebarShortcuts, ThemeMode, ToolId, ToolTab } from '@/types'
+import type { AppLocale, AppSettings, BackendConnection, DashboardCards, FileManagerFile, FileManagerState, HostsProfiles, NotesState, RuntimeInfo, ShortcutSyncState, SidebarShortcuts, ThemeMode, ToolId, ToolTab } from '@/types'
 
 // Debounce persistence separately so high-frequency editor and tab interactions never block rendering.
 let workspaceTimer: number | undefined
 let settingsTimer: number | undefined
 let notesTimer: number | undefined
+let fileManagerTimer: number | undefined
 let mediaQuery: MediaQueryList | undefined
 let motionQuery: MediaQueryList | undefined
-const knownToolIds = new Set<ToolId>(['notes', 'json', 'json-diff', 'json-java', 'api-client', 'jwt', 'mermaid', 'flowchart', 'kanban', 'java', 'timestamp', 'base64-text', 'base64-image', 'base64-file', 'qrcode', 'image-studio', 'image-format', 'video-audio', 'html-pdf', 'word-pdf', 'pdf-word', 'cron', 'sql', 'yaml', 'xml', 'text-diff', 'text-stats', 'regex', 'md5', 'naming', 'identifiers', 'hosts', 'clipboard-history', 'calculator'])
+const knownToolIds = new Set<ToolId>(['file-manager', 'notes', 'json', 'json-diff', 'json-java', 'api-client', 'jwt', 'mermaid', 'flowchart', 'kanban', 'java', 'timestamp', 'base64-text', 'base64-image', 'base64-file', 'qrcode', 'image-studio', 'image-format', 'video-audio', 'html-pdf', 'word-pdf', 'pdf-word', 'cron', 'sql', 'yaml', 'xml', 'text-diff', 'text-stats', 'regex', 'md5', 'naming', 'identifiers', 'hosts', 'clipboard-history', 'calculator'])
 
 function id(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function copyLocalFileManager(value: FileManagerState): FileManagerState {
+  return JSON.parse(JSON.stringify(value)) as FileManagerState
+}
+
+function archiveEditableState(toolId: ToolId, state: Record<string, unknown>): Record<string, unknown> {
+  const snapshot = JSON.parse(JSON.stringify(state)) as Record<string, unknown>
+  delete snapshot.__fileManagerAttachments
+  if (toolId === 'qrcode') delete snapshot.output
+  if (toolId === 'calculator') delete snapshot.expressionResult
+  if (toolId === 'md5') delete snapshot.output
+  if (toolId === 'html-pdf' || toolId === 'word-pdf' || toolId === 'pdf-word') {
+    delete snapshot.pageCount
+    delete snapshot.lineCount
+    delete snapshot.characterCount
+  }
+  return snapshot
 }
 
 function defaultShortcutSync(): ShortcutSyncState {
@@ -116,7 +136,7 @@ export const useAppStore = defineStore('app', {
     settings: defaultAppSettings() as AppSettings,
     systemReducedMotion: false,
     backendConnection: { schemaVersion: 1, localApiOrigin: DEFAULT_LOCAL_API_ORIGIN, useLocalApi: false } as BackendConnection,
-    sidebarShortcuts: { schemaVersion: 1, toolIds: ['notes', 'json', 'calculator', 'java', 'timestamp', 'base64-text', 'cron', 'hosts', 'clipboard-history', 'md5'] } as SidebarShortcuts,
+    sidebarShortcuts: { schemaVersion: 1, toolIds: ['file-manager', 'notes', 'json', 'calculator', 'java', 'timestamp', 'base64-text', 'cron', 'hosts', 'clipboard-history', 'md5'] } as SidebarShortcuts,
     shortcutSync: defaultShortcutSync() as ShortcutSyncState,
     dashboardCards: defaultDashboardCards() as DashboardCards,
     account: null as RemoteAccount | null,
@@ -126,6 +146,7 @@ export const useAppStore = defineStore('app', {
     shortcutSyncing: false,
     hostsProfiles: { schemaVersion: 1, groups: [] } as HostsProfiles,
     notes: defaultNotesState() as NotesState,
+    fileManager: defaultFileManagerState() as FileManagerState,
     tabs: [] as ToolTab[],
     activeTabId: '',
     runtime: null as RuntimeInfo | null,
@@ -190,13 +211,20 @@ export const useAppStore = defineStore('app', {
       const notesResult = await desktopApi.loadNotes()
       if (notesResult.ok) this.notes = notesResult.data
       else useToastStore().show(notesResult.error.message, 'error')
+      const fileManagerResult = await desktopApi.loadFileManager()
+      if (fileManagerResult.ok) this.fileManager = fileManagerResult.data
+      else useToastStore().show(`文件管理器未加载：${fileManagerResult.error.message}`, 'error')
       this.ready = true
       // Session restoration is deliberately asynchronous: local tools remain usable when the API is offline.
       void this.restoreSession()
     },
     openTool(toolId: ToolId, title: string, initialState: Record<string, unknown>, singleton = false, forceNew = false) {
       const existing = this.tabs.find((tab) => tab.toolId === toolId)
-      if (existing && (singleton || !forceNew)) { this.activeTabId = existing.id; return }
+      if (existing && (singleton || !forceNew)) {
+        if (singleton && forceNew && typeof initialState.__fileManagerFileId === 'string') existing.state = structuredClone(initialState)
+        this.activeTabId = existing.id
+        return
+      }
       const sameToolCount = this.tabs.filter((tab) => tab.toolId === toolId).length
       this.tabs.push({ id: id(toolId), toolId, title: sameToolCount ? `${title} ${sameToolCount + 1}` : title, pinned: false, state: structuredClone(initialState) })
       this.activeTabId = this.tabs.at(-1)?.id ?? ''
@@ -307,7 +335,7 @@ export const useAppStore = defineStore('app', {
       this.queueShortcutSync()
       this.scheduleSettingsSave()
     },
-    resetSidebarShortcuts() { this.setSidebarShortcuts(['notes', 'json', 'calculator', 'java', 'timestamp', 'base64-text', 'cron', 'hosts', 'clipboard-history', 'md5']) },
+    resetSidebarShortcuts() { this.setSidebarShortcuts(['file-manager', 'notes', 'json', 'calculator', 'java', 'timestamp', 'base64-text', 'cron', 'hosts', 'clipboard-history', 'md5']) },
     setBackendConnection(connection: BackendConnection) {
       this.backendConnection = {
         schemaVersion: 1,
@@ -369,6 +397,44 @@ export const useAppStore = defineStore('app', {
         const result = await desktopApi.saveNotes(structuredClone(toRaw(this.notes)))
         if (!result.ok) useToastStore().show(`笔记未保存：${result.error.message}`, 'error')
       }, 450)
+    },
+    setFileManager(fileManager: FileManagerState) {
+      this.fileManager = copyLocalFileManager(fileManager)
+      this.scheduleFileManagerSave()
+    },
+    archiveToolState(toolId: ToolId, title: string, state: Record<string, unknown>): FileManagerFile | null {
+      if (!isArchivableTool(toolId)) return null
+      const snapshot = archiveEditableState(toolId, state)
+      const existingId = typeof snapshot.__fileManagerFileId === 'string' ? snapshot.__fileManagerFileId : ''
+      delete snapshot.__fileManagerFileId
+      const now = new Date().toISOString()
+      const existing = existingId ? this.fileManager.files.find((file) => file.id === existingId && file.toolId === toolId) : undefined
+      const file: FileManagerFile = existing
+        ? { ...existing, title: title.trim().slice(0, 160) || existing.title, state: snapshot, updatedAt: now }
+        : {
+          id: id('file'),
+          folderId: null,
+          title: title.trim().slice(0, 160) || '未命名文件',
+          toolId,
+          payloadVersion: 1,
+          state: snapshot,
+          attachments: [],
+          createdAt: now,
+          updatedAt: now,
+        }
+      this.fileManager = {
+        ...this.fileManager,
+        files: existing ? this.fileManager.files.map((item) => item.id === file.id ? file : item) : [file, ...this.fileManager.files],
+      }
+      this.scheduleFileManagerSave()
+      return file
+    },
+    scheduleFileManagerSave() {
+      window.clearTimeout(fileManagerTimer)
+      fileManagerTimer = window.setTimeout(async () => {
+        const result = await desktopApi.saveFileManager(copyLocalFileManager(this.fileManager))
+        if (!result.ok) useToastStore().show(`文件管理器未保存：${result.error.message}`, 'error')
+      }, 350)
     },
     async persistSettings(): Promise<boolean> {
       const result = await desktopApi.saveSettings({

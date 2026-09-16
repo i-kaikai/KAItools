@@ -12,14 +12,22 @@ import { analyzeJwt, type JwtAnalysis } from '@/utils/jwt'
 const props = defineProps<{ state: Record<string, unknown> }>()
 const emit = defineEmits<{ 'update:state': [state: Record<string, unknown>] }>()
 const toast = useToastStore()
-const input = ref('')
+const input = ref(typeof props.state.input === 'string' ? props.state.input : '')
 const split = ref(typeof props.state.split === 'number' ? props.state.split : 47)
 const header = ref('')
 const payload = ref('')
 const analysis = ref<JwtAnalysis | null>(null)
 const error = ref('')
 
-watch(split, () => emit('update:state', { split: split.value }), { immediate: true })
+function archivedState(): Record<string, unknown> {
+  return {
+    split: split.value,
+    input: input.value,
+    ...(typeof props.state.__fileManagerFileId === 'string' ? { __fileManagerFileId: props.state.__fileManagerFileId } : {}),
+  }
+}
+
+watch([split, input], () => emit('update:state', archivedState()), { immediate: true })
 watch(input, (value) => {
   if (!value.trim()) {
     analysis.value = null
@@ -59,6 +67,7 @@ async function copy(value: string, label: string): Promise<void> {
 function clear(): void {
   input.value = ''
 }
+
 </script>
 
 <template>

@@ -32,6 +32,10 @@ class AppPaths:
         return self.notes_dir / "index.json"
 
     @property
+    def file_manager_file(self) -> Path:
+        return self.data_root / "file-manager.json"
+
+    @property
     def workspace_file(self) -> Path:
         return self.data_root / "workspace.json"
 

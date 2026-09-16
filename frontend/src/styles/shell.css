@@ -80,6 +80,11 @@ kbd { padding: 2px 4px; border: 1px solid #3a3e44; border-bottom-width: 2px; bor
 .workspace { display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; }
 .workspace-topbar { display: flex; align-items: stretch; flex: 0 0 48px; min-width: 0; border-bottom: 1px solid var(--border); background: var(--surface-subtle); }
 .tab-strip { display: flex; align-items: center; gap: 4px; flex: 1 1 auto; min-width: 0; padding: 6px 12px; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+.workspace-context-actions { display: flex; flex: 0 0 auto; align-items: center; padding: 0 6px; border-left: 1px solid var(--border); background: var(--surface-subtle); }
+.workspace-archive-action { position: relative; display: inline-grid; width: 32px; height: 32px; place-items: center; padding: 0; border: 1px solid transparent; border-radius: 5px; color: var(--accent); background: transparent; cursor: pointer; transition: transform 140ms var(--ease-out), border-color 140ms ease, background-color 140ms ease; }
+.workspace-archive-action > svg { flex: 0 0 auto; }
+.workspace-archive-action:active { transform: scale(.97); }
+@media (hover: hover) and (pointer: fine) { .workspace-archive-action:hover { border-color: color-mix(in srgb, var(--accent) 48%, var(--border)); background: var(--accent-soft); } }
 .workspace-tab { position: relative; display: flex; align-items: center; gap: 6px; min-width: 118px; max-width: 210px; height: 34px; padding: 0 4px 0 10px; border: 1px solid transparent; border-radius: 6px; color: var(--text-secondary); cursor: default; user-select: none; }
 .workspace-tab[data-tool='home'] { min-width: 92px; max-width: 92px; }
 .workspace-tab > span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -154,6 +159,7 @@ kbd { padding: 2px 4px; border: 1px solid #3a3e44; border-bottom-width: 2px; bor
 .home-active .workspace-tab[data-tool='home'] { --tool-accent: #42d6b2; }
 .home-active .tab-strip > .icon-button { color: #88939e; }
 .home-active .tab-strip > .icon-button:hover:not(:disabled) { border-color: #313943; color: #f3f6f8; background: #171c22; }
+.home-active .workspace-context-actions { border-color: #242a31; background: #0b0e12; }
 .home-active .language-menu-trigger, .home-active .account-entry { border-color: #242a31; color: #97a2ad; background: #0b0e12; }
 .home-active .language-menu { border-color: #303942; color: #e7edf1; background: #151b22; }
 .home-active .language-menu button[aria-checked='true'] { color: #e7edf1; background: rgb(66 214 178 / 12%); }

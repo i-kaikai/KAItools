@@ -3,6 +3,7 @@ import {
   Check,
   ChevronDown,
   CircleUserRound,
+  FolderArchive,
   Globe2,
   Monitor,
   Moon,
@@ -27,6 +28,7 @@ import DeveloperPanelDialog from '@/components/DeveloperPanelDialog.vue'
 import ApplicationSettingsDialog from '@/components/ApplicationSettingsDialog.vue'
 import ReleaseNotesDialog from '@/components/ReleaseNotesDialog.vue'
 import { desktopApi } from '@/api/desktopApi'
+import { isArchivableTool } from '@/api/fileManagerStorage'
 import { logoutLocalAccount } from '@/api/remoteApi'
 import { isWebRuntime } from '@/runtime'
 import ToastViewport from '@/components/ToastViewport.vue'
@@ -106,6 +108,35 @@ function openTool(toolId: keyof typeof toolsById, forceNew = false): void {
   const tool = toolsById[toolId]
   void tool.preload().catch(() => undefined)
   app.openTool(tool.id, tool.name, tool.initialState(), tool.singleton, forceNew)
+}
+
+function archiveTitle(toolId: keyof typeof toolsById, state: Record<string, unknown>): string {
+  if (toolId === 'api-client') {
+    const method = typeof state.method === 'string' ? state.method : 'GET'
+    const url = typeof state.url === 'string' ? state.url.trim() : ''
+    return url ? `${method} ${url}` : '未命名 API 请求'
+  }
+  for (const key of ['title', 'sourceName', 'outputName', 'fileName', 'className'] as const) {
+    const value = state[key]
+    if (typeof value === 'string' && value.trim()) return value.trim().slice(0, 160)
+  }
+  const input = state.input
+  if (typeof input === 'string' && input.trim()) return input.trim().split('\n')[0]!.slice(0, 80)
+  return toolsById[toolId].name
+}
+
+function archiveActiveTab(title?: string, state?: Record<string, unknown>): void {
+  const tab = app.activeTab
+  const tool = tab ? toolsById[tab.toolId] : undefined
+  if (!tab || !tool || !isArchivableTool(tool.id)) return
+  const existingId = typeof tab.state.__fileManagerFileId === 'string' ? tab.state.__fileManagerFileId : ''
+  const snapshot = state
+    ? { ...state, ...(existingId && typeof state.__fileManagerFileId !== 'string' ? { __fileManagerFileId: existingId } : {}) }
+    : tab.state
+  const file = app.archiveToolState(tool.id, title ?? archiveTitle(tool.id, snapshot), snapshot)
+  if (!file) return
+  app.updateTabState(tab.id, { ...snapshot, __fileManagerFileId: file.id })
+  toast.show(`已保存到文件管理器：${file.title}`, 'success')
 }
 
 function prefetchTool(toolId: keyof typeof toolsById): void {
@@ -392,6 +423,11 @@ onBeforeUnmount(() => {
             @click="openTool(activeTool.id, true)"
           />
         </div>
+        <div v-if="activeTool && isArchivableTool(activeTool.id)" class="workspace-context-actions">
+          <button class="workspace-archive-action tooltip-anchor" type="button" aria-label="保存当前内容到文件管理器" data-tooltip="归档到文件管理器" @click="archiveActiveTab()">
+            <FolderArchive :size="16" aria-hidden="true" />
+          </button>
+        </div>
         <div class="language-menu-wrap" @pointerdown.stop>
           <button class="language-menu-trigger" type="button" :aria-expanded="languageMenuOpen" aria-haspopup="menu" :aria-label="t('shell.selectLanguage')" @click="languageMenuOpen = !languageMenuOpen"><Globe2 :size="16" aria-hidden="true" /><span>{{ activeLocaleLabel }}</span><ChevronDown :size="13" aria-hidden="true" /></button>
           <div v-if="languageMenuOpen" class="language-menu" role="menu" :aria-label="t('shell.selectLanguage')">
@@ -432,6 +468,7 @@ onBeforeUnmount(() => {
         :key="app.activeTab.id"
         :state="app.activeTab.state"
         @update:state="app.updateTabState(app.activeTab.id, $event)"
+        @archive="archiveActiveTab($event.title, $event.state)"
       />
     </main>
     <ToolSearchDialog

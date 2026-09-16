@@ -1,0 +1,331 @@
+.file-manager-page {
+  min-height: 0;
+}
+
+.file-manager-header {
+  align-items: flex-start;
+}
+
+.file-manager-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.file-manager-actions select,
+.file-manager-filterbar select,
+.file-manager-dialog input,
+.file-manager-dialog select {
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  padding: 0 10px;
+  font: inherit;
+}
+
+.file-manager-workspace {
+  display: grid;
+  grid-template-columns: minmax(180px, 248px) minmax(0, 1fr);
+  min-height: 510px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.file-manager-tree {
+  min-width: 0;
+  padding: 10px;
+  border-right: 1px solid var(--border);
+  overflow: auto;
+}
+
+.file-manager-tree > button,
+.file-manager-folder-row > button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 36px;
+  gap: 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 0 10px;
+  text-align: left;
+  font: inherit;
+}
+
+.file-manager-tree button:hover,
+.file-manager-tree button.active {
+  background: var(--sidebar-active);
+  color: var(--sidebar-active-text);
+}
+
+.file-manager-tree small {
+  margin-left: auto;
+  color: var(--text-faint);
+}
+
+.file-manager-folder-list {
+  display: grid;
+  gap: 2px;
+  margin-top: 8px;
+}
+
+.file-manager-folder-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.file-manager-folder-row > button {
+  min-width: 0;
+}
+
+.file-manager-folder-row > button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-manager-folder-actions {
+  display: flex;
+  opacity: 0;
+}
+
+.file-manager-folder-row:hover .file-manager-folder-actions,
+.file-manager-folder-row:focus-within .file-manager-folder-actions {
+  opacity: 1;
+}
+
+.file-manager-content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.file-manager-filterbar {
+  display: flex;
+  min-height: 56px;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+  padding: 9px 14px;
+}
+
+.file-manager-filterbar > span {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.file-manager-search {
+  display: flex;
+  min-width: 180px;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  padding: 0 10px;
+  color: var(--text-faint);
+}
+
+.file-manager-search input {
+  min-width: 0;
+  height: 34px;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.file-manager-list {
+  display: grid;
+  align-content: start;
+  gap: 1px;
+  padding: 9px;
+  overflow: auto;
+}
+
+.file-manager-item {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 7px;
+}
+
+.file-manager-item:hover,
+.file-manager-item:focus-within {
+  border-color: var(--border);
+  background: var(--surface-raised);
+}
+
+.file-manager-open {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 11px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  padding: 4px;
+  text-align: left;
+  font: inherit;
+}
+
+.file-manager-open > span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.file-manager-open strong,
+.file-manager-open small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-manager-open small,
+.file-manager-item-meta > span {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.file-manager-file-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--accent);
+}
+
+.file-manager-item-meta {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.file-manager-item-meta > span {
+  margin-right: 6px;
+}
+
+.file-manager-empty {
+  display: grid;
+  min-height: 320px;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  color: var(--text-faint);
+  text-align: center;
+}
+
+.file-manager-empty strong {
+  color: var(--text-primary);
+}
+
+.file-manager-dialog-backdrop {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--surface) 45%, transparent);
+  padding: 16px;
+}
+
+.file-manager-dialog {
+  display: grid;
+  width: min(100%, 380px);
+  gap: 15px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-raised);
+  box-shadow: var(--panel-shadow);
+  padding: 16px;
+}
+
+.file-manager-dialog header,
+.file-manager-dialog footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.file-manager-dialog header button {
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.file-manager-dialog footer {
+  justify-content: flex-end;
+}
+
+@media (max-width: 760px) {
+  .file-manager-header,
+  .file-manager-actions,
+  .file-manager-filterbar {
+    align-items: stretch;
+  }
+
+  .file-manager-header,
+  .file-manager-actions {
+    flex-direction: column;
+  }
+
+  .file-manager-actions > * {
+    width: 100%;
+  }
+
+  .file-manager-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .file-manager-tree {
+    max-height: 190px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .file-manager-filterbar {
+    flex-wrap: wrap;
+  }
+
+  .file-manager-search {
+    flex-basis: 100%;
+  }
+
+  .file-manager-filterbar > span {
+    margin-left: 0;
+  }
+
+  .file-manager-item {
+    align-items: flex-start;
+  }
+
+  .file-manager-item-meta {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .file-manager-item-meta > span {
+    display: none;
+  }
+}

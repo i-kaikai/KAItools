@@ -178,6 +178,42 @@ def test_document_tools_are_valid_persistent_workspace_and_shortcut_ids(tmp_path
     assert [tab["toolId"] for tab in state["workspace"]["tabs"]] == document_tools
 
 
+def test_file_manager_round_trips_local_tool_snapshots(tmp_path: Path) -> None:
+    storage = AppStorage(paths(tmp_path))
+    storage.ensure_directories()
+    archive = {
+        "schemaVersion": 1,
+        "folders": [
+            {"id": "api", "parentId": None, "name": "接口", "createdAt": "2026-09-16T00:00:00Z", "updatedAt": "2026-09-16T00:00:00Z"}
+        ],
+        "files": [
+            {
+                "id": "request-1", "folderId": "api", "title": "GET users", "toolId": "api-client", "payloadVersion": 1,
+                "state": {"method": "GET", "url": "https://api.example.test/users", "authorization": "demo-value"}, "attachments": [],
+                "createdAt": "2026-09-16T00:00:00Z", "updatedAt": "2026-09-16T00:00:00Z",
+            }
+        ],
+    }
+
+    storage.save_file_manager(archive)
+
+    assert storage.load_file_manager() == archive
+    assert json.loads(storage.paths.file_manager_file.read_text("utf-8"))["files"][0]["state"]["authorization"] == "demo-value"
+
+
+def test_file_manager_rejects_unknown_tools_and_recovers_from_corrupt_index(tmp_path: Path) -> None:
+    storage = AppStorage(paths(tmp_path))
+    storage.ensure_directories()
+    with pytest.raises(StorageError):
+        storage.save_file_manager({"schemaVersion": 1, "folders": [], "files": [{
+            "id": "bad", "folderId": None, "title": "bad", "toolId": "clipboard-history", "payloadVersion": 1,
+            "state": {}, "attachments": [], "createdAt": "2026-09-16T00:00:00Z", "updatedAt": "2026-09-16T00:00:00Z",
+        }]})
+
+    storage.paths.file_manager_file.write_text("{broken", encoding="utf-8")
+    assert storage.load_file_manager() == {"schemaVersion": 1, "folders": [], "files": []}
+
+
 def test_dashboard_cards_round_trip_as_local_structured_settings(tmp_path: Path) -> None:
     storage = AppStorage(paths(tmp_path))
     storage.ensure_directories()

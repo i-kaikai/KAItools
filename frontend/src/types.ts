@@ -13,6 +13,7 @@ export interface EditorHighlight {
 
 export type ToolId =
   | 'home'
+  | 'file-manager'
   | 'json'
   | 'json-diff'
   | 'json-java'
@@ -252,6 +253,41 @@ export interface NotesState {
   notebooks: Notebook[]
   folders: NoteFolder[]
   notes: NoteDocument[]
+}
+
+export interface FileManagerFolder {
+  id: string
+  parentId: string | null
+  name: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface FileManagerAttachment {
+  id: string
+  name: string
+  mimeType: string
+  size: number
+  /** Inline local data for a tool snapshot. No attachment is uploaded or synchronized. */
+  dataBase64: string
+}
+
+export interface FileManagerFile {
+  id: string
+  folderId: string | null
+  title: string
+  toolId: Exclude<ToolId, 'home' | 'file-manager' | 'clipboard-history'>
+  payloadVersion: number
+  state: Record<string, unknown>
+  attachments: FileManagerAttachment[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface FileManagerState {
+  schemaVersion: number
+  folders: FileManagerFolder[]
+  files: FileManagerFile[]
 }
 
 export interface HostsBackup {

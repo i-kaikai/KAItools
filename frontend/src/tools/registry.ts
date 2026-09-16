@@ -14,6 +14,7 @@ import {
   Database,
   Diff,
   FileAudio,
+  FolderArchive,
   FileInput,
   FileJson,
   FileOutput,
@@ -128,6 +129,17 @@ export const homeTool: ToolDefinition = localizeTool({
 })
 
 const workspaceToolDefinitions: ToolDefinition[] = [
+  {
+    id: 'file-manager',
+    name: '文件管理器',
+    description: '统一管理本机工具档案与文件夹',
+    keywords: ['file', 'files', 'archive', 'folder', '文件', '文件夹', '档案', '归档'],
+    category: 'productivity',
+    icon: FolderArchive,
+    ...lazyTool(() => import('./fileManager/FileManagerTool.vue')),
+    singleton: true,
+    initialState: () => ({}),
+  },
   {
     id: 'json',
     name: 'JSON',

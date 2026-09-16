@@ -22,9 +22,15 @@ APP_LOCALES = {"zh-CN", "en-US"}
 SYSTEM_STATUS_REFRESH_INTERVALS = {0, 1, 30, 60, 300}
 SYSTEM_STATUS_REFRESH_MIGRATION_VERSION = 1
 TOOL_IDS = {
+    "file-manager",
     "json",
     "json-diff",
     "json-java",
+    "api-client",
+    "jwt",
+    "mermaid",
+    "flowchart",
+    "kanban",
     "java",
     "timestamp",
     "base64-text",
@@ -32,6 +38,7 @@ TOOL_IDS = {
     "base64-file",
     "qrcode",
     "image-studio",
+    "image-format",
     "video-audio",
     "html-pdf",
     "word-pdf",
@@ -80,7 +87,7 @@ DEFAULT_WORKSPACE: dict[str, Any] = {
 }
 DEFAULT_SIDEBAR_SHORTCUTS: dict[str, Any] = {
     "schemaVersion": SCHEMA_VERSION,
-    "toolIds": ["notes", "json", "calculator", "java", "timestamp", "base64-text", "cron", "hosts", "clipboard-history", "md5"],
+    "toolIds": ["file-manager", "notes", "json", "calculator", "java", "timestamp", "base64-text", "cron", "hosts", "clipboard-history", "md5"],
 }
 DEFAULT_SHORTCUT_SYNC: dict[str, Any] = {
     "schemaVersion": SCHEMA_VERSION,
@@ -144,6 +151,13 @@ DEFAULT_NOTES: dict[str, Any] = {
 LEGACY_DEFAULT_NOTE_CONTENT = """# KAI\n\n## Keep Approaching Ideal\n\n始终靠近理想\n\nKAITools 是面向开发者的本地优先工具空间。JSON、编码、时间、系统配置和笔记都先在当前设备完成处理；只有你主动登录并启用同步时，笔记、偏好与快捷方式才会进入服务端工作区。\n\n把这里当作产品说明、开发备忘录，或你的下一条想法。\n"""
 DEFAULT_NOTE_CONTENT = """# KAI Keep Approaching Ideal\n\n始终靠近理想\nKAITools 是面向开发者的本地优先工具空间。JSON、编码、时间、系统配置和笔记都先在当前设备完成处理；只有你主动登录并启用同步时，笔记、偏好与快捷方式才会进入服务端工作区。\n把这里当作产品说明、开发备忘录，或你的下一条想法。\n"""
 NOTE_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,79}$")
+
+
+DEFAULT_FILE_MANAGER: dict[str, Any] = {
+    "schemaVersion": SCHEMA_VERSION,
+    "folders": [],
+    "files": [],
+}
 
 
 class StorageError(RuntimeError):
@@ -697,3 +711,100 @@ class AppStorage:
             self.paths.notes_index_file,
             {"schemaVersion": SCHEMA_VERSION, "notebooks": notebooks, "folders": folders, "notes": index_notes},
         )
+
+    def load_file_manager(self) -> dict[str, Any]:
+        try:
+            return self._validate_file_manager(_read_json(self.paths.file_manager_file, DEFAULT_FILE_MANAGER))
+        except StorageError:
+            return copy.deepcopy(DEFAULT_FILE_MANAGER)
+
+    def save_file_manager(self, payload: dict[str, Any]) -> None:
+        value = self._validate_file_manager(payload)
+        atomic_write_json(self.paths.file_manager_file, value)
+
+    def _validate_file_manager(self, payload: Any) -> dict[str, Any]:
+        if not isinstance(payload, dict) or set(payload) - {"schemaVersion", "folders", "files"}:
+            raise StorageError("文件管理器格式无效")
+        if payload.get("schemaVersion") != SCHEMA_VERSION:
+            raise StorageError("文件管理器版本无效")
+        folders = payload.get("folders")
+        files = payload.get("files")
+        if not isinstance(folders, list) or not isinstance(files, list) or len(folders) > 500 or len(files) > 2000:
+            raise StorageError("文件管理器数量无效")
+        normalized_folders: list[dict[str, Any]] = []
+        folder_ids: set[str] = set()
+        for folder in folders:
+            if not isinstance(folder, dict) or set(folder) - {"id", "parentId", "name", "createdAt", "updatedAt"}:
+                raise StorageError("文件夹格式无效")
+            folder_id = folder.get("id")
+            name = folder.get("name")
+            parent_id = folder.get("parentId")
+            if (
+                not isinstance(folder_id, str)
+                or not 1 <= len(folder_id) <= 100
+                or folder_id in folder_ids
+                or not isinstance(name, str)
+                or not 1 <= len(name.strip()) <= 120
+                or parent_id is not None and not isinstance(parent_id, str)
+                or not isinstance(folder.get("createdAt"), str)
+                or not isinstance(folder.get("updatedAt"), str)
+            ):
+                raise StorageError("文件夹内容无效")
+            folder_ids.add(folder_id)
+            normalized_folders.append({**folder, "name": name.strip()})
+        for folder in normalized_folders:
+            parent_id = folder["parentId"]
+            if parent_id is not None and (parent_id not in folder_ids or parent_id == folder["id"]):
+                raise StorageError("文件夹父级无效")
+        normalized_files: list[dict[str, Any]] = []
+        file_ids: set[str] = set()
+        for file in files:
+            allowed = {"id", "folderId", "title", "toolId", "payloadVersion", "state", "attachments", "createdAt", "updatedAt"}
+            if not isinstance(file, dict) or set(file) - allowed:
+                raise StorageError("文件格式无效")
+            file_id = file.get("id")
+            folder_id = file.get("folderId")
+            title = file.get("title")
+            tool_id = file.get("toolId")
+            state = file.get("state")
+            attachments = file.get("attachments")
+            if (
+                not isinstance(file_id, str)
+                or not 1 <= len(file_id) <= 100
+                or file_id in file_ids
+                or folder_id is not None and (not isinstance(folder_id, str) or folder_id not in folder_ids)
+                or not isinstance(title, str)
+                or not 1 <= len(title.strip()) <= 160
+                or tool_id not in TOOL_IDS - {"file-manager", "clipboard-history", "hosts"}
+                or not isinstance(file.get("payloadVersion"), int)
+                or file["payloadVersion"] < 1
+                or not isinstance(state, dict)
+                or not isinstance(attachments, list)
+                or len(attachments) > 20
+                or not isinstance(file.get("createdAt"), str)
+                or not isinstance(file.get("updatedAt"), str)
+            ):
+                raise StorageError("文件内容无效")
+            attachment_ids: set[str] = set()
+            for attachment in attachments:
+                allowed_attachment = {"id", "name", "mimeType", "size", "dataBase64"}
+                if not isinstance(attachment, dict) or set(attachment) - allowed_attachment:
+                    raise StorageError("文件附件格式无效")
+                attachment_id = attachment.get("id")
+                if (
+                    not isinstance(attachment_id, str)
+                    or not 1 <= len(attachment_id) <= 100
+                    or attachment_id in attachment_ids
+                    or not isinstance(attachment.get("name"), str)
+                    or not 1 <= len(attachment["name"]) <= 260
+                    or not isinstance(attachment.get("mimeType"), str)
+                    or not 1 <= len(attachment["mimeType"]) <= 160
+                    or not isinstance(attachment.get("size"), int)
+                    or attachment["size"] < 0
+                    or not isinstance(attachment.get("dataBase64"), str)
+                ):
+                    raise StorageError("文件附件内容无效")
+                attachment_ids.add(attachment_id)
+            file_ids.add(file_id)
+            normalized_files.append({**file, "title": title.strip()})
+        return {"schemaVersion": SCHEMA_VERSION, "folders": normalized_folders, "files": normalized_files}

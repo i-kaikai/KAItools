@@ -10,8 +10,10 @@ import {
   createFolder, createNote, createNotebook, deleteNode, moveNote, noteTree, renameNode, togglePinnedNote,
   updateNote as updateNoteDocument, type NotesTreeNode as TreeNode,
 } from '@/tools/notes/notesOperations'
+import type { NoteDocument } from '@/types'
 
-defineProps<{ state: Record<string, unknown> }>()
+const props = defineProps<{ state: Record<string, unknown> }>()
+const emit = defineEmits<{ 'update:state': [state: Record<string, unknown>] }>()
 
 const app = useAppStore()
 const selectedKey = ref('')
@@ -22,6 +24,7 @@ const treeCollapsed = ref(false)
 const mobileTreeOpen = ref(false)
 const expandedKeys = ref(new Set<string>())
 const dialog = ref<{ mode: 'notebook' | 'folder' | 'rename' | 'delete'; value: string } | null>(null)
+const archivedNote = ref<NoteDocument | null>(null)
 
 function uid(prefix: string): string {
   return `${prefix}-${crypto.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`}`
@@ -29,8 +32,9 @@ function uid(prefix: string): string {
 
 const nodes = computed(() => noteTree(app.notes, search.value))
 const selectedNode = computed(() => nodes.value.find((node) => node.key === selectedKey.value) ?? null)
-const activeNote = computed(() => app.notes.notes.find((note) => note.id === activeNoteId.value) ?? app.notes.notes[0] ?? null)
+const activeNote = computed(() => archivedNote.value ?? app.notes.notes.find((note) => note.id === activeNoteId.value) ?? app.notes.notes[0] ?? null)
 const activeNotebookId = computed(() => {
+  if (archivedNote.value) return ''
   const selected = selectedNode.value
   if (!selected) return activeNote.value?.notebookId ?? app.notes.notebooks[0]?.id ?? ''
   if (selected.kind === 'notebook') return selected.id
@@ -38,6 +42,7 @@ const activeNotebookId = computed(() => {
   return app.notes.notes.find((note) => note.id === selected.id)?.notebookId ?? ''
 })
 const activeFolderId = computed<string | null>(() => {
+  if (archivedNote.value) return null
   const selected = selectedNode.value
   if (!selected) return activeNote.value?.folderId ?? null
   if (selected.kind === 'folder') return selected.id
@@ -59,6 +64,44 @@ watch(nodes, (tree) => {
   expandedKeys.value = next
 }, { immediate: true })
 
+function archivedState(note: NoteDocument): Record<string, unknown> {
+  return {
+    title: note.title,
+    content: note.content,
+    pinned: note.pinned,
+    ...(typeof props.state.__fileManagerFileId === 'string' ? { __fileManagerFileId: props.state.__fileManagerFileId } : {}),
+  }
+}
+
+function loadArchivedNote(state: Record<string, unknown>): void {
+  const fileId = typeof state.__fileManagerFileId === 'string' ? state.__fileManagerFileId : ''
+  const title = typeof state.title === 'string' ? state.title : ''
+  const content = typeof state.content === 'string' ? state.content : ''
+  if (!fileId || !title) {
+    archivedNote.value = null
+    return
+  }
+  const now = new Date().toISOString()
+  archivedNote.value = {
+    id: `file-manager-${fileId}`,
+    notebookId: '',
+    folderId: null,
+    title,
+    content,
+    pinned: state.pinned === true,
+    revision: 1,
+    syncStatus: 'local',
+    sortOrder: 0,
+    createdAt: now,
+    updatedAt: now,
+  }
+}
+
+watch(() => props.state, loadArchivedNote, { deep: true, immediate: true })
+watch(activeNote, (note) => {
+  if (note) emit('update:state', archivedState(note))
+}, { deep: true, immediate: true })
+
 function descendantsOf(parentKey: string): TreeNode[] {
   const result: TreeNode[] = []
   const visit = (key: string) => {
@@ -76,6 +119,7 @@ function expandAncestors(key: string): void {
 }
 
 function selectNode(node: TreeNode): void {
+  archivedNote.value = null
   selectedKey.value = node.key
   expandAncestors(node.key)
   if (node.kind === 'note') activeNoteId.value = node.id
@@ -150,10 +194,22 @@ function confirmDelete(): void {
   dialog.value = null
 }
 function updateCurrentNote(patch: Parameters<typeof updateNoteDocument>[2]): void {
-  if (activeNote.value) save(updateNoteDocument(app.notes, activeNote.value.id, patch))
+  if (!activeNote.value) return
+  if (archivedNote.value) {
+    archivedNote.value = { ...archivedNote.value, ...patch, updatedAt: new Date().toISOString() }
+    return
+  }
+  save(updateNoteDocument(app.notes, activeNote.value.id, patch))
 }
-function togglePinned(): void { if (activeNote.value) save(togglePinnedNote(app.notes, activeNote.value.id)) }
-function reorder(direction: -1 | 1): void { if (activeNote.value) save(moveNote(app.notes, activeNote.value.id, direction)) }
+function togglePinned(): void {
+  if (!activeNote.value) return
+  if (archivedNote.value) {
+    archivedNote.value = { ...archivedNote.value, pinned: !archivedNote.value.pinned, updatedAt: new Date().toISOString() }
+    return
+  }
+  save(togglePinnedNote(app.notes, activeNote.value.id))
+}
+function reorder(direction: -1 | 1): void { if (activeNote.value && !archivedNote.value) save(moveNote(app.notes, activeNote.value.id, direction)) }
 
 function renderMarkdown(content: string): string {
   const escape = (value: string) => value.replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character] ?? character)

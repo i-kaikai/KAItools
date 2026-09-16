@@ -14,7 +14,12 @@ function copyState(state: FlowchartState): FlowchartState {
   return {
     title: state.title,
     nodes: state.nodes.map((node) => ({ ...node })),
-    edges: state.edges.map((edge) => ({ ...edge, vertices: edge.vertices.map((vertex) => ({ ...vertex })) })),
+    edges: state.edges.map((edge) => ({
+      ...edge,
+      sourcePoint: edge.sourcePoint ? { ...edge.sourcePoint } : undefined,
+      targetPoint: edge.targetPoint ? { ...edge.targetPoint } : undefined,
+      vertices: edge.vertices.map((vertex) => ({ ...vertex })),
+    })),
   }
 }
 
