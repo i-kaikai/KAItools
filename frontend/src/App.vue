@@ -276,17 +276,24 @@ function onKeydown(event: KeyboardEvent): void {
   }
 }
 
+function preserveWorkspaceForRefresh(): void {
+  app.flushSessionWorkspace()
+}
+
 onMounted(() => {
   void app.bootstrap(homeTool.initialState())
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('pointerdown', closeTabMenu)
   window.addEventListener('blur', closeTabMenu)
+  window.addEventListener('pagehide', preserveWorkspaceForRefresh)
 })
 onBeforeUnmount(() => {
+  app.flushSessionWorkspace()
   window.clearTimeout(developerUnlockTimer)
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('pointerdown', closeTabMenu)
   window.removeEventListener('blur', closeTabMenu)
+  window.removeEventListener('pagehide', preserveWorkspaceForRefresh)
 })
 </script>
 

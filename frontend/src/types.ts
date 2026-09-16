@@ -80,6 +80,8 @@ export interface AppSettings {
   developerModeEnabled: boolean
   /** Windows desktop global shortcut that restores KAITools to the foreground. */
   activationHotkey: string
+  /** Recently used tools in most-recent-first order. Local to this device and never synced. */
+  recentToolIds: ToolId[]
 }
 
 export interface BackendConnection {

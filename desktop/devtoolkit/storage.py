@@ -21,6 +21,7 @@ SIDEBAR_STARTUP_MODES = {"remember", "collapsed", "expanded"}
 APP_LOCALES = {"zh-CN", "en-US"}
 SYSTEM_STATUS_REFRESH_INTERVALS = {0, 1, 30, 60, 300}
 SYSTEM_STATUS_REFRESH_MIGRATION_VERSION = 1
+RECENT_TOOL_LIMIT = 12
 TOOL_IDS = {
     "file-manager",
     "json",
@@ -75,6 +76,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "systemStatusRefreshMigrationVersion": SYSTEM_STATUS_REFRESH_MIGRATION_VERSION,
     "developerModeEnabled": False,
     "activationHotkey": DEFAULT_ACTIVATION_HOTKEY,
+    "recentToolIds": [],
 }
 DEFAULT_BACKEND_CONNECTION: dict[str, Any] = {
     "schemaVersion": SCHEMA_VERSION,
@@ -276,6 +278,21 @@ def _read_settings(path: Path) -> dict[str, Any]:
         if settings["activationHotkey"] != normalized:
             settings["activationHotkey"] = normalized
             changed = True
+    recent_tool_ids = settings.get("recentToolIds")
+    if not isinstance(recent_tool_ids, list):
+        settings["recentToolIds"] = []
+        changed = True
+    else:
+        normalized_recent_tool_ids: list[str] = []
+        for tool_id in recent_tool_ids:
+            if not isinstance(tool_id, str) or tool_id not in TOOL_IDS or tool_id in normalized_recent_tool_ids:
+                continue
+            normalized_recent_tool_ids.append(tool_id)
+            if len(normalized_recent_tool_ids) == RECENT_TOOL_LIMIT:
+                break
+        if recent_tool_ids != normalized_recent_tool_ids:
+            settings["recentToolIds"] = normalized_recent_tool_ids
+            changed = True
     if changed:
         atomic_write_json(path, settings)
     return settings
@@ -399,12 +416,12 @@ class AppStorage:
             settings = payload["settings"]
             if not isinstance(settings, dict):
                 raise StorageError("设置格式无效")
-            if set(settings) - {"schemaVersion", "locale", "theme", "sidebarCollapsed", "particleQuality", "motionMode", "sidebarStartup", "restorePinnedTabsOnLaunch", "editorFontSize", "editorLineWrapping", "clipboardMonitoringEnabled", "systemStatusRefreshSeconds", "systemStatusRefreshMigrationVersion", "developerModeEnabled", "activationHotkey"}:
+            if set(settings) - {"schemaVersion", "locale", "theme", "sidebarCollapsed", "particleQuality", "motionMode", "sidebarStartup", "restorePinnedTabsOnLaunch", "editorFontSize", "editorLineWrapping", "clipboardMonitoringEnabled", "systemStatusRefreshSeconds", "systemStatusRefreshMigrationVersion", "developerModeEnabled", "activationHotkey", "recentToolIds"}:
                 raise StorageError("设置中包含不支持的字段")
             if settings.get("schemaVersion", SCHEMA_VERSION) != SCHEMA_VERSION:
                 raise StorageError("设置版本无效")
             current = _read_settings(self.paths.settings_file)
-            update = {key: settings[key] for key in ("locale", "theme", "sidebarCollapsed", "particleQuality", "motionMode", "sidebarStartup", "restorePinnedTabsOnLaunch", "editorFontSize", "editorLineWrapping", "clipboardMonitoringEnabled", "systemStatusRefreshSeconds", "systemStatusRefreshMigrationVersion", "developerModeEnabled", "activationHotkey") if key in settings}
+            update = {key: settings[key] for key in ("locale", "theme", "sidebarCollapsed", "particleQuality", "motionMode", "sidebarStartup", "restorePinnedTabsOnLaunch", "editorFontSize", "editorLineWrapping", "clipboardMonitoringEnabled", "systemStatusRefreshSeconds", "systemStatusRefreshMigrationVersion", "developerModeEnabled", "activationHotkey", "recentToolIds") if key in settings}
             if "locale" in update and update["locale"] not in APP_LOCALES:
                 raise StorageError("语言设置无效")
             if "theme" in update and update["theme"] not in THEMES:
@@ -448,6 +465,13 @@ class AppStorage:
                     update["activationHotkey"] = normalize_activation_hotkey(update["activationHotkey"])
                 except HotkeyError as exc:
                     raise StorageError(str(exc)) from exc
+            if "recentToolIds" in update and (
+                not isinstance(update["recentToolIds"], list)
+                or len(update["recentToolIds"]) > RECENT_TOOL_LIMIT
+                or any(not isinstance(tool_id, str) or tool_id not in TOOL_IDS for tool_id in update["recentToolIds"])
+                or len(set(update["recentToolIds"])) != len(update["recentToolIds"])
+            ):
+                raise StorageError("最近使用工具记录无效")
             current.update(update)
             current["schemaVersion"] = SCHEMA_VERSION
             atomic_write_json(self.paths.settings_file, current)

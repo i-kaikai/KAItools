@@ -18,7 +18,7 @@ describe('application localization', () => {
 
     expect(document.documentElement.lang).toBe('en-US')
     expect(t('settings.title')).toBe('Application settings')
-    expect(translateForLocale('zh-CN', 'home.openedTools', { count: 2 })).toBe('已打开 2 个工具')
+    expect(translateForLocale('zh-CN', 'home.recentToolsCount', { count: 2 })).toBe('最近使用 2 个工具')
   })
 
   it('keeps locale choices in each language\'s own writing system', () => {

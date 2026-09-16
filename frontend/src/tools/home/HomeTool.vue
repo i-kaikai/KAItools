@@ -35,10 +35,9 @@ const categorizedTools = computed(() => toolCategories.map((category) => ({
 })))
 const pinnedNote = computed(() => app.notes.notes.find((note) => note.pinned) ?? app.notes.notes[0])
 const pinnedNotePreview = computed(() => markdownCardPreview(pinnedNote.value?.content ?? t('home.localDescription')))
-const sessionTools = computed(() => openTabs.value.flatMap((tab) => {
-  const tool = toolsById[tab.toolId]
-  return tool ? [{ tab, tool }] : []
-}).slice(0, 4))
+const recentTools = computed(() => app.settings.recentToolIds
+  .map((toolId) => toolsById[toolId])
+  .filter((tool): tool is ToolDefinition => Boolean(tool)))
 const dashboardCardManagerOpen = ref(false)
 const dashboardCardSaving = ref(false)
 const carouselItems = computed(() => [...app.dashboardCards.cards]
@@ -129,10 +128,6 @@ function openTool(tool: ToolDefinition): void {
 
 function prefetchTool(tool: ToolDefinition): void {
   void tool.preload().catch(() => undefined)
-}
-
-function activateTab(tabId: string): void {
-  app.activateTab(tabId)
 }
 
 function focusCard(tool: ToolDefinition): void {
@@ -229,16 +224,16 @@ async function saveDashboardCards(dashboardCards: DashboardCards): Promise<void>
             <div><b>{{ app.notes.notes.length.toString().padStart(2, '0') }}</b><small>{{ t('home.localNotes') }}</small></div>
             <div><b>{{ app.notes.notebooks.length.toString().padStart(2, '0') }}</b><small>{{ t('home.notebooks') }}</small></div>
           </div>
-          <section class="home-session-tools" :aria-label="t('home.session')">
-            <header><span>{{ t('home.session') }}</span><small>{{ openTabs.length ? t('home.openedTools', { count: openTabs.length }) : t('home.noOpenedTools') }}</small></header>
-            <div v-if="sessionTools.length" class="home-session-tool-grid">
-              <button v-for="item in sessionTools" :key="item.tab.id" type="button" :style="{ '--tool-accent': toolColors[item.tool.id] }" @click="activateTab(item.tab.id)">
-                <component :is="item.tool.icon" :size="17" aria-hidden="true" />
-                <span><strong>{{ item.tab.title }}</strong><small>{{ item.tool.description }}</small></span>
+          <section class="home-session-tools" :aria-label="t('home.recentTools')">
+            <header><span>{{ t('home.recentTools') }}</span><small>{{ recentTools.length ? t('home.recentToolsCount', { count: recentTools.length }) : t('home.noRecentTools') }}</small></header>
+            <div v-if="recentTools.length" class="home-session-tool-grid">
+              <button v-for="tool in recentTools" :key="tool.id" type="button" :style="{ '--tool-accent': toolColors[tool.id] }" @click="openTool(tool)">
+                <component :is="tool.icon" :size="17" aria-hidden="true" />
+                <span><strong>{{ tool.name }}</strong><small>{{ tool.description }}</small></span>
                 <ArrowUpRight :size="15" aria-hidden="true" />
               </button>
             </div>
-            <div v-else class="home-session-empty">{{ t('home.sessionEmpty') }}</div>
+            <div v-else class="home-session-empty">{{ t('home.recentToolsEmpty') }}</div>
           </section>
         </section>
 

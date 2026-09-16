@@ -17,6 +17,7 @@ import type {
   ClipboardHistorySnapshot,
   SystemStatusSnapshot,
   ShortcutSyncState,
+  ToolId,
   ToolTab,
 } from '@/types'
 import { isWebRuntime } from '@/runtime'
@@ -120,6 +121,7 @@ function defaultBrowserState(): BootstrapState {
       systemStatusRefreshMigrationVersion: SYSTEM_STATUS_REFRESH_MIGRATION_VERSION,
       developerModeEnabled: false,
       activationHotkey: 'Ctrl+Alt+K',
+      recentToolIds: [],
     },
     backendConnection: { schemaVersion: 1, localApiOrigin: DEFAULT_LOCAL_API_ORIGIN, useLocalApi: false },
     sidebarShortcuts: { schemaVersion: 1, toolIds: ['file-manager', 'notes', 'json', 'calculator', 'java', 'timestamp', 'base64-text', 'cron', 'hosts', 'clipboard-history', 'md5'] },
@@ -503,6 +505,9 @@ function normalizeBrowserSettings(value: Partial<AppSettings> | undefined): AppS
     systemStatusRefreshMigrationVersion: SYSTEM_STATUS_REFRESH_MIGRATION_VERSION,
     developerModeEnabled: value?.developerModeEnabled === true,
     activationHotkey: typeof value?.activationHotkey === 'string' ? value.activationHotkey : defaults.activationHotkey,
+    recentToolIds: Array.isArray(value?.recentToolIds)
+      ? [...new Set(value.recentToolIds.filter((toolId): toolId is ToolId => typeof toolId === 'string'))].slice(0, 12)
+      : defaults.recentToolIds,
   }
 }
 

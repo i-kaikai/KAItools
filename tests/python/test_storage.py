@@ -33,6 +33,7 @@ def test_default_settings_start_with_collapsed_sidebar(tmp_path: Path) -> None:
         "systemStatusRefreshMigrationVersion": 1,
         "developerModeEnabled": False,
         "activationHotkey": "Ctrl+Alt+K",
+        "recentToolIds": [],
     }
     assert storage.paths.webview_profile_dir.is_dir()
     assert len(storage.load_all()["dashboardCards"]["cards"]) == 6
@@ -53,12 +54,13 @@ def test_storage_round_trip_and_schema(tmp_path: Path) -> None:
             "motionMode": "reduced",
             "sidebarStartup": "expanded",
             "restorePinnedTabsOnLaunch": False,
-                "editorFontSize": 16,
-                "editorLineWrapping": False,
-                "clipboardMonitoringEnabled": False,
-                "systemStatusRefreshSeconds": 60,
-                "systemStatusRefreshMigrationVersion": 1,
+            "editorFontSize": 16,
+            "editorLineWrapping": False,
+            "clipboardMonitoringEnabled": False,
+            "systemStatusRefreshSeconds": 60,
+            "systemStatusRefreshMigrationVersion": 1,
             "activationHotkey": "ctrl+alt+f8",
+            "recentToolIds": ["json", "cron"],
         },
         "backendConnection": {"schemaVersion": 1, "localApiOrigin": "http://127.0.0.1:8080", "useLocalApi": True},
     })
@@ -95,13 +97,14 @@ def test_storage_round_trip_and_schema(tmp_path: Path) -> None:
         "motionMode": "reduced",
         "sidebarStartup": "expanded",
         "restorePinnedTabsOnLaunch": False,
-            "editorFontSize": 16,
-            "editorLineWrapping": False,
-            "clipboardMonitoringEnabled": False,
-            "systemStatusRefreshSeconds": 60,
-            "systemStatusRefreshMigrationVersion": 1,
+        "editorFontSize": 16,
+        "editorLineWrapping": False,
+        "clipboardMonitoringEnabled": False,
+        "systemStatusRefreshSeconds": 60,
+        "systemStatusRefreshMigrationVersion": 1,
         "developerModeEnabled": False,
         "activationHotkey": "Ctrl+Alt+F8",
+        "recentToolIds": ["json", "cron"],
     }
     assert state["backendConnection"] == {"schemaVersion": 1, "localApiOrigin": "http://127.0.0.1:8080", "useLocalApi": False}
     assert state["workspace"]["tabs"][0]["state"]["input"] == '{"ok":true}'
@@ -124,6 +127,8 @@ def test_storage_rejects_unknown_and_oversized_content(tmp_path: Path) -> None:
         storage.save_settings({"settings": {"locale": "fr-FR"}})
     with pytest.raises(StorageError):
         storage.save_settings({"settings": {"editorFontSize": 17}})
+    with pytest.raises(StorageError):
+        storage.save_settings({"settings": {"recentToolIds": ["json", "unknown"]}})
     with pytest.raises(StorageError):
         storage.save_settings({"hostsProfiles": {"groups": [], "unexpected": True}})
     with pytest.raises(StorageError):
@@ -336,6 +341,7 @@ def test_legacy_configuration_is_migrated_atomically(tmp_path: Path) -> None:
         "systemStatusRefreshMigrationVersion": 1,
         "developerModeEnabled": False,
         "activationHotkey": "Ctrl+Alt+K",
+        "recentToolIds": [],
     }
     assert persisted == settings
     assert not list(storage.paths.data_root.glob("*.tmp"))

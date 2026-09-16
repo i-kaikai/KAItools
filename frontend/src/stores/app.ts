@@ -22,12 +22,22 @@ import type { AppLocale, AppSettings, BackendConnection, DashboardCards, FileMan
 
 // Debounce persistence separately so high-frequency editor and tab interactions never block rendering.
 let workspaceTimer: number | undefined
+let sessionWorkspaceTimer: number | undefined
 let settingsTimer: number | undefined
 let notesTimer: number | undefined
 let fileManagerTimer: number | undefined
 let mediaQuery: MediaQueryList | undefined
 let motionQuery: MediaQueryList | undefined
 const knownToolIds = new Set<ToolId>(['file-manager', 'notes', 'json', 'json-diff', 'json-java', 'api-client', 'jwt', 'mermaid', 'flowchart', 'kanban', 'java', 'timestamp', 'base64-text', 'base64-image', 'base64-file', 'qrcode', 'image-studio', 'image-format', 'video-audio', 'html-pdf', 'word-pdf', 'pdf-word', 'cron', 'sql', 'yaml', 'xml', 'text-diff', 'text-stats', 'regex', 'md5', 'naming', 'identifiers', 'hosts', 'clipboard-history', 'calculator'])
+const RECENT_TOOL_LIMIT = 12
+const SESSION_WORKSPACE_KEY = 'kaitools.workspace.session.v1'
+const SESSION_WORKSPACE_TAB_LIMIT = 50
+
+interface SessionWorkspace {
+  schemaVersion: 1
+  tabs: ToolTab[]
+  activeTabId: string
+}
 
 function id(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
@@ -53,6 +63,38 @@ function unproxyState<T>(value: T, seen = new WeakMap<object, unknown>()): T {
 
 function cloneState<T extends object>(value: T): T {
   return structuredClone(unproxyState(value))
+}
+
+function sessionStorageOrNull(): Storage | null {
+  if (typeof window === 'undefined') return null
+  try {
+    return window.sessionStorage
+  } catch {
+    return null
+  }
+}
+
+function loadSessionWorkspace(): SessionWorkspace | null {
+  const storage = sessionStorageOrNull()
+  if (!storage) return null
+  try {
+    const serialized = storage.getItem(SESSION_WORKSPACE_KEY)
+    if (!serialized) return null
+    const source = JSON.parse(serialized) as Partial<SessionWorkspace>
+    if (source.schemaVersion !== 1 || !Array.isArray(source.tabs) || !source.tabs.length || source.tabs.length > SESSION_WORKSPACE_TAB_LIMIT || typeof source.activeTabId !== 'string' || source.activeTabId.length > 80) throw new Error('Invalid session workspace')
+    const tabIds = new Set<string>()
+    const tabs = source.tabs.map((value) => {
+      if (!value || typeof value !== 'object') throw new Error('Invalid session tab')
+      const tab = value as Partial<ToolTab>
+      if (typeof tab.id !== 'string' || !tab.id || tab.id.length > 80 || tabIds.has(tab.id) || typeof tab.title !== 'string' || !tab.title || tab.title.length > 80 || typeof tab.pinned !== 'boolean' || !tab.state || typeof tab.state !== 'object' || Array.isArray(tab.state) || !knownToolIds.has(tab.toolId as ToolId)) throw new Error('Invalid session tab')
+      tabIds.add(tab.id)
+      return { id: tab.id, toolId: tab.toolId as ToolId, title: tab.title, pinned: tab.pinned, state: cloneState(tab.state) }
+    })
+    return { schemaVersion: 1, tabs, activeTabId: source.activeTabId }
+  } catch {
+    storage.removeItem(SESSION_WORKSPACE_KEY)
+    return null
+  }
 }
 
 function copyLocalFileManager(value: FileManagerState): FileManagerState {
@@ -94,6 +136,7 @@ function defaultAppSettings(): AppSettings {
     systemStatusRefreshMigrationVersion: 1,
     developerModeEnabled: false,
     activationHotkey: 'Ctrl+Alt+K',
+    recentToolIds: [],
   }
 }
 
@@ -127,7 +170,20 @@ function normalizeAppSettings(value: Partial<AppSettings> | undefined): AppSetti
     systemStatusRefreshMigrationVersion: 1,
     developerModeEnabled: value?.developerModeEnabled === true,
     activationHotkey: typeof value?.activationHotkey === 'string' ? value.activationHotkey : defaults.activationHotkey,
+    recentToolIds: normalizeRecentToolIds(value?.recentToolIds),
   }
+}
+
+export function normalizeRecentToolIds(value: unknown): ToolId[] {
+  if (!Array.isArray(value)) return []
+  const recentToolIds: ToolId[] = []
+  for (const toolId of value) {
+    if (typeof toolId !== 'string' || !knownToolIds.has(toolId as ToolId)) continue
+    const typedToolId = toolId as ToolId
+    if (!recentToolIds.includes(typedToolId)) recentToolIds.push(typedToolId)
+    if (recentToolIds.length === RECENT_TOOL_LIMIT) break
+  }
+  return recentToolIds
 }
 
 function asToolIds(toolIds: string[]): ToolId[] {
@@ -221,11 +277,17 @@ export const useAppStore = defineStore('app', {
       }, this.settings.locale)
       this.hostsProfiles = result.data.hostsProfiles
       this.runtime = result.data.runtime
-      const pinnedTabs = this.settings.restorePinnedTabsOnLaunch
+      const sessionWorkspace = loadSessionWorkspace()
+      const persistedTabs = this.settings.restorePinnedTabsOnLaunch
         ? result.data.workspace.tabs.filter((tab) => tab.pinned && tab.toolId !== 'home').map((tab) => localizeDefaultTabTitle(tab, this.settings.locale))
         : []
-      this.tabs = [{ id: id('home'), toolId: 'home', title: translateForLocale(this.settings.locale, 'tool.home.name'), pinned: false, state: defaultHomeState }, ...pinnedTabs]
-      this.activeTabId = this.tabs[0]?.id ?? ''
+      const restoredTabs = sessionWorkspace
+        ? sessionWorkspace.tabs.map((tab) => localizeDefaultTabTitle(tab, this.settings.locale))
+        : persistedTabs
+      this.tabs = [{ id: id('home'), toolId: 'home', title: translateForLocale(this.settings.locale, 'tool.home.name'), pinned: false, state: defaultHomeState }, ...restoredTabs]
+      this.activeTabId = sessionWorkspace && this.tabs.some((tab) => tab.id === sessionWorkspace.activeTabId)
+        ? sessionWorkspace.activeTabId
+        : this.tabs[0]?.id ?? ''
       if (this.settings.sidebarStartup === 'collapsed') this.settings.sidebarCollapsed = true
       if (this.settings.sidebarStartup === 'expanded') this.settings.sidebarCollapsed = false
       this.applyTheme(this.settings.theme)
@@ -245,13 +307,30 @@ export const useAppStore = defineStore('app', {
       if (existing && (singleton || !forceNew)) {
         if (singleton && forceNew && typeof initialState.__fileManagerFileId === 'string') existing.state = structuredClone(initialState)
         this.activeTabId = existing.id
+        this.scheduleSessionWorkspaceSave()
+        this.recordRecentTool(toolId)
         return
       }
       const sameToolCount = this.tabs.filter((tab) => tab.toolId === toolId).length
       this.tabs.push({ id: id(toolId), toolId, title: sameToolCount ? `${title} ${sameToolCount + 1}` : title, pinned: false, state: structuredClone(initialState) })
       this.activeTabId = this.tabs.at(-1)?.id ?? ''
+      this.scheduleSessionWorkspaceSave()
+      this.recordRecentTool(toolId)
     },
-    activateTab(tabId: string) { if (this.tabs.some((tab) => tab.id === tabId)) this.activeTabId = tabId },
+    activateTab(tabId: string) {
+      const tab = this.tabs.find((item) => item.id === tabId)
+      if (!tab) return
+      this.activeTabId = tab.id
+      this.scheduleSessionWorkspaceSave()
+      this.recordRecentTool(tab.toolId)
+    },
+    recordRecentTool(toolId: ToolId) {
+      if (toolId === 'home') return
+      const recentToolIds = [toolId, ...this.settings.recentToolIds.filter((item) => item !== toolId)].slice(0, RECENT_TOOL_LIMIT)
+      if (recentToolIds.every((item, index) => item === this.settings.recentToolIds[index]) && recentToolIds.length === this.settings.recentToolIds.length) return
+      this.settings.recentToolIds = recentToolIds
+      this.scheduleSettingsSave()
+    },
     closeTab(tabId: string) { this.closeTabs([tabId]) },
     closeTabs(tabIds: string[]) {
       const closing = new Set(tabIds)
@@ -262,22 +341,53 @@ export const useAppStore = defineStore('app', {
       this.tabs = remaining
       if (activeWillClose) this.activeTabId = remaining[Math.min(Math.max(activeIndex, 0), remaining.length - 1)]?.id ?? remaining[0]?.id ?? ''
       this.scheduleWorkspaceSave()
+      this.scheduleSessionWorkspaceSave()
     },
     togglePin(tabId: string) {
       const tab = this.tabs.find((item) => item.id === tabId)
       if (!tab) return
       tab.pinned = !tab.pinned
       this.scheduleWorkspaceSave()
+      this.scheduleSessionWorkspaceSave()
     },
     updateTabState(tabId: string, state: Record<string, unknown>) {
       const tab = this.tabs.find((item) => item.id === tabId)
       if (!tab) return
       tab.state = state
       if (tab.pinned) this.scheduleWorkspaceSave()
+      this.scheduleSessionWorkspaceSave()
     },
     scheduleWorkspaceSave() {
       window.clearTimeout(workspaceTimer)
       workspaceTimer = window.setTimeout(() => { void desktopApi.saveWorkspace(this.tabs.filter((tab) => tab.pinned).map((tab) => structuredClone(toRaw(tab)))) }, 350)
+    },
+    scheduleSessionWorkspaceSave() {
+      window.clearTimeout(sessionWorkspaceTimer)
+      sessionWorkspaceTimer = window.setTimeout(() => { this.saveSessionWorkspace() }, 250)
+    },
+    saveSessionWorkspace() {
+      const storage = sessionStorageOrNull()
+      if (!storage) return
+      const tabs = this.tabs.filter((tab) => tab.toolId !== 'home')
+      if (!tabs.length) {
+        storage.removeItem(SESSION_WORKSPACE_KEY)
+        return
+      }
+      try {
+        const activeTabId = this.activeTab?.toolId === 'home' ? '' : this.activeTabId
+        const workspace: SessionWorkspace = {
+          schemaVersion: 1,
+          activeTabId,
+          tabs: tabs.map((tab) => cloneState(tab)),
+        }
+        storage.setItem(SESSION_WORKSPACE_KEY, JSON.stringify(workspace))
+      } catch {
+        storage.removeItem(SESSION_WORKSPACE_KEY)
+      }
+    },
+    flushSessionWorkspace() {
+      window.clearTimeout(sessionWorkspaceTimer)
+      this.saveSessionWorkspace()
     },
     setTheme(theme: ThemeMode) { this.settings.theme = theme; this.applyTheme(theme); this.scheduleSettingsSave() },
     setLocale(locale: AppLocale) {
@@ -287,6 +397,7 @@ export const useAppStore = defineStore('app', {
       this.tabs = this.tabs.map((tab) => localizeDefaultTabTitle(tab, locale))
       setActiveLocale(locale)
       this.scheduleSettingsSave()
+      this.scheduleSessionWorkspaceSave()
     },
     toggleSidebar() { this.settings.sidebarCollapsed = !this.settings.sidebarCollapsed; this.scheduleSettingsSave() },
     setParticleQuality(quality: AppSettings['particleQuality']) {
