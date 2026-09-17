@@ -108,6 +108,14 @@ async function openWorkspaceTool(page: Page, name: string): Promise<void> {
   await expect(dialog).toBeHidden()
 }
 
+async function activeEditorLine(page: Page, label: string): Promise<string | null> {
+  return page.getByLabel(label).evaluate(() => {
+    const anchor = window.getSelection()?.anchorNode
+    const element = anchor instanceof Element ? anchor : anchor?.parentElement
+    return element?.closest('.cm-line')?.textContent ?? null
+  })
+}
+
 async function dropFile(page: Page, label: string, name: string, mimeType: string, base64: string): Promise<void> {
   await page.getByRole('button', { name: label }).evaluate((target, value: { name: string; mimeType: string; base64: string }) => {
     const bytes = Uint8Array.from(atob(value.base64), (character) => character.charCodeAt(0))
@@ -134,6 +142,27 @@ test('sidebar active tool uses a restrained dark selection in both themes', asyn
   await expect(activeTool).toHaveCSS('background-color', 'rgb(43, 33, 65)')
   await expect(activeTool).toHaveCSS('color', 'rgb(240, 234, 255)')
   await page.screenshot({ path: resolve(qaDir, `sidebar-active-dark-${testInfo.project.name}.png`), fullPage: true })
+})
+
+test('language and account controls switch theme without a delayed color transition', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await openWorkspaceTool(page, 'JSON')
+
+  const themeButton = page.locator('.sidebar-footer .icon-button').nth(2)
+  await themeButton.click()
+  await expect(themeButton).toHaveAttribute('aria-label', '浅色')
+  await themeButton.click()
+
+  const immediateColors = await page.evaluate(() => {
+    const readBackground = (selector: string) => getComputedStyle(document.querySelector(selector)!).backgroundColor
+    return {
+      theme: document.documentElement.dataset.theme,
+      language: readBackground('.language-menu-trigger'),
+      account: readBackground('.account-entry'),
+    }
+  })
+  expect(immediateColors).toEqual({ theme: 'dark', language: 'rgb(37, 39, 42)', account: 'rgb(37, 39, 42)' })
 })
 
 async function sampleParticleCanvas(page: Page): Promise<{ brightPixels: number; colorRange: number; hash: number }> {
@@ -465,6 +494,52 @@ test('notes use one collapsible tree and leave the editor available by default',
   await expect(page.locator('.notes-tree-panel')).toBeHidden()
   await page.getByRole('button', { name: '展开笔记树' }).click()
   await expect(page.locator('.notes-tree-panel')).toBeVisible()
+  await assertViewportIntegrity(page)
+})
+
+test('home file library overview reflects local archives and opens the manager', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await openWorkspaceTool(page, '笔记')
+  await page.getByRole('button', { name: '保存当前内容到文件管理器' }).click()
+  await expect(page.locator('.toast')).toContainText('已保存到文件管理器：关于 KAITools')
+
+  await page.getByRole('button', { name: '首页', exact: true }).click()
+  const library = page.locator('.home-file-library')
+  await expect(library.getByRole('heading', { name: '文件库概览' })).toBeVisible()
+  await expect(library).toContainText('本周新增 1 个')
+  await expect(library).toContainText('笔记')
+  await page.screenshot({ path: resolve(qaDir, `home-file-library-desktop-${testInfo.project.name}.png`), fullPage: true })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await assertViewportIntegrity(page)
+  await page.screenshot({ path: resolve(qaDir, `home-file-library-mobile-${testInfo.project.name}.png`), fullPage: true })
+  await page.setViewportSize({ width: 1280, height: 800 })
+  const libraryOpenArea = library.getByRole('button', { name: '打开文件库' })
+  await expect(libraryOpenArea).toHaveCSS('cursor', 'pointer')
+  await expect(libraryOpenArea).toHaveAttribute('title', '打开文件库')
+  await libraryOpenArea.click({ position: { x: 12, y: 108 } })
+  await expect(page.getByRole('heading', { name: '文件管理器' })).toBeVisible()
+  await assertViewportIntegrity(page)
+})
+
+test('file manager tree uses workspace selection colors in light and dark themes', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await openWorkspaceTool(page, '文件管理器')
+
+  const allFiles = page.locator('.file-manager-tree > button').first()
+  const unfiled = page.locator('.file-manager-tree > button').nth(1)
+  await expect(allFiles).toHaveCSS('background-color', 'rgb(221, 242, 236)')
+  await expect(allFiles).toHaveCSS('color', 'rgb(22, 25, 29)')
+  await expect(allFiles.locator('small')).toHaveCSS('color', 'rgb(17, 132, 105)')
+  await unfiled.hover()
+  await expect(unfiled).toHaveCSS('background-color', 'rgb(236, 238, 240)')
+  await page.screenshot({ path: resolve(qaDir, `file-manager-tree-light-${testInfo.project.name}.png`), fullPage: true })
+
+  await page.locator('html').evaluate((element) => element.setAttribute('data-theme', 'dark'))
+  await expect(allFiles).toHaveCSS('background-color', 'rgb(28, 66, 57)')
+  await expect(allFiles).toHaveCSS('color', 'rgb(244, 246, 248)')
+  await expect(allFiles.locator('small')).toHaveCSS('color', 'rgb(84, 184, 159)')
   await assertViewportIntegrity(page)
 })
 
@@ -1007,6 +1082,43 @@ test('formatted JSON output remains editable and drives tree and graph views', a
   await page.getByRole('button', { name: '浅色' }).click()
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
   await page.screenshot({ path: resolve(qaDir, 'json-graph-desktop-dark.png'), fullPage: true })
+})
+
+test('JSON diagnostics do not move the active caret to the next line', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'JSON', exact: true }).click()
+
+  const editor = page.getByLabel('JSON 输入')
+  await editor.fill('{\n  "name": "KAITools",\n  "ready": true,\n  "count": 9\n}')
+  const thirdLine = editor.locator('.cm-line').nth(2)
+  await thirdLine.click()
+  await editor.press('End')
+  await editor.press('Backspace')
+
+  await expect(thirdLine).toHaveText('  "ready": true')
+  await expect.poll(() => activeEditorLine(page, 'JSON 输入')).toBe('  "ready": true')
+})
+
+test('JSON node diagnostics do not move the active caret to the next line', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'JSON', exact: true }).click()
+  await page.getByLabel('JSON 格式化结果').fill('{"owner":"kai","active":true,"count":9}')
+  await page.getByRole('button', { name: '关系图', exact: true }).click()
+
+  const graph = page.getByLabel('JSON 关系图')
+  await graph.locator('.json-graph-node').first().click()
+  const editor = page.getByLabel('节点 JSON 内容')
+  await expect(editor).toBeVisible()
+  await editor.fill('{\n  "owner": "kai",\n  "active": true,\n  "count": 9\n}')
+  const thirdLine = editor.locator('.cm-line').nth(2)
+  await thirdLine.click()
+  await editor.press('End')
+  await editor.press('Backspace')
+
+  await expect(thirdLine).toHaveText('  "active": true')
+  await expect.poll(() => activeEditorLine(page, '节点 JSON 内容')).toBe('  "active": true')
 })
 
 test('JSON graph node editor scrolls long content and drags without selecting text', async ({ page }) => {

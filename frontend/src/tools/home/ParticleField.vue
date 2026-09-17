@@ -60,9 +60,9 @@ function createSphereGeometry(count: number, radius: number, seed: number, inner
   const positions = new Float32Array(count * 3)
   const colors = new Float32Array(count * 3)
   const lightDirection = new THREE.Vector3(-0.82, 0.24, 0.52).normalize()
-  const base = new THREE.Color('#536f89')
-  const white = new THREE.Color('#f5fbff')
-  const dim = new THREE.Color('#172635')
+  const base = new THREE.Color('#6b8eaa')
+  const white = new THREE.Color('#ffffff')
+  const dim = new THREE.Color('#2a455d')
   const normal = new THREE.Vector3()
   const color = new THREE.Color()
 
@@ -80,8 +80,8 @@ function createSphereGeometry(count: number, radius: number, seed: number, inner
     normal.set(x, y, z)
     const diffuse = Math.max(0, normal.dot(lightDirection))
     const rim = Math.pow(1 - Math.abs(z), 3.2)
-    const sparkle = random() > 0.935 ? 0.42 : random() * 0.12
-    const intensity = inner ? 0.12 + Math.max(0, z) * 0.16 + sparkle * 0.2 : Math.min(1, 0.17 + diffuse * 0.68 + rim * 0.38 + sparkle)
+    const sparkle = random() > 0.935 ? 0.46 : random() * 0.15
+    const intensity = inner ? 0.18 + Math.max(0, z) * 0.22 + sparkle * 0.24 : Math.min(1, 0.24 + diffuse * 0.72 + rim * 0.4 + sparkle)
     color.copy(inner ? dim : base).lerp(white, intensity)
     colors[offset] = color.r
     colors[offset + 1] = color.g
@@ -131,10 +131,10 @@ function updateStage(stage: 'hero' | 'workbench'): void {
     targetSystemX = Math.min(5.5, Math.max(2.3, (camera?.aspect ?? 1.6) * 1.58))
     targetSystemY = 0.76
     targetSystemScale = 0.52
-    targetSphereOpacity = 0.16
-    targetInnerOpacity = 0.042
-    targetOrbitOpacity = 0.055
-    targetSatelliteOpacity = 0.38
+    targetSphereOpacity = 0.27
+    targetInnerOpacity = 0.08
+    targetOrbitOpacity = 0.1
+    targetSatelliteOpacity = 0.56
   }
   if (host.value) host.value.dataset.stage = stage
 }

@@ -403,7 +403,8 @@ watch(
 watch(
   () => props.selectionOffset,
   (offset) => {
-    if (!editor || offset === undefined) return
+    // Diagnostics may move while the user is typing; keep the active caret under user control.
+    if (!editor || offset === undefined || editor.hasFocus) return
     const safeOffset = Math.max(0, Math.min(offset, editor.state.doc.length))
     editor.dispatch({ selection: { anchor: safeOffset }, effects: EditorView.scrollIntoView(safeOffset, { y: 'center' }) })
   },

@@ -5,6 +5,7 @@ import { computed, ref, toRaw } from 'vue'
 import { isArchivableTool } from '@/api/fileManagerStorage'
 import IconButton from '@/components/IconButton.vue'
 import { useAppStore } from '@/stores/app'
+import { useConfirmStore } from '@/stores/confirm'
 import { toolsById, workspaceTools } from '@/tools/registry'
 import type { FileManagerFile, FileManagerFolder, ToolId } from '@/types'
 
@@ -17,6 +18,7 @@ type Dialog =
   | { mode: 'move-file'; fileId: string; value: string }
 
 const app = useAppStore()
+const confirm = useConfirmStore()
 const selectedFolderId = ref('all')
 const search = ref('')
 const toolFilter = ref('all')
@@ -99,13 +101,23 @@ function duplicateFile(file: FileManagerFile): void {
   save({ files: [copy, ...app.fileManager.files] })
 }
 
-function deleteFile(file: FileManagerFile): void {
-  if (!window.confirm(`删除“${file.title}”后无法恢复，是否继续？`)) return
+async function deleteFile(file: FileManagerFile): Promise<void> {
+  if (!(await confirm.ask({
+    title: '删除文件？',
+    message: `“${file.title}”删除后无法恢复，请确认是否继续。`,
+    confirmLabel: '确认删除',
+    tone: 'danger',
+  }))) return
   save({ files: app.fileManager.files.filter((item) => item.id !== file.id) })
 }
 
-function deleteFolder(folder: FileManagerFolder): void {
-  if (!window.confirm(`删除文件夹“${folder.name}”及其中所有文件后无法恢复，是否继续？`)) return
+async function deleteFolder(folder: FileManagerFolder): Promise<void> {
+  if (!(await confirm.ask({
+    title: '删除文件夹？',
+    message: `“${folder.name}”及其中所有文件删除后无法恢复，请确认是否继续。`,
+    confirmLabel: '删除文件夹',
+    tone: 'danger',
+  }))) return
   const removed = new Set<string>([folder.id])
   let changed = true
   while (changed) {

@@ -4,6 +4,7 @@ import { AlignCenterHorizontal, AlignLeft, AlignRight, ArrowRight, BringToFront,
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
 import IconButton from '@/components/IconButton.vue'
+import { useConfirmStore } from '@/stores/confirm'
 import { useToastStore } from '@/stores/toast'
 import { downloadBlob } from '@/utils/download'
 import { deleteFlowchart, loadFlowchartLibrary, saveFlowchart, type SavedFlowchart } from './flowchartLibrary'
@@ -40,6 +41,7 @@ type ExtensionDirection = 'left' | 'right' | 'top' | 'bottom'
 
 const props = defineProps<{ state: Record<string, unknown> }>()
 const emit = defineEmits<{ 'update:state': [state: Record<string, unknown>] }>()
+const confirm = useConfirmStore()
 const toast = useToastStore()
 const canvasHost = ref<HTMLDivElement | null>(null)
 const canvasViewport = ref<HTMLDivElement | null>(null)
@@ -1236,14 +1238,24 @@ function replaceDiagram(next: FlowchartState): void {
   requestAnimationFrame(fitGraph)
 }
 
-function applyTemplate(): void {
-  if (model.nodes.length && !window.confirm('应用模板将替换当前画板内容，是否继续？')) return
+async function applyTemplate(): Promise<void> {
+  if (model.nodes.length && !(await confirm.ask({
+    title: '替换当前画板？',
+    message: '应用模板会替换当前画板中的节点和连线，未保存的内容将被覆盖。',
+    confirmLabel: '应用模板',
+    tone: 'warning',
+  }))) return
   replaceDiagram(createFlowchartTemplate(selectedTemplate.value))
   toast.show('已应用流程图模板', 'success')
 }
 
-function clearGraph(): void {
-  if (model.nodes.length && !window.confirm('清空后无法恢复当前未保存内容，是否继续？')) return
+async function clearGraph(): Promise<void> {
+  if (model.nodes.length && !(await confirm.ask({
+    title: '清空未保存内容？',
+    message: '当前画板中的节点和连线清空后无法恢复。',
+    confirmLabel: '清空画板',
+    tone: 'danger',
+  }))) return
   graph?.clearCells()
   model.nodes = []
   model.edges = []
@@ -1285,9 +1297,14 @@ function loadFromLibrary(): void {
   toast.show(`已载入 ${entry.title}`, 'success')
 }
 
-function removeFromLibrary(): void {
+async function removeFromLibrary(): Promise<void> {
   if (!selectedSavedId.value) return
-  if (!window.confirm('删除后无法从本地图纸库恢复，是否继续？')) return
+  if (!(await confirm.ask({
+    title: '删除本地图纸？',
+    message: '删除后无法从本地图纸库恢复，请确认是否继续。',
+    confirmLabel: '确认删除',
+    tone: 'danger',
+  }))) return
   savedFlowcharts.value = deleteFlowchart(savedFlowcharts.value, selectedSavedId.value)
   selectedSavedId.value = ''
   toast.show('已从本地库删除图纸', 'success')

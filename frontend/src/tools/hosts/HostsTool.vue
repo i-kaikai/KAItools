@@ -8,12 +8,14 @@ import DesktopOnlyState from '@/components/DesktopOnlyState.vue'
 import IconButton from '@/components/IconButton.vue'
 import { useToolState } from '@/composables/useToolState'
 import { isWebRuntime } from '@/runtime'
+import { useConfirmStore } from '@/stores/confirm'
 import { useToastStore } from '@/stores/toast'
 import type { HostsBackup, HostsPreview, HostsSnapshot } from '@/types'
 import { copyText } from '@/utils/clipboard'
 
 const props = defineProps<{ state: Record<string, unknown> }>()
 const emit = defineEmits<{ 'update:state': [state: Record<string, unknown>] }>()
+const confirm = useConfirmStore()
 const toast = useToastStore()
 const model = useToolState(
   props.state,
@@ -50,7 +52,12 @@ async function loadSnapshot(force = false): Promise<void> {
 }
 
 async function reload(): Promise<void> {
-  if (dirty.value && !window.confirm('放弃当前未应用的 Hosts 修改并重新加载？')) return
+  if (dirty.value && !(await confirm.ask({
+    title: '放弃未应用修改？',
+    message: '重新加载会丢弃当前尚未应用的 Hosts 编辑内容。',
+    confirmLabel: '放弃并重新加载',
+    tone: 'warning',
+  }))) return
   await loadSnapshot(true)
 }
 
@@ -76,7 +83,12 @@ async function apply(): Promise<void> {
     toast.show('系统 Hosts 已是当前内容', 'info')
     return
   }
-  if (!window.confirm('确认写入完整系统 Hosts 文件？写入前会自动创建备份。')) return
+  if (!(await confirm.ask({
+    title: '写入系统 Hosts？',
+    message: '将覆盖完整系统 Hosts 文件，写入前会自动创建备份。',
+    confirmLabel: '写入文件',
+    tone: 'danger',
+  }))) return
   busy.value = true
   const result = await desktopApi.applyHosts(model.content, model.sourceSha256, false)
   busy.value = false
@@ -100,7 +112,12 @@ async function openBackups(): Promise<void> {
 }
 
 async function restore(backup: HostsBackup): Promise<void> {
-  if (!window.confirm(`恢复 ${new Date(backup.createdAt).toLocaleString()} 的完整 Hosts 文件？`)) return
+  if (!(await confirm.ask({
+    title: '恢复 Hosts 备份？',
+    message: `将恢复 ${new Date(backup.createdAt).toLocaleString()} 的完整系统 Hosts 文件。`,
+    confirmLabel: '确认恢复',
+    tone: 'warning',
+  }))) return
   busy.value = true
   const result = await desktopApi.restoreHostsBackup(backup.id)
   busy.value = false

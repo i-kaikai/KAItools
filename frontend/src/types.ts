@@ -22,6 +22,7 @@ export type ToolId =
   | 'mermaid'
   | 'flowchart'
   | 'kanban'
+  | 'checklist'
   | 'java'
   | 'timestamp'
   | 'base64-text'

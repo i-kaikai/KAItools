@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowUpRight, BookOpenText, Boxes, CircleDot, ExternalLink, LayoutGrid, Sparkles } from '@lucide/vue'
+import { ArrowUpRight, BookOpenText, Boxes, CircleDot, ExternalLink, FolderArchive, LayoutGrid, Sparkles } from '@lucide/vue'
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue'
 
 import giteeLogo from '@/assets/gitee-g-red.svg'
@@ -35,6 +35,24 @@ const categorizedTools = computed(() => toolCategories.map((category) => ({
 })))
 const pinnedNote = computed(() => app.notes.notes.find((note) => note.pinned) ?? app.notes.notes[0])
 const pinnedNotePreview = computed(() => markdownCardPreview(pinnedNote.value?.content ?? t('home.localDescription')))
+const archivedFiles = computed(() => app.fileManager.files)
+const archiveTypes = computed(() => {
+  const groups = new Map<string, { tool: ToolDefinition; count: number }>()
+  for (const file of archivedFiles.value) {
+    const tool = toolsById[file.toolId]
+    if (!tool) continue
+    const current = groups.get(file.toolId)
+    if (current) current.count += 1
+    else groups.set(file.toolId, { tool, count: 1 })
+  }
+  const values = [...groups.values()].sort((left, right) => right.count - left.count || left.tool.name.localeCompare(right.tool.name, 'zh-CN')).slice(0, 3)
+  const total = Math.max(1, values.reduce((sum, item) => sum + item.count, 0))
+  return values.map((item) => ({ ...item, share: item.count / total * 100 }))
+})
+const recentArchiveCount = computed(() => {
+  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000
+  return archivedFiles.value.filter((file) => Date.parse(file.createdAt) >= cutoff).length
+})
 const recentTools = computed(() => app.settings.recentToolIds
   .map((toolId) => toolsById[toolId])
   .filter((tool): tool is ToolDefinition => Boolean(tool)))
@@ -54,6 +72,7 @@ const toolColors: Record<string, string> = {
   jwt: '#c08be1',
   mermaid: '#52bea0',
   kanban: '#66b991',
+  checklist: '#3aa88d',
   java: '#ff7d5d',
   timestamp: '#6ea0ff',
   'base64-text': '#dcad49',
@@ -144,6 +163,11 @@ function openNotes(): void {
   if (notes) openTool(notes)
 }
 
+function openFileManager(): void {
+  const fileManager = toolsById['file-manager']
+  if (fileManager) openTool(fileManager)
+}
+
 async function saveDashboardCards(dashboardCards: DashboardCards): Promise<void> {
   dashboardCardSaving.value = true
   const saved = await app.setDashboardCards(dashboardCards)
@@ -182,9 +206,23 @@ async function saveDashboardCards(dashboardCards: DashboardCards): Promise<void>
 
       <section class="home-launchpad" aria-labelledby="home-launchpad-title">
         <div class="home-launchpad-copy">
-          <div class="home-section-eyebrow"><Sparkles :size="15" />LOCAL MODE</div>
-          <h2 id="home-launchpad-title">{{ t('home.launchpad') }}</h2>
+          <div class="home-launchpad-title-row"><h2 id="home-launchpad-title">{{ t('home.launchpad') }}</h2><div class="home-section-eyebrow"><Sparkles :size="15" />LOCAL MODE</div></div>
           <p>{{ t('home.localDescription') }}</p>
+          <section class="home-file-library" :aria-label="t('home.fileLibrary')">
+            <button class="home-file-library-hit-area" type="button" :aria-label="t('home.openFileManager')" :title="t('home.openFileManager')" @click="openFileManager" />
+            <header class="home-file-library-header"><span><FolderArchive :size="14" />FILE LIBRARY</span><div><b>{{ archivedFiles.length.toString().padStart(2, '0') }}</b><ArrowUpRight :size="14" aria-hidden="true" /></div></header>
+            <template v-if="archiveTypes.length">
+              <div class="home-file-library-copy"><h3>{{ t('home.fileLibrary') }}</h3><p>{{ t('home.fileLibraryCompactAdded', { count: recentArchiveCount }) }}</p></div>
+              <div class="home-file-library-types">
+                <div v-for="item in archiveTypes" :key="item.tool.id" class="home-file-library-type">
+                  <span><component :is="item.tool.icon" :size="12" :style="{ color: toolColors[item.tool.id] ?? '#63d4b7' }" />{{ item.tool.name }}</span>
+                  <i><b :style="{ width: `${item.share}%`, backgroundColor: toolColors[item.tool.id] ?? '#63d4b7' }" /></i>
+                  <strong>{{ item.count.toString().padStart(2, '0') }}</strong>
+                </div>
+              </div>
+            </template>
+            <div v-else class="home-file-library-empty"><FolderArchive :size="18" /><div><strong>{{ t('home.fileLibraryEmpty') }}</strong><span>{{ t('home.fileLibraryEmptyDetail') }}</span></div><em>{{ t('home.openFileManager') }}</em></div>
+          </section>
           <div class="home-local-mode-card" :aria-label="t('home.localModeStatus')">
             <span class="home-local-mode-signal" aria-hidden="true" />
             <div><small>WORKSPACE STATE</small><strong>{{ t('home.localFirst') }}</strong><span>{{ t('home.localFirstDescription') }}</span></div>

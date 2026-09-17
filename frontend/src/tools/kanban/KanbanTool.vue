@@ -31,6 +31,7 @@ const draft = reactive<KanbanTaskDraft>(emptyKanbanDraft())
 const formError = ref('')
 
 const statusLabels: Record<KanbanStatus, string> = { todo: '待办', doing: '进行中', done: '已完成' }
+const statusDescriptions: Record<KanbanStatus, string> = { todo: '收集下一步', doing: '正在推进', done: '已归档' }
 const statusIcons = { todo: Circle, doing: CircleDot, done: CheckCircle2 } satisfies Record<KanbanStatus, typeof Circle>
 const priorityLabels: Record<KanbanPriority, string> = { high: '高优先级', medium: '中优先级', low: '低优先级' }
 
@@ -43,6 +44,7 @@ watch(model, () => emit('update:state', {
 const totalOpen = computed(() => model.tasks.filter((task) => task.status !== 'done').length)
 const completedCount = computed(() => model.tasks.filter((task) => task.status === 'done').length)
 const overdueCount = computed(() => model.tasks.filter((task) => isKanbanTaskOverdue(task)).length)
+const completionRate = computed(() => model.tasks.length ? Math.round((completedCount.value / model.tasks.length) * 100) : 0)
 const queryNeedle = computed(() => model.query.trim().toLocaleLowerCase())
 
 function taskMatches(task: KanbanTask): boolean {
@@ -54,6 +56,10 @@ function taskMatches(task: KanbanTask): boolean {
 
 function tasksFor(status: KanbanStatus): KanbanTask[] {
   return model.tasks.filter((task) => task.status === status && taskMatches(task))
+}
+
+function statusCount(status: KanbanStatus): number {
+  return model.tasks.filter((task) => task.status === status).length
 }
 
 function statusIndex(status: KanbanStatus): number {
@@ -150,9 +156,10 @@ function dueState(task: KanbanTask): 'none' | 'overdue' | 'done' | 'active' {
 </script>
 
 <template>
-  <section class="tool-page kanban-tool">
-    <header class="tool-header">
+  <section class="tool-page kanban-tool kanban-modern">
+    <header class="tool-header kanban-modern-header">
       <div>
+        <div class="kanban-eyebrow"><ListTodo :size="15" aria-hidden="true" />LOCAL BOARD</div>
         <h1>轻量任务看板</h1>
         <p>任务仅保存在当前工作区。{{ totalOpen ? `还有 ${totalOpen} 项待处理${overdueCount ? `，其中 ${overdueCount} 项已逾期` : ''}` : '当前没有待处理任务。' }}</p>
       </div>
@@ -162,14 +169,20 @@ function dueState(task: KanbanTask): 'none' | 'overdue' | 'done' | 'active' {
       </div>
     </header>
 
-    <div class="kanban-controls">
+    <section class="kanban-overview" aria-label="任务概览">
+      <div class="kanban-overview-lead"><strong>{{ completionRate }}%</strong><div><b>{{ completedCount ? '持续推进中' : '从第一项开始' }}</b><span>{{ model.tasks.length ? `${completedCount} / ${model.tasks.length} 项任务已完成` : '准备好后，任务会显示在这里' }}</span></div></div>
+      <div class="kanban-overview-stats"><div><span>待处理</span><b>{{ totalOpen }}</b></div><div><span>进行中</span><b>{{ statusCount('doing') }}</b></div><div class="warning"><span>已逾期</span><b>{{ overdueCount }}</b></div></div>
+      <div class="kanban-overview-bar" aria-hidden="true"><i><b :style="{ width: `${completionRate}%` }" /></i></div>
+    </section>
+
+    <div class="kanban-controls kanban-modern-controls">
       <label class="kanban-search"><Search :size="16" aria-hidden="true" /><input v-model="model.query" type="search" aria-label="搜索任务" placeholder="搜索任务名称或备注" /></label>
-      <label>查看<select v-model="model.filter" aria-label="任务筛选"><option value="all">全部任务</option><option value="open">未完成</option><option value="overdue">已逾期</option></select></label>
+      <label class="kanban-filter"><span>查看</span><select v-model="model.filter" aria-label="任务筛选"><option value="all">全部任务</option><option value="open">未完成</option><option value="overdue">已逾期</option></select></label>
       <small>{{ model.tasks.length }} 项任务 · {{ completedCount }} 项完成</small>
     </div>
 
-    <form v-if="formOpen" class="kanban-draft" aria-label="任务编辑器" @submit.prevent="saveTask">
-      <header><div><strong>{{ editingTaskId ? '编辑任务' : '新建任务' }}</strong><small>{{ formError || '填写完成后，任务会立即保存在当前工作区。' }}</small></div><IconButton :icon="X" label="关闭任务编辑器" size="small" @click="closeForm" /></header>
+    <form v-if="formOpen" class="kanban-draft kanban-modern-editor" aria-label="任务编辑器" @submit.prevent="saveTask">
+      <header><div><span class="kanban-editor-kicker">TASK DETAILS</span><strong>{{ editingTaskId ? '编辑任务' : '新建任务' }}</strong><small>{{ formError || '任务信息会保存到当前工作区。' }}</small></div><IconButton :icon="X" label="关闭任务编辑器" size="small" @click="closeForm" /></header>
       <div class="kanban-draft-fields">
         <label class="kanban-draft-title"><span>任务名称</span><input v-model="draft.title" maxlength="120" autofocus placeholder="例如：整理本周会议纪要" /></label>
         <label><span>状态</span><select v-model="draft.status"><option value="todo">待办</option><option value="doing">进行中</option><option value="done">已完成</option></select></label>
@@ -180,17 +193,17 @@ function dueState(task: KanbanTask): 'none' | 'overdue' | 'done' | 'active' {
       <footer><button class="command-button subtle" type="button" @click="closeForm">取消</button><button class="command-button primary" type="submit">{{ editingTaskId ? '保存修改' : '添加任务' }}</button></footer>
     </form>
 
-    <section class="kanban-board" aria-label="任务看板">
-      <section v-for="status in kanbanStatuses" :key="status" class="kanban-column" :class="`status-${status}`" @dragover.prevent @drop.prevent="dropTask(status)">
-        <header><div><component :is="statusIcons[status]" :size="16" aria-hidden="true" /><strong>{{ statusLabels[status] }}</strong><span>{{ tasksFor(status).length }}</span></div><IconButton :icon="Plus" :label="`在${statusLabels[status]}中添加任务`" size="small" @click="openCreate(status)" /></header>
+    <section class="kanban-board kanban-modern-board" aria-label="任务看板">
+      <section v-for="status in kanbanStatuses" :key="status" class="kanban-column kanban-modern-column" :class="`status-${status}`" @dragover.prevent @drop.prevent="dropTask(status)">
+        <header class="kanban-column-header"><div class="kanban-column-heading"><span class="kanban-column-icon"><component :is="statusIcons[status]" :size="17" aria-hidden="true" /></span><div><strong>{{ statusLabels[status] }}</strong><small>{{ statusDescriptions[status] }}</small></div><b>{{ tasksFor(status).length }}</b></div><IconButton :icon="Plus" :label="`在${statusLabels[status]}中添加任务`" size="small" @click="openCreate(status)" /></header>
         <div class="kanban-task-list" role="list" :aria-label="statusLabels[status]">
-          <article v-for="task in tasksFor(status)" :key="task.id" class="kanban-task" draggable="true" role="listitem" @dragstart="draggedTaskId = task.id" @dragend="draggedTaskId = null" @dblclick="openEdit(task)">
-            <header><span class="kanban-priority" :class="task.priority">{{ priorityLabels[task.priority] }}</span><div><GripVertical :size="15" aria-hidden="true" /><IconButton :icon="Pencil" :label="`编辑任务：${task.title}`" size="small" @click="openEdit(task)" /><IconButton :icon="Trash2" :label="`删除任务：${task.title}`" size="small" danger @click="deleteTask(task)" /></div></header>
-            <strong>{{ task.title }}</strong>
+          <article v-for="task in tasksFor(status)" :key="task.id" class="kanban-task kanban-modern-task" draggable="true" role="listitem" @dragstart="draggedTaskId = task.id" @dragend="draggedTaskId = null" @dblclick="openEdit(task)">
+            <header class="kanban-task-topline"><span class="kanban-priority" :class="task.priority"><i aria-hidden="true" />{{ priorityLabels[task.priority] }}</span><div class="kanban-task-actions"><GripVertical :size="15" aria-hidden="true" /><IconButton :icon="Pencil" :label="`编辑任务：${task.title}`" size="small" @click="openEdit(task)" /><IconButton :icon="Trash2" :label="`删除任务：${task.title}`" size="small" danger @click="deleteTask(task)" /></div></header>
+            <div class="kanban-task-title"><span class="kanban-status-dot" aria-hidden="true" /><strong>{{ task.title }}</strong></div>
             <p v-if="task.note">{{ task.note }}</p>
-            <footer><span :class="['kanban-due', dueState(task)]"><CalendarDays :size="13" aria-hidden="true" />{{ dueText(task) }}</span><div><IconButton :icon="ArrowLeft" :label="`将 ${task.title} 移到上一列`" size="small" :disabled="statusIndex(task.status) === 0" @click="moveTaskByOffset(task, -1)" /><IconButton :icon="ArrowRight" :label="`将 ${task.title} 移到下一列`" size="small" :disabled="statusIndex(task.status) === kanbanStatuses.length - 1" @click="moveTaskByOffset(task, 1)" /></div></footer>
+            <footer><span :class="['kanban-due', dueState(task)]"><CalendarDays :size="13" aria-hidden="true" />{{ dueText(task) }}</span><div class="kanban-task-movers"><IconButton :icon="ArrowLeft" :label="`将 ${task.title} 移到上一列`" size="small" :disabled="statusIndex(task.status) === 0" @click="moveTaskByOffset(task, -1)" /><IconButton :icon="ArrowRight" :label="`将 ${task.title} 移到下一列`" size="small" :disabled="statusIndex(task.status) === kanbanStatuses.length - 1" @click="moveTaskByOffset(task, 1)" /></div></footer>
           </article>
-          <div v-if="!tasksFor(status).length" class="kanban-empty"><ListTodo :size="19" aria-hidden="true" /><span>{{ model.query || model.filter !== 'all' ? '没有匹配任务' : `拖入任务或在此新建${statusLabels[status]}任务` }}</span></div>
+          <div v-if="!tasksFor(status).length" class="kanban-empty"><ListTodo :size="22" aria-hidden="true" /><strong>{{ model.query || model.filter !== 'all' ? '没有匹配任务' : `暂无${statusLabels[status]}任务` }}</strong><span>{{ model.query || model.filter !== 'all' ? '调整搜索或筛选条件' : '在此处新建或拖入任务' }}</span></div>
         </div>
       </section>
     </section>

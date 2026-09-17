@@ -55,10 +55,19 @@
   font: inherit;
 }
 
-.file-manager-tree button:hover,
+.file-manager-tree button:hover:not(.active) {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
 .file-manager-tree button.active {
-  background: var(--sidebar-active);
-  color: var(--sidebar-active-text);
+  background: var(--accent-soft);
+  color: var(--text-primary);
+}
+
+.file-manager-tree button.active > svg,
+.file-manager-tree button.active small {
+  color: var(--accent);
 }
 
 .file-manager-tree small {

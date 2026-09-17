@@ -2,6 +2,7 @@
 @import './shell.css';
 @import './tools.css';
 @import './file-manager.css';
+@import './confirm-dialog.css';
 @import './home.css';
 @import './release-notes.css';
 @import './responsive.css';

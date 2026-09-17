@@ -28,7 +28,9 @@ let notesTimer: number | undefined
 let fileManagerTimer: number | undefined
 let mediaQuery: MediaQueryList | undefined
 let motionQuery: MediaQueryList | undefined
-const knownToolIds = new Set<ToolId>(['file-manager', 'notes', 'json', 'json-diff', 'json-java', 'api-client', 'jwt', 'mermaid', 'flowchart', 'kanban', 'java', 'timestamp', 'base64-text', 'base64-image', 'base64-file', 'qrcode', 'image-studio', 'image-format', 'video-audio', 'html-pdf', 'word-pdf', 'pdf-word', 'cron', 'sql', 'yaml', 'xml', 'text-diff', 'text-stats', 'regex', 'md5', 'naming', 'identifiers', 'hosts', 'clipboard-history', 'calculator'])
+let themeSwitchFrame: number | undefined
+let themeSwitchTimer: number | undefined
+const knownToolIds = new Set<ToolId>(['file-manager', 'notes', 'json', 'json-diff', 'json-java', 'api-client', 'jwt', 'mermaid', 'flowchart', 'kanban', 'checklist', 'java', 'timestamp', 'base64-text', 'base64-image', 'base64-file', 'qrcode', 'image-studio', 'image-format', 'video-audio', 'html-pdf', 'word-pdf', 'pdf-word', 'cron', 'sql', 'yaml', 'xml', 'text-diff', 'text-stats', 'regex', 'md5', 'naming', 'identifiers', 'hosts', 'clipboard-history', 'calculator'])
 const RECENT_TOOL_LIMIT = 12
 const SESSION_WORKSPACE_KEY = 'kaitools.workspace.session.v1'
 const SESSION_WORKSPACE_TAB_LIMIT = 50
@@ -673,8 +675,19 @@ export const useAppStore = defineStore('app', {
     applyTheme(theme: ThemeMode) {
       mediaQuery ??= window.matchMedia('(prefers-color-scheme: dark)')
       const resolved = theme === 'system' ? (mediaQuery.matches ? 'dark' : 'light') : theme
-      document.documentElement.dataset.theme = resolved
-      document.documentElement.style.colorScheme = resolved
+      const root = document.documentElement
+      if (themeSwitchFrame !== undefined && typeof window.cancelAnimationFrame === 'function') window.cancelAnimationFrame(themeSwitchFrame)
+      window.clearTimeout(themeSwitchTimer)
+      root.dataset.themeSwitching = 'true'
+      root.dataset.theme = resolved
+      root.style.colorScheme = resolved
+      const releaseThemeSwitch = () => {
+        delete root.dataset.themeSwitching
+        themeSwitchFrame = undefined
+        themeSwitchTimer = undefined
+      }
+      if (typeof window.requestAnimationFrame === 'function') themeSwitchFrame = window.requestAnimationFrame(releaseThemeSwitch)
+      else themeSwitchTimer = window.setTimeout(releaseThemeSwitch, 0)
       mediaQuery.onchange = () => { if (this.settings.theme === 'system') this.applyTheme('system') }
     },
     applyMotionPreference() {

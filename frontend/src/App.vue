@@ -21,6 +21,7 @@ import {
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 import IconButton from '@/components/IconButton.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import ToolSearchDialog from '@/components/ToolSearchDialog.vue'
 import ShortcutManagerDialog from '@/components/ShortcutManagerDialog.vue'
 import AccountSyncDialog from '@/components/AccountSyncDialog.vue'
@@ -503,6 +504,7 @@ onBeforeUnmount(() => {
     <DeveloperPanelDialog :open="developerPanelOpen && developerModeActive" @close="developerPanelOpen = false" />
     <Teleport to="body"><ReleaseNotesDialog :open="releaseNotesOpen" :version="app.runtime?.version ?? APP_VERSION" @close="releaseNotesOpen = false" /></Teleport>
     <Teleport to="body"><ApplicationSettingsDialog :open="applicationSettingsOpen" @close="applicationSettingsOpen = false" /></Teleport>
+    <ConfirmDialog />
     <ToastViewport />
   </div>
 </template>
