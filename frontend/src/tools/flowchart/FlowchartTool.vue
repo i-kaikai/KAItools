@@ -70,6 +70,7 @@ const extensionAnchors = ref<{ direction: ExtensionDirection; left: number; top:
 const extensionPreview = ref<{ left: number; top: number; width: number; height: number; shape: FlowShape } | null>(null)
 const edgeEndpointAnchors = ref<{ terminal: 'source' | 'target'; left: number; top: number }[]>([])
 const hoveredConnectionNodeId = ref('')
+const hoveredConnectionPort = ref<{ nodeId: string; portId: string } | null>(null)
 
 let graph: X6Graph | null = null
 let dnd: X6Dnd | null = null
@@ -107,11 +108,7 @@ let previousCanvasPointerY = 0
 let canvasPointerStartX = 0
 let canvasPointerStartY = 0
 let canvasPointerStartedWithPendingLine = false
-let basicLinePointerId: number | null = null
-let basicLineGhost: HTMLDivElement | null = null
-let basicLineRoute: EdgeRoute = 'straight'
 let pendingClickLine: { previewId: string } | null = null
-let suppressConnectorChoice = false
 let endpointDrag: { pointerId: number; terminal: 'source' | 'target'; startX: number; startY: number; moved: boolean } | null = null
 let preserveSelectionUntil = 0
 let pendingDiagram: FlowchartState | null = null
@@ -180,8 +177,9 @@ function labelAttrs(node: FlowNodeState): Record<string, unknown> {
 function routeAttrs(route: EdgeRoute, vertexCount = 0, hasPointTerminal = false): { router: { name: string; args?: Record<string, unknown> }; connector: { name: string } } {
   if (route === 'straight') return { router: { name: 'normal' }, connector: { name: 'normal' } }
   if (route === 'curve') return { router: { name: 'normal' }, connector: { name: 'smooth' } }
-  if (vertexCount || hasPointTerminal) return { router: { name: 'normal' }, connector: { name: 'normal' } }
-  return { router: { name: 'orth', args: { padding: 14 } }, connector: { name: 'normal' } }
+  if (vertexCount) return { router: { name: 'normal' }, connector: { name: 'normal' } }
+  if (hasPointTerminal) return { router: { name: 'normal' }, connector: { name: 'normal' } }
+  return { router: { name: 'manhattan', args: { padding: 14, step: 8, startDirections: ['right', 'bottom', 'top', 'left'], endDirections: ['left', 'top', 'bottom', 'right'], excludeTerminals: ['source', 'target'] } }, connector: { name: 'normal' } }
 }
 
 function graphNode(node: FlowNodeState): Record<string, unknown> {
@@ -203,14 +201,106 @@ function graphNode(node: FlowNodeState): Record<string, unknown> {
   }
 }
 
+function orthogonalNodeVertices(source: FlowNodeState, target: FlowNodeState, sourcePort: string, targetPort: string): FlowEdgeVertex[] {
+  const sourcePoint = {
+    x: sourcePort === 'right' ? source.x + source.width : sourcePort === 'left' ? source.x : source.x + source.width / 2,
+    y: sourcePort === 'bottom' ? source.y + source.height : sourcePort === 'top' ? source.y : source.y + source.height / 2,
+  }
+  const targetPoint = {
+    x: targetPort === 'right' ? target.x + target.width : targetPort === 'left' ? target.x : target.x + target.width / 2,
+    y: targetPort === 'bottom' ? target.y + target.height : targetPort === 'top' ? target.y : target.y + target.height / 2,
+  }
+  const horizontalSource = sourcePort === 'right' || sourcePort === 'left'
+  const horizontalTarget = targetPort === 'right' || targetPort === 'left'
+  const candidates: FlowEdgeVertex[][] = []
+  if (horizontalSource && horizontalTarget) {
+    if (sourcePoint.y === targetPoint.y) return []
+    const middleX = Math.round((sourcePoint.x + targetPoint.x) / 2)
+    candidates.push([{ x: middleX, y: sourcePoint.y }, { x: middleX, y: targetPoint.y }])
+    candidates.push(
+      [{ x: Math.min(source.x, target.x) - 32, y: sourcePoint.y }, { x: Math.min(source.x, target.x) - 32, y: targetPoint.y }],
+      [{ x: Math.max(source.x + source.width, target.x + target.width) + 32, y: sourcePoint.y }, { x: Math.max(source.x + source.width, target.x + target.width) + 32, y: targetPoint.y }],
+    )
+  } else if (!horizontalSource && !horizontalTarget) {
+    if (sourcePoint.x === targetPoint.x) return []
+    const approachY = targetPort === 'top' ? targetPoint.y - 28 : targetPoint.y + 28
+    candidates.push([{ x: sourcePoint.x, y: approachY }, { x: targetPoint.x, y: approachY }])
+    candidates.push(
+      [{ x: sourcePoint.x, y: Math.min(source.y, target.y) - 32 }, { x: targetPoint.x, y: Math.min(source.y, target.y) - 32 }],
+      [{ x: sourcePoint.x, y: Math.max(source.y + source.height, target.y + target.height) + 32 }, { x: targetPoint.x, y: Math.max(source.y + source.height, target.y + target.height) + 32 }],
+    )
+  } else if (horizontalSource) {
+    const middleX = Math.round(sourcePoint.x + (targetPoint.x - sourcePoint.x) * .35)
+    const approachY = targetPort === 'top' ? targetPoint.y - 28 : targetPoint.y + 28
+    candidates.push([{ x: middleX, y: sourcePoint.y }, { x: middleX, y: approachY }, { x: targetPoint.x, y: approachY }])
+    candidates.push(
+      [{ x: source.x + source.width + 32, y: sourcePoint.y }, { x: source.x + source.width + 32, y: approachY }, { x: targetPoint.x, y: approachY }],
+      [{ x: source.x - 32, y: sourcePoint.y }, { x: source.x - 32, y: approachY }, { x: targetPoint.x, y: approachY }],
+    )
+  } else {
+    const middleY = Math.round(sourcePoint.y + (targetPoint.y - sourcePoint.y) * .35)
+    const approachX = targetPort === 'left' ? targetPoint.x - 28 : targetPoint.x + 28
+    candidates.push([{ x: sourcePoint.x, y: middleY }, { x: approachX, y: middleY }, { x: approachX, y: targetPoint.y }])
+    candidates.push(
+      [{ x: sourcePoint.x, y: source.y - 32 }, { x: approachX, y: source.y - 32 }, { x: approachX, y: targetPoint.y }],
+      [{ x: sourcePoint.x, y: source.y + source.height + 32 }, { x: approachX, y: source.y + source.height + 32 }, { x: approachX, y: targetPoint.y }],
+    )
+  }
+  const others = model.nodes.filter((node) => node.id !== source.id && node.id !== target.id)
+  const hitsNode = (from: FlowEdgeVertex, to: FlowEdgeVertex, node: FlowNodeState): boolean => {
+    const padding = 12
+    const left = node.x - padding
+    const right = node.x + node.width + padding
+    const top = node.y - padding
+    const bottom = node.y + node.height + padding
+    if (from.x === to.x) return from.x >= left && from.x <= right && Math.max(from.y, to.y) >= top && Math.min(from.y, to.y) <= bottom
+    if (from.y === to.y) return from.y >= top && from.y <= bottom && Math.max(from.x, to.x) >= left && Math.min(from.x, to.x) <= right
+    return false
+  }
+  const clearPath = (vertices: FlowEdgeVertex[]) => {
+    const points = [sourcePoint, ...vertices, targetPoint]
+    return others.every((node) => points.slice(0, -1).every((point, index) => {
+      const next = points[index + 1]
+      return next ? !hitsNode(point, next, node) : true
+    }))
+  }
+  return candidates.find(clearPath) ?? candidates[0] ?? []
+}
+
+function resolvedEdgeVertices(edge: FlowEdgeState): FlowEdgeVertex[] {
+  if (edge.manualVertices || edge.route !== 'orthogonal' || !edge.source || !edge.target) return edge.vertices
+  const source = model.nodes.find((node) => node.id === edge.source)
+  const target = model.nodes.find((node) => node.id === edge.target)
+  return source && target ? orthogonalNodeVertices(source, target, edge.sourcePort, edge.targetPort) : edge.vertices
+}
+
+function refreshAutomaticOrthogonalRoutes(): void {
+  if (!graph) return
+  graph.getEdges().forEach((edge) => {
+    const saved = edge.getData<{ flowEdge?: FlowEdgeState }>().flowEdge
+    if (!saved || saved.manualVertices || saved.route !== 'orthogonal') return
+    const source = snapshotNode(edge.getSourceCellId() || '')
+    const target = snapshotNode(edge.getTargetCellId() || '')
+    if (!source || !target) return
+    const vertices = orthogonalNodeVertices(source, target, edge.getSourcePortId() || saved.sourcePort, edge.getTargetPortId() || saved.targetPort)
+    edge.setData({ flowEdge: { ...saved, source: source.id, sourcePort: edge.getSourcePortId() || saved.sourcePort, target: target.id, targetPort: edge.getTargetPortId() || saved.targetPort, vertices, manualVertices: false } })
+    edge.setVertices(vertices)
+    const definition = routeAttrs('orthogonal', vertices.length, false)
+    edge.setRouter(definition.router.name, definition.router.args)
+    edge.setConnector(definition.connector.name)
+  })
+}
+
 function graphEdge(edge: FlowEdgeState): Record<string, unknown> {
+  const vertices = resolvedEdgeVertices(edge)
+  const resolved = { ...edge, vertices }
   return {
     id: edge.id,
     source: edge.source ? { cell: edge.source, port: edge.sourcePort } : edge.sourcePoint ?? { x: 0, y: 0 },
     target: edge.target ? { cell: edge.target, port: edge.targetPort } : edge.targetPoint ?? { x: 0, y: 0 },
-    vertices: edge.vertices.map(({ x, y }) => ({ x, y })),
-    data: { flowEdge: { ...edge } },
-    ...routeAttrs(edge.route, edge.vertices.length, Boolean(edge.sourcePoint || edge.targetPoint)),
+    vertices: vertices.map(({ x, y }) => ({ x, y })),
+    data: { flowEdge: resolved },
+    ...routeAttrs(edge.route, vertices.length, Boolean(edge.sourcePoint || edge.targetPoint)),
     attrs: { line: { stroke: edge.stroke, strokeWidth: edge.strokeWidth, strokeDasharray: dashArray(edge.dash), sourceMarker: marker(edge.sourceMarker), targetMarker: marker(edge.targetMarker) } },
     labels: edge.label ? [edge.label] : [],
   }
@@ -226,6 +316,7 @@ function draftEdge(): FlowEdgeState {
     targetPort: 'left',
     targetPoint: undefined,
     vertices: [],
+    manualVertices: false,
     route: connectionRoute.value,
     label: '',
     stroke: '#475569',
@@ -243,6 +334,29 @@ function isFloatingEdge(edge: Pick<FlowEdgeState, 'sourcePoint' | 'targetPoint'>
 function freeLineVertices(route: EdgeRoute, source: FlowEdgeVertex, target: FlowEdgeVertex): FlowEdgeVertex[] {
   if (route !== 'orthogonal' || source.x === target.x || source.y === target.y) return []
   return [{ x: target.x, y: source.y }]
+}
+
+function orthogonalPointVertices(sourcePoint: FlowEdgeVertex, targetPoint: FlowEdgeVertex, sourcePort: string, targetPort: string): FlowEdgeVertex[] {
+  const horizontalSource = sourcePort === 'right' || sourcePort === 'left'
+  const horizontalTarget = targetPort === 'right' || targetPort === 'left'
+  if (horizontalSource && horizontalTarget) {
+    if (sourcePoint.y === targetPoint.y) return []
+    const middleX = Math.round((sourcePoint.x + targetPoint.x) / 2)
+    return [{ x: middleX, y: sourcePoint.y }, { x: middleX, y: targetPoint.y }]
+  }
+  if (!horizontalSource && !horizontalTarget) {
+    if (sourcePoint.x === targetPoint.x) return []
+    const middleY = Math.round((sourcePoint.y + targetPoint.y) / 2)
+    return [{ x: sourcePoint.x, y: middleY }, { x: targetPoint.x, y: middleY }]
+  }
+  if (horizontalSource) {
+    const middleX = Math.round(sourcePoint.x + (targetPoint.x - sourcePoint.x) * .35)
+    const approachY = targetPort === 'top' ? targetPoint.y - 28 : targetPoint.y + 28
+    return [{ x: middleX, y: sourcePoint.y }, { x: middleX, y: approachY }, { x: targetPoint.x, y: approachY }]
+  }
+  const middleY = Math.round(sourcePoint.y + (targetPoint.y - sourcePoint.y) * .35)
+  const approachX = targetPort === 'left' ? targetPoint.x - 28 : targetPoint.x + 28
+  return [{ x: sourcePoint.x, y: middleY }, { x: approachX, y: middleY }, { x: approachX, y: targetPoint.y }]
 }
 
 function createFreeLine(source: FlowEdgeVertex, target: FlowEdgeVertex, route = connectionRoute.value): FlowEdgeState {
@@ -303,7 +417,7 @@ function finishFreeLine(clientX: number, clientY: number, cancelled = false): vo
   updateFreeLine(clientX, clientY)
   const current = edge.getData<{ flowEdge?: FlowEdgeState & { isPreview?: boolean } }>().flowEdge
   if (!current) return
-  const target = nodePortAt(clientX, clientY)
+  const target = nodePortAt(clientX, clientY, true)
   const next = target
     ? { ...current, target: target.nodeId, targetPort: target.portId, targetPoint: undefined, isPreview: false }
     : { ...current, isPreview: false }
@@ -317,67 +431,6 @@ function finishFreeLine(clientX: number, clientY: number, cancelled = false): vo
   preserveCurrentSelection()
   setToolMode('select')
   scheduleSync()
-}
-
-function placeBasicLine(clientX: number, clientY: number): void {
-  if (!graph) return
-  const point = graph.clientToLocal(clientX, clientY)
-  const source = { x: Math.round(point.x - 80), y: Math.round(point.y) }
-  const target = { x: Math.round(point.x + 80), y: Math.round(point.y) }
-  const edge = createFreeLine(source, target, basicLineRoute)
-  graph.addEdge(graphEdge(edge))
-  syncFromGraph()
-  selectEdge(edge.id)
-  preserveCurrentSelection()
-  activeRailPopover.value = null
-  setToolMode('select')
-  scheduleSync()
-}
-
-function clearBasicLineDrag(): void {
-  basicLinePointerId = null
-  basicLineGhost?.remove()
-  basicLineGhost = null
-}
-
-function moveBasicLineGhost(clientX: number, clientY: number): void {
-  if (!basicLineGhost) return
-  basicLineGhost.style.transform = `translate(${Math.round(clientX)}px, ${Math.round(clientY)}px) translate(-50%, -50%)`
-}
-
-function startBasicLineDrag(event: PointerEvent, route: EdgeRoute = 'straight'): void {
-  if (event.pointerType === 'touch' || event.button !== 0 || basicLinePointerId !== null) return
-  const source = event.currentTarget as HTMLElement
-  basicLinePointerId = event.pointerId
-  basicLineRoute = route
-  source.setPointerCapture(event.pointerId)
-  const ghost = document.createElement('div')
-  ghost.className = 'flowchart-basic-line-ghost'
-  ghost.setAttribute('aria-hidden', 'true')
-  ghost.innerHTML = '<i></i>'
-  document.body.append(ghost)
-  basicLineGhost = ghost
-  moveBasicLineGhost(event.clientX, event.clientY)
-  event.preventDefault()
-}
-
-function moveBasicLineDrag(event: PointerEvent): void {
-  if (event.pointerId !== basicLinePointerId) return
-  moveBasicLineGhost(event.clientX, event.clientY)
-  event.preventDefault()
-}
-
-function finishBasicLineDrag(event: PointerEvent): void {
-  if (event.pointerId !== basicLinePointerId) return
-  const source = event.currentTarget as HTMLElement
-  if (source.hasPointerCapture(event.pointerId)) source.releasePointerCapture(event.pointerId)
-  if (event.type !== 'pointercancel' && isCanvasDropPoint(event.clientX, event.clientY)) {
-    suppressConnectorChoice = true
-    window.setTimeout(() => { suppressConnectorChoice = false }, 0)
-    placeBasicLine(event.clientX, event.clientY)
-  }
-  clearBasicLineDrag()
-  event.preventDefault()
 }
 
 function snapshotNode(id: string): FlowNodeState | null {
@@ -435,6 +488,7 @@ function snapshotEdge(id: string): FlowEdgeState | null {
     targetPort: target ? edge.getTargetPortId() || 'left' : '',
     targetPoint: targetPoint ? { x: Math.round(targetPoint.x), y: Math.round(targetPoint.y) } : undefined,
     vertices: [],
+    manualVertices: false,
     route: 'orthogonal',
     label: '',
     stroke: '#475569',
@@ -467,6 +521,7 @@ function scheduleSync(): void {
 
 function syncFromGraph(): void {
   if (!graph) return
+  refreshAutomaticOrthogonalRoutes()
   model.nodes = graph.getNodes().map((node) => snapshotNode(node.id)).filter((node): node is FlowNodeState => Boolean(node))
   model.edges = graph.getEdges().map((edge) => snapshotEdge(edge.id)).filter((edge): edge is FlowEdgeState => Boolean(edge))
   if (!model.nodes.some((node) => node.id === selectedNodeId.value)) selectedNodeId.value = ''
@@ -484,6 +539,7 @@ function clearSelection(): void {
   extensionAnchors.value = []
   edgeEndpointAnchors.value = []
   clearHoveredConnectionNode()
+  clearHoveredConnectionPort()
   clearExtensionPreview()
 }
 
@@ -529,6 +585,7 @@ function lockManualOrthogonalRoute(edge: Edge): void {
   const saved = edge.getData<{ flowEdge?: Partial<FlowEdgeState> }>().flowEdge
   const route = saved?.route
   if (route !== 'orthogonal') return
+  edge.setData({ flowEdge: { ...saved, vertices: edge.getVertices().map(({ x, y }) => ({ x: Math.round(x), y: Math.round(y) })), manualVertices: true } })
   const definition = routeAttrs(route, edge.getVertices().length, Boolean(saved?.sourcePoint || saved?.targetPoint))
   edge.setRouter(definition.router.name, definition.router.args)
   edge.setConnector(definition.connector.name)
@@ -540,9 +597,12 @@ function selectEdge(id: string): void {
   const isCurrentEdge = selectedEdgeId.value === id
   graph?.getEdges().forEach((entry) => entry.removeTools())
   graph?.resetSelection(edge)
-  edge.addTools([
-    { name: 'segments', args: { precision: 1, attrs: { width: 16, height: 16, x: -8, y: -8, rx: 8, ry: 8, fill: 'var(--tool-accent)', stroke: 'var(--surface-raised)', 'stroke-width': 3 }, onChanged: ({ edge: changedEdge }: { edge: Edge }) => lockManualOrthogonalRoute(changedEdge) } },
-  ])
+  const selected = edge.getData<{ flowEdge?: FlowEdgeState }>().flowEdge
+  if (selected?.route === 'orthogonal') {
+    edge.addTools([
+      { name: 'segments', args: { precision: 1, threshold: 12, attrs: { width: 16, height: 16, x: -8, y: -8, rx: 8, ry: 8, fill: 'var(--tool-accent)', stroke: 'var(--surface-raised)', 'stroke-width': 3 }, onChanged: ({ edge: changedEdge }: { edge: Edge }) => lockManualOrthogonalRoute(changedEdge) } },
+    ])
+  }
   selectedNodeId.value = ''
   selectedEdgeId.value = id
   extensionAnchors.value = []
@@ -565,13 +625,20 @@ function bindSelectedEndpoint(nodeId: string, portId: string): void {
   const next = endpoint === 'source'
     ? { ...current, source: nodeId, sourcePort: portId, sourcePoint: undefined }
     : { ...current, target: nodeId, targetPort: portId, targetPoint: undefined }
-  const route = routeAttrs(next.route, next.vertices.length, isFloatingEdge(next))
-  edge.setData({ flowEdge: next })
+  const sourceNode = model.nodes.find((node) => node.id === next.source)
+  const targetNode = model.nodes.find((node) => node.id === next.target)
+  const normalized = sourceNode && targetNode && next.route === 'orthogonal'
+    ? { ...next, vertices: orthogonalNodeVertices(sourceNode, targetNode, next.sourcePort, next.targetPort), manualVertices: false }
+    : { ...next, manualVertices: false }
+  const route = routeAttrs(normalized.route, normalized.vertices.length, isFloatingEdge(normalized))
+  edge.setData({ flowEdge: normalized })
   if (endpoint === 'source') edge.setSource({ cell: nodeId, port: portId })
   else edge.setTarget({ cell: nodeId, port: portId })
+  edge.setVertices(normalized.vertices)
   edge.setRouter(route.router.name, route.router.args)
   edge.setConnector(route.connector.name)
   bindingEndpoint.value = null
+  clearHoveredConnectionPort()
   syncFromGraph()
   selectEdge(edge.id)
   requestAnimationFrame(updateEdgeEndpointControls)
@@ -599,12 +666,29 @@ function moveSelectedEndpoint(terminal: 'source' | 'target', clientX: number, cl
   const current = selectedEdge.value
   const edge = current ? graph?.getCellById(current.id) : null
   if (!graph || !current || !edge?.isEdge()) return
-  const local = graph.clientToLocal(clientX, clientY)
+  const snap = nodePortAt(clientX, clientY)
+  const snapped = snap ? graphPortPoint(snap.nodeId, snap.portId) : null
+  const local = snapped ?? graph.clientToLocal(clientX, clientY)
   const point = { x: Math.round(local.x), y: Math.round(local.y) }
   let next = terminal === 'source'
-    ? { ...current, source: '', sourcePort: '', sourcePoint: point }
-    : { ...current, target: '', targetPort: '', targetPoint: point }
-  if (next.sourcePoint && next.targetPoint) next = { ...next, vertices: freeLineVertices(next.route, next.sourcePoint, next.targetPoint) }
+    ? { ...current, source: '', sourcePort: '', sourcePoint: point, manualVertices: false }
+    : { ...current, target: '', targetPort: '', targetPoint: point, manualVertices: false }
+  if (next.route === 'orthogonal') {
+    const snappedNode = snap ? snapshotNode(snap.nodeId) : null
+    const fixedSource = current.source ? snapshotNode(current.source) : null
+    const fixedTarget = current.target ? snapshotNode(current.target) : null
+    if (terminal === 'source' && snappedNode && fixedTarget) {
+      next = { ...next, vertices: orthogonalNodeVertices(snappedNode, fixedTarget, snap!.portId, current.targetPort) }
+    } else if (terminal === 'target' && fixedSource && snappedNode) {
+      next = { ...next, vertices: orthogonalNodeVertices(fixedSource, snappedNode, current.sourcePort, snap!.portId) }
+    } else if (next.sourcePoint && next.targetPoint) {
+      next = { ...next, vertices: freeLineVertices(next.route, next.sourcePoint, next.targetPoint) }
+    } else if (terminal === 'source' && current.target) {
+      next = { ...next, vertices: orthogonalPointVertices(point, edge.getTargetPoint(), snap?.portId ?? current.sourcePort, current.targetPort) }
+    } else if (terminal === 'target' && current.source) {
+      next = { ...next, vertices: orthogonalPointVertices(edge.getSourcePoint(), point, current.sourcePort, snap?.portId ?? current.targetPort) }
+    }
+  }
   const route = routeAttrs(next.route, next.vertices.length, isFloatingEdge(next))
   edge.setData({ flowEdge: next })
   if (terminal === 'source') edge.setSource(point)
@@ -651,7 +735,7 @@ function finishEndpointDrag(event: PointerEvent): void {
     return
   }
   host.style.pointerEvents = 'none'
-  const target = event.type === 'pointercancel' ? null : nodePortAt(event.clientX, event.clientY)
+  const target = event.type === 'pointercancel' ? null : nodePortAt(event.clientX, event.clientY, true)
   host.style.pointerEvents = ''
   if (target) {
     bindingEndpoint.value = terminal
@@ -667,7 +751,17 @@ function finishEndpointDrag(event: PointerEvent): void {
   event.stopPropagation()
 }
 
-function nodePortAt(clientX: number, clientY: number): { nodeId: string; portId: string } | null {
+function graphPortPoint(nodeId: string, portId: string): FlowEdgeVertex | null {
+  const node = graph?.getCellById(nodeId)
+  if (!node?.isNode()) return null
+  const bounds = node.getBBox()
+  if (portId === 'top') return { x: bounds.x + bounds.width / 2, y: bounds.y }
+  if (portId === 'right') return { x: bounds.x + bounds.width, y: bounds.y + bounds.height / 2 }
+  if (portId === 'bottom') return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height }
+  return { x: bounds.x, y: bounds.y + bounds.height / 2 }
+}
+
+function nodePortAt(clientX: number, clientY: number, allowBody = false): { nodeId: string; portId: string } | null {
   const target = document.elementFromPoint(clientX, clientY)
   const portId = portIdFromTarget(target)
   const nodeId = target instanceof Element ? target.closest('.x6-node')?.getAttribute('data-cell-id') : null
@@ -692,7 +786,22 @@ function nodePortAt(clientX: number, clientY: number): { nodeId: string; portId:
   const nearest = candidates
     .map((candidate) => ({ ...candidate, distance: Math.hypot(local.x - candidate.x, local.y - candidate.y) }))
     .sort((left, right) => left.distance - right.distance)[0]
-  return nearest && nearest.distance <= 24 ? { nodeId: nearest.nodeId, portId: nearest.portId } : null
+  if (nearest && nearest.distance <= 24) return { nodeId: nearest.nodeId, portId: nearest.portId }
+  if (allowBody) {
+    const node = graph.getNodes().find((entry) => entry.getBBox().containsPoint(local))
+    if (node) {
+      const bounds = node.getBBox()
+      const distances = [
+        { portId: 'top', distance: Math.abs(local.y - bounds.y) },
+        { portId: 'right', distance: Math.abs(local.x - (bounds.x + bounds.width)) },
+        { portId: 'bottom', distance: Math.abs(local.y - (bounds.y + bounds.height)) },
+        { portId: 'left', distance: Math.abs(local.x - bounds.x) },
+      ]
+      const nearestDistance = distances.sort((left, right) => left.distance - right.distance)[0]
+      return nearestDistance ? { nodeId: node.id, portId: nearestDistance.portId } : null
+    }
+  }
+  return null
 }
 
 function beginClickLine(clientX: number, clientY: number, source?: { nodeId: string; portId: string }): void {
@@ -729,8 +838,14 @@ function updateClickLine(clientX: number, clientY: number): void {
   const saved = edge.getData<{ flowEdge?: FlowEdgeState & { isPreview?: boolean } }>().flowEdge
   if (!saved) return
   const local = graph.clientToLocal(clientX, clientY)
-  const targetPoint = { x: Math.round(local.x), y: Math.round(local.y) }
-  const vertices = saved.sourcePoint ? freeLineVertices(saved.route, saved.sourcePoint, targetPoint) : []
+  const targetPort = nodePortAt(clientX, clientY)
+  const targetPoint = targetPort ? graphPortPoint(targetPort.nodeId, targetPort.portId) ?? { x: Math.round(local.x), y: Math.round(local.y) } : { x: Math.round(local.x), y: Math.round(local.y) }
+  const sourcePoint = saved.sourcePoint ?? edge.getSourcePoint()
+  const sourceNode = saved.source ? snapshotNode(saved.source) : null
+  const targetNode = targetPort ? snapshotNode(targetPort.nodeId) : null
+  const vertices = saved.route === 'orthogonal' && sourceNode && targetNode && targetPort
+    ? orthogonalNodeVertices(sourceNode, targetNode, saved.sourcePort, targetPort.portId)
+    : sourcePoint ? orthogonalPointVertices(sourcePoint, targetPoint, saved.sourcePort || 'right', targetPort?.portId || 'left') : []
   const next = { ...saved, target: '', targetPort: '', targetPoint, vertices, isPreview: true }
   const route = routeAttrs(next.route, next.vertices.length, isFloatingEdge(next))
   edge.setData({ flowEdge: next })
@@ -763,13 +878,19 @@ function finishClickLine(clientX: number, clientY: number, cancelled = false): v
   const current = edge.getData<{ flowEdge?: FlowEdgeState & { isPreview?: boolean } }>().flowEdge
   pendingClickLine = null
   if (!current) return
-  const target = nodePortAt(clientX, clientY)
+  const target = nodePortAt(clientX, clientY, true)
   if (target && current.source === target.nodeId) {
     graph.removeCells([edge])
     return
   }
   const next = target
-    ? { ...current, target: target.nodeId, targetPort: target.portId, targetPoint: undefined, isPreview: false }
+    ? (() => {
+        const sourceNode = model.nodes.find((node) => node.id === current.source)
+        const targetNode = model.nodes.find((node) => node.id === target.nodeId)
+        return sourceNode && targetNode && current.route === 'orthogonal'
+          ? { ...current, target: target.nodeId, targetPort: target.portId, targetPoint: undefined, vertices: orthogonalNodeVertices(sourceNode, targetNode, current.sourcePort, target.portId), manualVertices: false, isPreview: false }
+          : { ...current, target: target.nodeId, targetPort: target.portId, targetPoint: undefined, manualVertices: false, isPreview: false }
+      })()
     : { ...current, isPreview: false }
   const route = routeAttrs(next.route, next.vertices.length, isFloatingEdge(next))
   edge.setData({ flowEdge: next })
@@ -789,6 +910,21 @@ function clearHoveredConnectionNode(): void {
   hoveredConnectionNodeId.value = ''
 }
 
+function clearHoveredConnectionPort(): void {
+  const current = hoveredConnectionPort.value
+  if (current) graph?.findViewByCell(current.nodeId)?.container.querySelector(`[port="${current.portId}"]`)?.classList.remove('flowchart-connection-port-target')
+  hoveredConnectionPort.value = null
+}
+
+function showHoveredConnectionPort(target: { nodeId: string; portId: string } | null): void {
+  const current = hoveredConnectionPort.value
+  if (current?.nodeId === target?.nodeId && current?.portId === target?.portId) return
+  clearHoveredConnectionPort()
+  if (!target) return
+  graph?.findViewByCell(target.nodeId)?.container.querySelector(`[port="${target.portId}"]`)?.classList.add('flowchart-connection-port-target')
+  hoveredConnectionPort.value = target
+}
+
 function showHoveredConnectionNode(id: string): void {
   if (!(activeMode.value === 'connect' || activeRailPopover.value === 'connectors' || selectedEdge.value || bindingEndpoint.value)) return
   if (hoveredConnectionNodeId.value === id) return
@@ -800,8 +936,10 @@ function showHoveredConnectionNode(id: string): void {
 function updateConnectionHover(clientX: number, clientY: number): void {
   if (!(activeMode.value === 'connect' || pendingClickLine || bindingEndpoint.value)) {
     clearHoveredConnectionNode()
+    clearHoveredConnectionPort()
     return
   }
+  showHoveredConnectionPort(nodePortAt(clientX, clientY))
   const nodeElement = document.elementsFromPoint(clientX, clientY)
     .map((element) => element.closest('.x6-node'))
     .find((element): element is Element => Boolean(element))
@@ -834,6 +972,16 @@ function extensionPorts(direction: ExtensionDirection): { sourcePort: string; ta
   if (direction === 'top') return { sourcePort: 'top', targetPort: 'bottom' }
   if (direction === 'bottom') return { sourcePort: 'bottom', targetPort: 'top' }
   return { sourcePort: 'right', targetPort: 'left' }
+}
+
+function extensionDirectionAvailable(source: FlowNodeState, direction: ExtensionDirection): boolean {
+  if (nearbyExtensionTarget(source, direction)) return false
+  const ports = extensionPorts(direction)
+  return !model.edges.some((edge) => {
+    const sourceSide = edge.source === source.id && edge.sourcePort === ports.sourcePort
+    const targetSide = edge.target === source.id && edge.targetPort === ports.sourcePort
+    return sourceSide || targetSide
+  })
 }
 
 function nearbyExtensionTarget(source: FlowNodeState, direction: ExtensionDirection): FlowNodeState | null {
@@ -869,11 +1017,7 @@ function showExtensionPreview(direction: ExtensionDirection): void {
   const view = graph && source ? graph.findViewByCell(source.id) : null
   if (!source || !host || !view?.container) return
   clearExtensionPreview()
-  const target = nearbyExtensionTarget(source, direction)
-  if (target) {
-    graph?.findViewByCell(target.id)?.container.classList.add('flowchart-extension-target')
-    return
-  }
+  if (!extensionDirectionAvailable(source, direction)) return
   const hostRect = host.getBoundingClientRect()
   const rect = (view.container as SVGElement).getBoundingClientRect()
   const gap = 90
@@ -888,17 +1032,9 @@ function extendFromNode(id: string, direction: ExtensionDirection = 'right'): vo
   if (!graph) return
   const source = model.nodes.find((node) => node.id === id) ?? snapshotNode(id)
   if (!source) return
+  if (!extensionDirectionAvailable(source, direction)) return
   clearExtensionPreview()
   const ports = extensionPorts(direction)
-  const nearby = nearbyExtensionTarget(source, direction)
-  if (nearby) {
-    const alreadyConnected = model.edges.some((edge) => edge.source === source.id && edge.target === nearby.id && edge.sourcePort === ports.sourcePort && edge.targetPort === ports.targetPort)
-    if (!alreadyConnected) graph.addEdge(graphEdge(createFlowEdge(source, nearby, { ...ports })))
-    syncFromGraph()
-    selectNode(nearby.id)
-    scheduleSync()
-    return
-  }
   const spacing = 120
   let x = direction === 'left' ? source.x - source.width - spacing : direction === 'right' ? source.x + source.width + spacing : source.x
   let y = direction === 'top' ? source.y - source.height - spacing : direction === 'bottom' ? source.y + source.height + spacing : source.y
@@ -911,7 +1047,7 @@ function extendFromNode(id: string, direction: ExtensionDirection = 'right'): vo
     else y += source.height + spacing
   }
   const next = createFlowNode(source.shape, x, y)
-  const edge = createFlowEdge(source, next, { ...ports })
+  const edge = createFlowEdge(source, next, { ...ports, vertices: source && next && connectionRoute.value === 'orthogonal' ? orthogonalNodeVertices(source, next, ports.sourcePort, ports.targetPort) : [] })
   graph.batchUpdate(() => {
     graph?.addNode(graphNode(next))
     graph?.addEdge(graphEdge(edge))
@@ -932,12 +1068,20 @@ function updateExtensionControl(): void {
   const hostRect = host.getBoundingClientRect()
   const nodeRect = (view.container as SVGElement).getBoundingClientRect()
   const clamp = (value: number, maximum: number) => Math.max(20, Math.min(maximum - 20, value))
-  extensionAnchors.value = [
+  const source = model.nodes.find((node) => node.id === id) ?? snapshotNode(id)
+  if (!source) {
+    extensionAnchors.value = []
+    return
+  }
+  const directions: ExtensionDirection[] = ['left', 'right', 'top', 'bottom']
+  const available = directions.filter((direction) => extensionDirectionAvailable(source, direction))
+  const anchors: { direction: ExtensionDirection; left: number; top: number }[] = [
     { direction: 'left', left: clamp(nodeRect.left - hostRect.left - 16, host.clientWidth), top: clamp(nodeRect.top - hostRect.top + nodeRect.height / 2, host.clientHeight) },
     { direction: 'right', left: clamp(nodeRect.right - hostRect.left + 16, host.clientWidth), top: clamp(nodeRect.top - hostRect.top + nodeRect.height / 2, host.clientHeight) },
     { direction: 'top', left: clamp(nodeRect.left - hostRect.left + nodeRect.width / 2, host.clientWidth), top: clamp(nodeRect.top - hostRect.top - 16, host.clientHeight) },
     { direction: 'bottom', left: clamp(nodeRect.left - hostRect.left + nodeRect.width / 2, host.clientWidth), top: clamp(nodeRect.bottom - hostRect.top + 16, host.clientHeight) },
   ]
+  extensionAnchors.value = anchors.filter(({ direction }) => available.includes(direction))
 }
 
 function updateNode(patch: Partial<FlowNodeState>): void {
@@ -1100,19 +1244,9 @@ function toggleShapePopover(): void {
   setToolMode('select')
 }
 
-function toggleConnectorPopover(): void {
-  activeRailPopover.value = activeRailPopover.value === 'connectors' ? null : 'connectors'
-  setToolMode('select')
-}
-
-function chooseConnector(route: EdgeRoute): void {
-  if (suppressConnectorChoice) return
-  connectionRoute.value = route
-  activeRailPopover.value = null
-  setToolMode('connect')
-}
-
-function beginNodeConnection(): void {
+function activateDefaultConnector(): void {
+  connectionRoute.value = 'orthogonal'
+  connectionEndMarker.value = 'arrow'
   activeRailPopover.value = null
   setToolMode('connect')
 }
@@ -1121,6 +1255,10 @@ function setToolMode(mode: ToolMode): void {
   if (mode !== 'connect') cancelClickLine()
   activeMode.value = mode
   connectingSourceId.value = ''
+  if (mode === 'pan') {
+    preserveSelectionUntil = 0
+    clearSelection()
+  }
   if (!graph) return
   if (mode === 'connect') {
     graph.cleanSelection()
@@ -1229,11 +1367,11 @@ function replaceDiagram(next: FlowchartState): void {
     pendingDiagram = next
     return
   }
-  graph.fromJSON({ nodes: next.nodes.map(graphNode), edges: next.edges.map(graphEdge) })
-  graph.cleanHistory()
   model.title = next.title
   model.nodes = next.nodes.map((node) => ({ ...node }))
   model.edges = next.edges.map((edge) => ({ ...edge, sourcePoint: edge.sourcePoint ? { ...edge.sourcePoint } : undefined, targetPoint: edge.targetPoint ? { ...edge.targetPoint } : undefined, vertices: edge.vertices.map((vertex) => ({ ...vertex })) }))
+  graph.fromJSON({ nodes: model.nodes.map(graphNode), edges: model.edges.map(graphEdge) })
+  graph.cleanHistory()
   clearSelection()
   requestAnimationFrame(fitGraph)
 }
@@ -1348,7 +1486,7 @@ function startCanvasPointer(event: PointerEvent): void {
   const directPortNode = directPortNodeId ? graph?.getCellById(directPortNodeId) : null
   const portHit = directPortId && directPortNode?.isNode()
     ? { nodeId: directPortNode.id, portId: directPortId }
-    : nodePortAt(event.clientX, event.clientY)
+    : nodePortAt(event.clientX, event.clientY, Boolean(bindingEndpoint.value))
   if (bindingEndpoint.value) {
     if (portHit) {
       bindSelectedEndpoint(portHit.nodeId, portHit.portId)
@@ -1383,6 +1521,8 @@ function startCanvasPointer(event: PointerEvent): void {
     return
   }
   if (activeMode.value !== 'pan' || isCanvasPlacementBlockedTarget(event.target)) return
+  preserveSelectionUntil = 0
+  clearSelection()
   const host = event.currentTarget as HTMLElement
   canvasPointerId = event.pointerId
   previousCanvasPointerX = event.clientX
@@ -1617,6 +1757,9 @@ onMounted(async () => {
     if (hoveredConnectionNodeId.value === node.id) clearHoveredConnectionNode()
   })
   graph.on('edge:click', ({ edge }) => selectEdge(edge.id))
+  graph.on('blank:mousedown', ({ e }) => {
+    if (e.button === 2 || activeMode.value === 'pan') clearSelection()
+  })
   graph.on('blank:click', clearSelection)
   graph.on('cell:changed', () => {
     scheduleSync()
@@ -1658,7 +1801,6 @@ onBeforeUnmount(() => {
   pendingTouchPanX = 0
   pendingTouchPanY = 0
   freeLineId = ''
-  clearBasicLineDrag()
   canvasTouchMoved = false
   clearPaletteTouch()
   dnd?.dispose()
@@ -1695,7 +1837,7 @@ onBeforeUnmount(() => {
         <div class="flowchart-rail-group">
           <button type="button" class="flowchart-rail-button tooltip-anchor" :class="{ active: activeMode === 'select' }" aria-label="选择工具" :aria-pressed="activeMode === 'select'" data-tooltip="选择" @click="activeRailPopover = null; setToolMode('select')"><MousePointer2 :size="18" /></button>
           <button type="button" class="flowchart-rail-button tooltip-anchor" :class="{ active: activeRailPopover === 'shapes' }" aria-label="形状工具" :aria-pressed="activeRailPopover === 'shapes'" data-tooltip="形状" @click="toggleShapePopover"><Shapes :size="18" /></button>
-          <button type="button" class="flowchart-rail-button tooltip-anchor" :class="{ active: activeMode === 'connect' }" aria-label="连线工具" :aria-pressed="activeMode === 'connect'" data-tooltip="连线" @click="toggleConnectorPopover"><GitBranch :size="18" /></button>
+          <button type="button" class="flowchart-rail-button tooltip-anchor" :class="{ active: activeMode === 'connect' }" aria-label="连线工具" :aria-pressed="activeMode === 'connect'" data-tooltip="连线" @click="activateDefaultConnector"><GitBranch :size="18" /></button>
           <button type="button" class="flowchart-rail-button tooltip-anchor" :class="{ active: activeMode === 'pan' }" aria-label="抓手工具" :aria-pressed="activeMode === 'pan'" data-tooltip="抓手" @click="activeRailPopover = null; setToolMode('pan')"><Hand :size="18" /></button>
         </div>
         <div class="flowchart-rail-divider" />
@@ -1711,21 +1853,6 @@ onBeforeUnmount(() => {
           <div class="flowchart-shape-list"><button v-for="item in paletteItems" :key="item.id" type="button" :class="['flowchart-shape', `shape-${item.id}`, { 'is-pending': pendingPaletteShape === item.id, 'is-touch-dragging': paletteTouchDragging && paletteTouchShape === item.id }]" :aria-label="`拖拽添加${item.label}`" :aria-pressed="pendingPaletteShape === item.id" :title="item.label" @mousedown.prevent="startPaletteDrag(item.id, $event)" @touchstart="startPaletteTouch(item.id, $event)" @touchmove="movePaletteTouch" @touchend="finishPaletteTouch(item.id, $event)" @touchcancel="cancelPaletteTouch"><span class="flowchart-shape-preview"><FlowShapePreview :shape="item.id" /></span><span class="flowchart-shape-label">{{ item.label }}</span></button></div>
         </section>
 
-        <section v-if="activeRailPopover === 'connectors'" class="flowchart-rail-popover flowchart-connector-popover" aria-label="连线选择">
-          <header><strong>连线</strong><small>拖动放置</small></header>
-          <button type="button" class="flowchart-basic-line" aria-label="拖拽添加基础线条" @pointerdown="startBasicLineDrag" @pointermove="moveBasicLineDrag" @pointerup="finishBasicLineDrag" @pointercancel="finishBasicLineDrag"><i /><span>基础线条</span></button>
-          <div class="flowchart-connector-options" aria-label="连线样式">
-            <button type="button" :class="{ active: connectionRoute === 'orthogonal' }" aria-label="使用正交连线" title="拖拽添加正交线条" @pointerdown="startBasicLineDrag($event, 'orthogonal')" @pointermove="moveBasicLineDrag" @pointerup="finishBasicLineDrag" @pointercancel="finishBasicLineDrag" @click="chooseConnector('orthogonal')"><i class="orthogonal" /><span>正交</span></button>
-            <button type="button" :class="{ active: connectionRoute === 'straight' }" aria-label="使用直线连线" title="拖拽添加直线" @pointerdown="startBasicLineDrag($event, 'straight')" @pointermove="moveBasicLineDrag" @pointerup="finishBasicLineDrag" @pointercancel="finishBasicLineDrag" @click="chooseConnector('straight')"><i class="straight" /><span>直线</span></button>
-            <button type="button" :class="{ active: connectionRoute === 'curve' }" aria-label="使用曲线连线" title="拖拽添加曲线" @pointerdown="startBasicLineDrag($event, 'curve')" @pointermove="moveBasicLineDrag" @pointerup="finishBasicLineDrag" @pointercancel="finishBasicLineDrag" @click="chooseConnector('curve')"><i class="curve" /><span>曲线</span></button>
-          </div>
-          <div class="flowchart-marker-options" aria-label="连线终点样式">
-            <button type="button" :class="{ active: connectionEndMarker === 'arrow' }" aria-label="使用箭头终点" @click="connectionEndMarker = 'arrow'">箭头</button>
-            <button type="button" :class="{ active: connectionEndMarker === 'diamond' }" aria-label="使用菱形终点" @click="connectionEndMarker = 'diamond'">菱形</button>
-            <button type="button" :class="{ active: connectionEndMarker === 'none' }" aria-label="使用无线条终点" @click="connectionEndMarker = 'none'">无终点</button>
-          </div>
-          <button type="button" class="flowchart-node-connection" aria-label="连接已有图形" @click="beginNodeConnection">连接已有图形</button>
-        </section>
       </aside>
 
       <div
@@ -1771,7 +1898,7 @@ onBeforeUnmount(() => {
         <template v-else-if="selectedEdge">
           <div class="panel-label"><span>连线属性</span><small>拖动控制点</small></div>
           <label>标签<input :value="selectedEdge.label" aria-label="连线标签" maxlength="120" @input="updateEdge({ label: ($event.target as HTMLInputElement).value })" /></label>
-          <div class="flowchart-field-grid"><label>路径<select :value="selectedEdge.route" aria-label="连线路径" @change="updateEdge({ route: ($event.target as HTMLSelectElement).value as EdgeRoute })"><option value="orthogonal">正交</option><option value="straight">直线</option><option value="curve">曲线</option></select></label><label>线宽<input :value="selectedEdge.strokeWidth" aria-label="连线宽度" type="number" min="1" max="12" step="0.5" @change="updateEdge({ strokeWidth: Number(($event.target as HTMLInputElement).value) })" /></label></div>
+          <label>线宽<input :value="selectedEdge.strokeWidth" aria-label="连线宽度" type="number" min="1" max="12" step="0.5" @change="updateEdge({ strokeWidth: Number(($event.target as HTMLInputElement).value) })" /></label>
           <div class="flowchart-field-grid"><label>起点<select :value="selectedEdge.sourceMarker" aria-label="连线起点样式" @change="updateEdge({ sourceMarker: ($event.target as HTMLSelectElement).value as EdgeMarker })"><option value="none">无</option><option value="arrow">箭头</option><option value="diamond">菱形</option><option value="circle">圆点</option></select></label><label>终点<select :value="selectedEdge.targetMarker" aria-label="连线终点样式" @change="updateEdge({ targetMarker: ($event.target as HTMLSelectElement).value as EdgeMarker })"><option value="none">无</option><option value="arrow">箭头</option><option value="diamond">菱形</option><option value="circle">圆点</option></select></label></div>
           <div class="flowchart-swatch-field"><span>线条色</span><div><button v-for="stroke in edgeStrokeOptions" :key="stroke" type="button" :class="{ active: selectedEdge.stroke === stroke }" :style="{ backgroundColor: stroke }" :aria-label="`使用线条色 ${stroke}`" @click="updateEdge({ stroke })" /><input :value="selectedEdge.stroke" aria-label="自定义线条色" type="color" @input="updateEdge({ stroke: ($event.target as HTMLInputElement).value })" /></div></div>
           <label>线条样式<select :value="selectedEdge.dash" aria-label="连线样式" @change="updateEdge({ dash: ($event.target as HTMLSelectElement).value as StrokeDash })"><option value="solid">实线</option><option value="dashed">虚线</option><option value="dotted">点线</option></select></label>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { AlertCircle, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronRight, Circle, ClipboardList, FileUp, FolderPlus, GripVertical, ListChecks, ListTodo, Pencil, Plus, Search, Trash2, X } from '@lucide/vue'
-import { computed, reactive, ref, watch, type Component } from 'vue'
+import { AlertCircle, CalendarDays, Check, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, FileUp, FolderPlus, GripVertical, ListChecks, ListTodo, Pencil, Plus, Search, Trash2, X } from '@lucide/vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch, type Component } from 'vue'
 
 import IconButton from '@/components/IconButton.vue'
 import { useToastStore } from '@/stores/toast'
@@ -30,7 +30,6 @@ const props = defineProps<{ state: Record<string, unknown> }>()
 const emit = defineEmits<{ 'update:state': [state: Record<string, unknown>] }>()
 const toast = useToastStore()
 const model = reactive(normalizeChecklistState(props.state))
-const quickAdd = ref('')
 const editorOpen = ref(false)
 const editingItemId = ref<string | null>(null)
 const draggedItemId = ref<string | null>(null)
@@ -46,6 +45,10 @@ const importCategory = ref('')
 const newImportCategory = ref('')
 const importError = ref('')
 const importFileInput = ref<HTMLInputElement | null>(null)
+const dialogRef = ref<HTMLElement | null>(null)
+const titleInput = ref<HTMLInputElement | null>(null)
+const dueDateInput = ref<HTMLInputElement | null>(null)
+const returnFocus = ref<HTMLElement | null>(null)
 
 const viewLabels: Record<ChecklistView, string> = { all: '全部', today: '今天', overdue: '已逾期', completed: '已完成' }
 const viewIcons: Record<ChecklistView, Component> = { all: ListTodo, today: CalendarDays, overdue: AlertCircle, completed: CheckCircle2 }
@@ -143,6 +146,44 @@ function closeEditor(): void {
   resetDraft()
 }
 
+function handleEditorKeydown(event: KeyboardEvent): void {
+  if (!editorOpen.value) return
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeEditor()
+    return
+  }
+  if (event.key !== 'Tab') return
+
+  const focusable = dialogRef.value?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])')
+  if (!focusable?.length) return
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  if (!first || !last) return
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
+watch(editorOpen, async (open, previousOpen) => {
+  if (open) {
+    if (!previousOpen) returnFocus.value = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    await nextTick()
+    titleInput.value?.focus()
+  } else if (previousOpen) {
+    await nextTick()
+    if (returnFocus.value?.isConnected) returnFocus.value.focus()
+    returnFocus.value = null
+  }
+})
+
+onMounted(() => window.addEventListener('keydown', handleEditorKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', handleEditorKeydown))
+
 function saveItem(): void {
   const list = activeList.value
   if (!list || !draft.title.trim()) {
@@ -162,15 +203,26 @@ function saveItem(): void {
   closeEditor()
 }
 
-function addQuickItem(): void {
-  const title = quickAdd.value.trim()
-  const list = activeList.value
-  if (!title || !list) return
-  const item = createChecklistItem({ ...emptyChecklistItemDraft(), title })
-  if (!item) return
-  updateActiveItems([{ ...item, order: -1 }, ...list.items.map((existing, index) => ({ ...existing, order: index }))])
-  quickAdd.value = ''
-  if (model.view === 'completed') model.view = 'all'
+function openDueDatePicker(): void {
+  const input = dueDateInput.value
+  if (!input) return
+  input.focus()
+  const pickerInput = input as HTMLInputElement & { showPicker?: () => void }
+  pickerInput.showPicker?.()
+}
+
+function setDueDateOffset(offset: number): void {
+  const date = new Date()
+  date.setHours(12, 0, 0, 0)
+  date.setDate(date.getDate() + offset)
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  draft.dueDate = `${year}-${month}-${day}`
+}
+
+function clearDueDate(): void {
+  draft.dueDate = ''
 }
 
 function toggleItem(item: ChecklistItem): void {
@@ -411,23 +463,15 @@ function dueState(item: ChecklistItem): 'today' | 'overdue' | 'normal' | 'done' 
           <footer><button class="command-button subtle" type="button" @click="closeImporter">取消</button><button class="command-button primary" type="button" :disabled="!importTitles.length" @click="saveImport">导入条目</button></footer>
         </section>
 
-        <form class="checklist-quick-add" aria-label="快速添加清单条目" @submit.prevent="addQuickItem">
-          <label class="checklist-check-control pending"><input type="checkbox" disabled aria-label="新条目未完成" /><span class="checklist-check-box"><Circle :size="17" aria-hidden="true" /></span></label>
-          <input v-model="quickAdd" aria-label="添加清单条目" maxlength="160" placeholder="添加条目" />
-          <IconButton :icon="Plus" label="添加清单条目" size="small" :disabled="!quickAdd.trim()" @click="addQuickItem" />
-        </form>
+        <button v-if="!allItems.length" class="checklist-first-add" type="button" aria-label="添加第一条清单条目" @click="openCreate()">
+          <span class="checklist-first-add-copy"><span class="checklist-first-add-icon" aria-hidden="true"><ListChecks :size="19" /></span><span><strong>新建第一项</strong><small>先写下要完成的事情，详情稍后也可以修改</small></span></span>
+          <Plus :size="18" aria-hidden="true" />
+        </button>
 
-        <form v-if="editorOpen" class="checklist-editor" aria-label="条目详情编辑器" @submit.prevent="saveItem">
-          <header><div><strong>{{ editingItemId ? '编辑条目' : '补充条目详情' }}</strong><small>{{ formError || '条目详情' }}</small></div><IconButton :icon="X" label="关闭条目编辑器" size="small" @click="closeEditor" /></header>
-          <div class="checklist-editor-fields">
-            <label class="checklist-editor-title"><span>条目名称</span><input v-model="draft.title" autofocus maxlength="160" /></label>
-            <label><span>分类</span><input v-model="draft.section" maxlength="60" placeholder="可留空" /></label>
-            <label><span>优先级</span><select v-model="draft.priority"><option value="high">高</option><option value="medium">中</option><option value="low">低</option></select></label>
-            <label><span>截止日</span><input v-model="draft.dueDate" type="date" /></label>
-            <label class="checklist-editor-note"><span>备注</span><textarea v-model="draft.note" maxlength="1200" rows="2" placeholder="可选：补充下一步、联系人或交付说明" /></label>
-          </div>
-          <footer><button class="command-button subtle" type="button" @click="closeEditor">取消</button><button class="command-button primary" type="submit">{{ editingItemId ? '保存修改' : '保存条目' }}</button></footer>
-        </form>
+        <button v-else class="checklist-add-entry" type="button" aria-label="添加清单条目" @click="openCreate()">
+          <span class="checklist-add-entry-copy"><Plus :size="17" aria-hidden="true" /><span><strong>添加条目</strong><small>打开弹窗填写分类、优先级和截止日期</small></span></span>
+          <ChevronRight :size="17" aria-hidden="true" />
+        </button>
 
         <div class="checklist-item-area" role="list" aria-label="清单条目">
           <section v-for="section in filteredSections" :key="section.key" class="checklist-section">
@@ -444,5 +488,31 @@ function dueState(item: ChecklistItem): 'today' | 'overdue' | 'normal' | 'done' 
         </div>
       </main>
     </section>
+
+    <Teleport to="body">
+      <Transition name="checklist-editor-dialog">
+        <div v-if="editorOpen" class="modal-backdrop checklist-editor-backdrop" @pointerdown.self="closeEditor">
+          <form ref="dialogRef" class="modal checklist-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="checklist-editor-title" @submit.prevent="saveItem">
+            <header>
+              <div><span class="checklist-editor-kicker">条目详情</span><h2 id="checklist-editor-title">{{ editingItemId ? '编辑条目' : '新增条目' }}</h2><p>{{ formError || '补充信息后，条目会保存到当前工作区。' }}</p></div>
+              <IconButton :icon="X" label="关闭条目编辑器" @click="closeEditor" />
+            </header>
+            <div class="checklist-editor-dialog-body">
+              <div class="checklist-editor-fields">
+                <label class="checklist-editor-title"><span>条目名称</span><input ref="titleInput" v-model="draft.title" maxlength="160" /></label>
+                <label><span>分类</span><input v-model="draft.section" maxlength="60" placeholder="可留空" /></label>
+                <label><span>优先级</span><select v-model="draft.priority"><option value="high">高</option><option value="medium">中</option><option value="low">低</option></select></label>
+                <div class="checklist-date-field">
+                  <label class="checklist-date-label" for="checklist-due-date">截止日期</label><div class="checklist-date-control" @click="openDueDatePicker"><CalendarDays :size="15" aria-hidden="true" /><input id="checklist-due-date" ref="dueDateInput" v-model="draft.dueDate" type="date" /><IconButton :icon="X" label="清除日期" size="small" :disabled="!draft.dueDate" @click.stop="clearDueDate" /></div>
+                  <div class="checklist-date-presets"><button type="button" @click="setDueDateOffset(0)">今天</button><button type="button" @click="setDueDateOffset(1)">明天</button></div>
+                </div>
+                <label class="checklist-editor-note"><span>备注</span><textarea v-model="draft.note" maxlength="1200" rows="3" placeholder="可选：补充下一步、联系人或交付说明" /></label>
+              </div>
+            </div>
+            <footer><button class="command-button subtle" type="button" @click="closeEditor">取消</button><button class="command-button primary" type="submit">{{ editingItemId ? '保存修改' : '保存条目' }}</button></footer>
+          </form>
+        </div>
+      </Transition>
+    </Teleport>
   </section>
 </template>

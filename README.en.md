@@ -13,27 +13,54 @@ Python, pywebview, WebView2, Vue 3, and TypeScript. Extract the ZIP and launch
 
 - **JSON**: strict validation, formatting, minification, editable syntax-colored output, tree view, relationship graph, and JSONPath queries. Graph cards group fields by level, and node content can be edited and applied back to the result.
 - **JSON Diff**: semantic comparison with optional object-key order normalization and highlighted changes.
-- **JSON / JavaBean**: two-way conversion with class name and Lombok options.
-- **SQL Formatter & Converter**: cross-database SQL dialect conversion, keyword casing, and indentation controls.
 - **YAML Formatter**: validation, parsing, and formatting.
 - **XML Formatter**: validation, formatting, and minification.
 
-### Encoding
+### Encoding and identifiers
 
 - **Base64 Text**: UTF-8 encoding, decoding, and URL-safe mode.
 - **Base64 Image**: image file and Data URL conversion with preview.
 - **Base64 File**: arbitrary file and Base64 conversion.
 - **MD5 Digest**: standard 32-character UTF-8 text digests with lower- or uppercase output.
+- **UUID / ULID**: generate UUID v4, UUID v7, and ULID values, and inspect their time components.
+
+### Images and media
+
+- **QR Code**: local QR generation with correction levels and image decoding.
+- **Image Studio**: local image crop, resize, compression, and PNG/JPEG/WebP conversion with lossless original-file copying.
+- **Image Format Converter**: convert dropped, pasted, or selected images locally to PNG, JPEG, or WebP; JPEG uses a white background.
+- **Video to Audio**: extract browser-supported audio tracks from local video files.
+
+### Documents and files
+
+- **File Manager**: manage local tool archives and folders with controlled save and restore operations.
 - **HTML to PDF**: import HTML or a ZIP with local CSS, fonts, and images, then safely preview and export without remote asset requests.
 - **Word to PDF**: Windows desktop prefers installed Microsoft Word and falls back to LibreOffice; Web uses compatibility rendering.
 - **PDF to Word**: Windows uses enhanced Microsoft Word conversion when available; Web and no-Word environments create an editable text-compatible DOCX.
 
-### Developer utilities
+### API and debugging
 
+- **API Debugger**: send HTTP requests and inspect local responses.
+- **JWT Analyzer**: decode token claims and expiry locally.
+- **Regex Workbench**: live match highlighting, capture details, common flags, and replacement previews.
+### Data and code conversion
+
+- **JSON / JavaBean**: two-way conversion with class name and Lombok options.
+- **SQL Formatter & Converter**: cross-database SQL dialect conversion, keyword casing, and indentation controls.
 - **Java Escape**: string escaping, unescaping, and optional Unicode conversion.
+- **Naming Converter**: convert camelCase, PascalCase, snake_case, kebab-case, and other code naming styles.
+
+### Diagrams and tasks
+
+- **Mermaid Flowchart**: author and export flowcharts and sequence diagrams.
+- **Flowchart Board**: draw, connect, style, and import/export local flowcharts.
+- **Lightweight Kanban**: manage todo, in-progress, and completed tasks locally.
+- **Checklist Workspace**: manage multiple local lists, sections, and progress.
+
+### Time and productivity
+
 - **Date Converter**: automatic recognition of timestamps, ISO 8601, common date formats, Chinese dates, RFC values, and time zones, with local, UTC, ISO, and selected IANA-zone output.
 - **Crontab Generator**: two-way expression and field editing, field templates, presets, readable summaries, IANA time zones, and the next 5/10/20 runs.
-- **Regex Workbench**: live match highlighting, capture details, common flags, and replacement previews.
 - **Super Calculator**: scientific functions, base and bit operations, unit conversion, finance/date, plus matrix, complex, and statistics calculations.
 - **Notes**: notebooks, folders, and Markdown notes stored in desktop `data/notes/` or browser IndexedDB, with the pinned note surfaced on the home workspace.
 
@@ -41,8 +68,8 @@ Python, pywebview, WebView2, Vue 3, and TypeScript. Extract the ZIP and launch
 
 - **Text Diff**: line- or character-level comparison with highlighted changes.
 - **Text Statistics**: character, word, line, paragraph, and UTF-8 byte counts.
-- **Hosts**: direct system Hosts editing in the desktop build with diff preview, source digest checks, UAC save, and full-file backup and restore. The web build clearly marks this feature as desktop-only.
 - **Clipboard History**: desktop-only in-memory history for the latest 100 text clipboard entries. It clears on exit; the browser build provides a desktop download entry.
+- **Hosts**: direct system Hosts editing in the desktop build with diff preview, source digest checks, UAC save, and full-file backup and restore. The web build clearly marks this feature as desktop-only.
 
 Both panes remain editable in every side-by-side tool. The divider supports
 pointer dragging, keyboard adjustment, and double-click reset. Results from

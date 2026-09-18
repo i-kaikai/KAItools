@@ -829,11 +829,21 @@ html[data-motion='reduced'] .home-motion-entry, html[data-motion='reduced'] .hom
 
 /* Kanban refresh: clear hierarchy, status-led lanes, and larger task typography. */
 .kanban-modern { min-height: 0; height: 100%; padding-top: 10px; --tool-accent: #45936f; }
-.kanban-modern-header { flex-basis: 45px; margin-bottom: 6px; }
-.kanban-modern-header > div:first-child { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; column-gap: 11px; }
+.kanban-modern-header { display: grid; grid-template-columns: minmax(300px, .9fr) minmax(420px, 1.4fr) auto; align-items: center; gap: 18px; flex-basis: 62px; margin-bottom: 8px; }
+.kanban-modern-header > .kanban-header-copy { display: grid; min-width: 0; align-content: center; gap: 3px; }
 .kanban-eyebrow { display: none; }
-.kanban-modern-header h1 { grid-column: 1; font-size: 19px; }
-.kanban-modern-header p { grid-column: 2; margin-top: 0; font-size: 11px; }
+.kanban-modern-header h1 { font-size: 19px; }
+.kanban-modern-header p { margin-top: 0; overflow: visible; font-size: 11px; line-height: 1.35; text-overflow: clip; white-space: normal; }
+.kanban-header-copy { min-width: 0; }
+.kanban-header-overview { min-width: 0; min-height: 40px; margin: 0; padding: 0; border: 0; background: transparent; grid-template-columns: minmax(126px, .8fr) minmax(196px, 1.25fr) minmax(92px, .55fr); gap: 12px; }
+.kanban-header-overview .kanban-overview-lead { gap: 8px; }
+.kanban-header-overview .kanban-overview-lead > strong { font-size: 18px; }
+.kanban-header-overview .kanban-overview-lead b { font-size: 10px; }
+.kanban-header-overview .kanban-overview-lead span, .kanban-header-overview .kanban-overview-stats span { font-size: 9px; }
+.kanban-header-overview .kanban-overview-stats { gap: 10px; }
+.kanban-header-overview .kanban-overview-stats > div { padding-left: 8px; }
+.kanban-header-overview .kanban-overview-stats b { font-size: 13px; }
+.kanban-header-overview .kanban-overview-bar i { height: 4px; }
 .kanban-overview { display: grid; grid-template-columns: minmax(190px, 1fr) minmax(280px, 1.1fr) 170px; align-items: center; gap: 15px; min-height: 50px; margin-bottom: 7px; padding: 6px 11px; border-block: 1px solid var(--border-subtle); background: color-mix(in srgb, var(--surface-subtle) 72%, transparent); }
 .kanban-overview-lead { display: flex; min-width: 0; align-items: center; gap: 11px; }
 .kanban-overview-lead > strong { flex: 0 0 auto; color: var(--tool-accent); font: 700 20px/1 "Cascadia Code", Consolas, monospace; }
@@ -876,7 +886,7 @@ html[data-motion='reduced'] .home-motion-entry, html[data-motion='reduced'] .hom
 .kanban-column-heading strong { color: var(--text-primary); font-size: 12px; }.kanban-column-heading small { color: var(--text-faint); font-size: 9px; }
 .kanban-column-heading > b { min-width: 23px; margin-left: auto; padding: 4px 5px; border-radius: 5px; color: var(--lane-accent); background: color-mix(in srgb, var(--lane-accent) 10%, var(--surface)); font: 700 10px/1 "Cascadia Code", Consolas, monospace; text-align: center; }
 .kanban-modern-column > .kanban-column-header > .icon-button { color: var(--text-faint); }.kanban-modern-column > .kanban-column-header > .icon-button:hover { color: var(--lane-accent); }
-.kanban-modern-column .kanban-task-list { gap: 8px; padding: 10px; }
+.kanban-modern-column .kanban-task-list { gap: 8px; max-height: 100%; padding: 10px; flex: 0 1 auto; overflow: auto; }
 .kanban-modern-task { min-height: 124px; padding: 11px 11px 9px; border-color: var(--border); border-radius: 7px; background: var(--surface); box-shadow: 0 2px 5px color-mix(in srgb, var(--text-primary) 5%, transparent); cursor: grab; transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease, transform 140ms var(--ease-out); }
 .kanban-modern-task:hover, .kanban-modern-task:focus-within { border-color: color-mix(in srgb, var(--lane-accent) 55%, var(--border)); background: var(--surface-raised); box-shadow: 0 5px 13px color-mix(in srgb, var(--text-primary) 10%, transparent); transform: translateY(-1px); }
 .kanban-modern-task:active { cursor: grabbing; transform: none; }
@@ -891,16 +901,60 @@ html[data-motion='reduced'] .home-motion-entry, html[data-motion='reduced'] .hom
 .kanban-modern-task .kanban-due { font-size: 10px; }.kanban-modern-task .kanban-due.none { color: var(--text-faint); }.kanban-modern-task .kanban-due.active { color: var(--lane-accent); }.kanban-modern-task .kanban-due.overdue { color: var(--danger); }
 .kanban-task-movers { display: flex; align-items: center; gap: 1px; }
 .kanban-modern-task .kanban-task-movers .icon-button { width: 25px; height: 25px; color: var(--text-faint); }.kanban-modern-task .kanban-task-movers .icon-button:hover:not(:disabled) { color: var(--lane-accent); }
-.kanban-modern-column .kanban-empty { min-height: 150px; margin: 2px; padding: 24px 12px; border: 1px dashed color-mix(in srgb, var(--lane-accent) 35%, var(--border)); border-radius: 6px; color: var(--text-faint); }
+.kanban-modern-column .kanban-empty { min-height: 78px; margin: 0; padding: 16px 12px; border: 1px dashed color-mix(in srgb, var(--lane-accent) 35%, var(--border)); border-radius: 6px; color: var(--text-faint); }
 .kanban-modern-column .kanban-empty > svg { color: var(--lane-accent); }.kanban-modern-column .kanban-empty strong { color: var(--text-secondary); font-size: 11px; }.kanban-modern-column .kanban-empty span { font-size: 10px; }
+.kanban-column-add { display: inline-flex; width: 100%; min-height: 32px; align-items: center; justify-content: center; gap: 5px; margin: 0; padding: 0 9px; border: 1px dashed color-mix(in srgb, var(--lane-accent) 45%, var(--border)); border-radius: 5px; color: var(--lane-accent); background: color-mix(in srgb, var(--lane-accent) 5%, var(--surface)); cursor: pointer; font-size: 10px; transition: transform 140ms var(--ease-out), border-color 120ms ease, background-color 120ms ease, color 120ms ease; }
+.kanban-column-add:hover { border-style: solid; border-color: var(--lane-accent); color: var(--text-primary); background: color-mix(in srgb, var(--lane-accent) 10%, var(--surface)); }
+.kanban-column-add:active { transform: scale(.98); }
+.kanban-task-dialog-backdrop { z-index: 60; background: rgb(8 11 15 / 58%); backdrop-filter: blur(3px); }
+.kanban-task-dialog { width: min(520px, calc(100vw - 32px)); max-height: min(640px, calc(100vh - 32px)); }
+.kanban-task-dialog > header { display: grid; grid-template-columns: 36px minmax(0, 1fr) 30px; align-items: start; flex: 0 0 auto; min-height: 82px; gap: 11px; padding: 17px 16px 15px; background: color-mix(in srgb, var(--tool-accent) 7%, var(--surface-raised)); }
+.kanban-dialog-heading-mark { display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid color-mix(in srgb, var(--tool-accent) 35%, var(--border)); border-radius: 9px; color: var(--tool-accent); background: color-mix(in srgb, var(--tool-accent) 11%, var(--surface)); }
+.kanban-task-dialog > header > div:nth-child(2) { min-width: 0; }
+.kanban-task-dialog h2 { margin-top: 6px; font-size: 17px; }
+.kanban-task-dialog > header p { max-width: 390px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kanban-task-dialog-body { min-height: 0; overflow: auto; }
+.kanban-task-dialog .kanban-draft-fields { grid-template-columns: minmax(0, 1fr); gap: 14px; padding: 18px 16px; }
+.kanban-task-dialog-meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.kanban-task-dialog .kanban-draft-fields label { display: grid; min-width: 0; gap: 5px; color: var(--text-faint); font-size: 10px; }
+.kanban-task-dialog .kanban-draft-fields input, .kanban-task-dialog .kanban-draft-fields select, .kanban-task-dialog .kanban-draft-fields textarea { min-width: 0; border: 1px solid var(--border); border-radius: 5px; outline: 0; color: var(--text-primary); background: var(--surface); font-size: 11px; }
+.kanban-task-dialog .kanban-draft-fields input, .kanban-task-dialog .kanban-draft-fields select { height: 35px; padding: 0 8px; }
+.kanban-task-dialog .kanban-draft-fields textarea { min-height: 76px; padding: 7px 8px; line-height: 1.5; resize: vertical; }
+.kanban-task-dialog .kanban-draft-fields input:focus, .kanban-task-dialog .kanban-draft-fields select:focus, .kanban-task-dialog .kanban-draft-fields textarea:focus { border-color: var(--tool-accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--tool-accent) 14%, transparent); }
+.kanban-date-field { display: grid; min-width: 0; gap: 5px; }
+.kanban-date-control { display: grid; grid-template-columns: 16px minmax(0, 1fr) 25px; min-width: 0; height: 35px; align-items: center; gap: 5px; padding: 0 5px 0 8px; border: 1px solid var(--border); border-radius: 5px; color: var(--text-faint); background: var(--surface); cursor: text; }
+.kanban-date-control:hover, .kanban-date-control:focus-within { border-color: var(--tool-accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--tool-accent) 14%, transparent); }
+.kanban-date-control > svg { color: var(--tool-accent); }
+.kanban-date-control input { width: 100%; height: 100% !important; padding: 0 !important; border: 0 !important; outline: 0; background: transparent !important; box-shadow: none !important; cursor: text; }
+.kanban-date-control .icon-button { width: 25px; height: 25px; }
+.kanban-date-presets, .checklist-date-presets { display: flex; gap: 4px; }
+.kanban-date-presets button, .checklist-date-presets button { height: 22px; padding: 0 7px; border: 1px solid var(--border-subtle); border-radius: 4px; color: var(--text-faint); background: var(--surface-subtle); cursor: pointer; font-size: 9px; }
+.kanban-date-presets button:hover, .checklist-date-presets button:hover { border-color: color-mix(in srgb, var(--tool-accent) 45%, var(--border)); color: var(--tool-accent); background: color-mix(in srgb, var(--tool-accent) 8%, var(--surface)); }
+.kanban-task-dialog .kanban-draft-title, .kanban-task-dialog .kanban-draft-note { grid-column: 1; }
+.kanban-task-dialog .kanban-draft-title input { min-height: 42px; font-size: 13px; }
+.kanban-task-dialog .kanban-draft-note span { display: flex; align-items: baseline; justify-content: space-between; }
+.kanban-task-dialog .kanban-draft-note small { color: var(--text-faint); font-size: 9px; font-weight: 400; }
+.kanban-task-dialog > footer { min-height: 64px; padding: 11px 16px 15px; border-top: 1px solid var(--border-subtle); }
+.kanban-task-dialog-enter-active, .kanban-task-dialog-leave-active { transition: opacity 160ms ease; }
+.kanban-task-dialog-enter-active .kanban-task-dialog, .kanban-task-dialog-leave-active .kanban-task-dialog { transition: opacity 160ms ease, transform 180ms var(--ease-out); }
+.kanban-task-dialog-enter-from, .kanban-task-dialog-leave-to { opacity: 0; }
+.kanban-task-dialog-enter-from .kanban-task-dialog, .kanban-task-dialog-leave-to .kanban-task-dialog { opacity: 0; transform: translateY(8px) scale(.98); }
 
-@media (max-width: 900px) {
+@media (max-width: 1040px) {
   .kanban-overview { grid-template-columns: minmax(190px, 1fr) minmax(240px, 1fr); }.kanban-overview-bar { grid-column: 1 / -1; }
+  .kanban-modern-header { grid-template-columns: minmax(0, 1fr) auto; }
+  .kanban-header-overview { grid-column: 1 / -1; grid-row: 2; grid-template-columns: minmax(150px, .8fr) minmax(240px, 1.2fr) 112px; }
+  .kanban-modern-header .toolbar { grid-column: 2; grid-row: 1; }
 }
 
 @media (max-width: 720px) {
   .kanban-modern { height: auto; min-height: 0; overflow: auto; }
   .kanban-modern .tool-header { min-height: 49px; margin-bottom: 9px; }.kanban-modern-header p { display: none; }
+  .kanban-modern-header { grid-template-columns: minmax(0, 1fr) auto; gap: 9px 12px; }
+  .kanban-header-copy { grid-column: 1 / -1; }
+  .kanban-header-overview { grid-column: 1 / -1; grid-row: auto; grid-template-columns: minmax(120px, .8fr) minmax(0, 1.2fr); gap: 9px; }
+  .kanban-header-overview .kanban-overview-bar { grid-column: 1 / -1; }
+  .kanban-modern-header .toolbar { grid-column: 1 / -1; grid-row: auto; justify-content: flex-end; }
   .kanban-overview { grid-template-columns: minmax(150px, 1fr) minmax(215px, 1.2fr); gap: 12px; padding: 9px 10px; }
   .kanban-overview-stats { gap: 7px; }.kanban-overview-stats > div { padding-left: 7px; }.kanban-overview-stats span { font-size: 9px; }.kanban-overview-stats b { font-size: 14px; }
   .kanban-modern-controls { grid-template-columns: minmax(0, 1fr) 120px; }.kanban-modern-controls > small { grid-column: 1 / -1; padding-bottom: 0; }
@@ -912,14 +966,24 @@ html[data-motion='reduced'] .home-motion-entry, html[data-motion='reduced'] .hom
 @media (max-width: 460px) {
   .kanban-modern .tool-header { align-items: flex-start; }.kanban-modern-header h1 { font-size: 19px; }.kanban-modern .toolbar .icon-button { display: none; }
   .kanban-modern .toolbar .command-button { padding: 0 9px; }
-  .kanban-overview { grid-template-columns: 1fr; }.kanban-overview-stats { grid-row: 2; }.kanban-overview-bar { grid-column: 1; grid-row: 3; }
+  .kanban-overview, .kanban-header-overview { grid-template-columns: 1fr; }.kanban-overview-stats { grid-row: 2; }.kanban-overview-bar { grid-column: 1; grid-row: 3; }
   .kanban-modern-controls { grid-template-columns: minmax(0, 1fr); }.kanban-modern-controls > small { padding-top: 0; }
-  .kanban-modern-editor .kanban-draft-fields { grid-template-columns: minmax(0, 1fr); }.kanban-modern-editor .kanban-draft-title, .kanban-modern-editor .kanban-draft-note { grid-column: 1; }
+  .kanban-modern-editor .kanban-draft-fields, .kanban-task-dialog .kanban-draft-fields { grid-template-columns: minmax(0, 1fr); }.kanban-modern-editor .kanban-draft-title, .kanban-modern-editor .kanban-draft-note, .kanban-task-dialog .kanban-draft-title, .kanban-task-dialog .kanban-draft-note { grid-column: 1; }.kanban-task-dialog-meta { grid-template-columns: minmax(0, 1fr); }
   .kanban-modern-board { grid-auto-columns: minmax(280px, 84vw); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kanban-column-add, .kanban-task-dialog-backdrop, .kanban-task-dialog { transition-duration: 0ms; }
 }
 
 .flowchart-line-endpoint-control { position: absolute; z-index: 10; width: 16px; height: 16px; border: 3px solid var(--tool-accent); border-radius: 50%; background: var(--surface-raised); box-shadow: 0 1px 4px color-mix(in srgb, var(--text-primary) 28%, transparent); cursor: crosshair; transform: translate(-50%, -50%); touch-action: none; }.flowchart-line-endpoint-control:hover, .flowchart-line-endpoint-control.active { background: var(--tool-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--tool-accent) 20%, transparent); }.flowchart-canvas .x6-node.flowchart-connection-target { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--tool-accent) 52%, transparent)); }.flowchart-canvas .x6-node.flowchart-connection-target [magnet='true'] { opacity: 1 !important; }.flowchart-canvas .x6-node.flowchart-connection-target [magnet='true']:hover { fill: var(--tool-accent) !important; stroke: var(--surface-raised) !important; stroke-width: 2.5px !important; r: 6px; }
 :root[data-theme='dark'] .flowchart-line-endpoint-control { border-color: #9ac8ff; background: #20252c; }:root[data-theme='dark'] .flowchart-line-endpoint-control:hover, :root[data-theme='dark'] .flowchart-line-endpoint-control.active { background: #60a5fa; }
+
+/* Keep line endpoints and node ports in the same visual scale as the whiteboard reference. */
+.flowchart-line-endpoint-control { box-sizing: border-box; width: 14px; height: 14px; border-width: 2px; }
+.flowchart-canvas-wrap.is-binding-endpoint .x6-node.flowchart-connection-target [magnet='true'] { opacity: 1 !important; fill: var(--tool-accent) !important; stroke: var(--surface-raised) !important; stroke-width: 2px !important; r: 6px; filter: drop-shadow(0 0 3px color-mix(in srgb, var(--tool-accent) 42%, transparent)); }
+.flowchart-canvas .x6-port-body.flowchart-connection-port-target { opacity: 1 !important; fill: var(--tool-accent) !important; stroke: var(--surface-raised) !important; stroke-width: 2px !important; r: 6px; filter: drop-shadow(0 0 3px color-mix(in srgb, var(--tool-accent) 42%, transparent)); }
+.flowchart-canvas-wrap.is-binding-endpoint .flowchart-line-endpoint-control.active { background: var(--tool-accent); border-color: var(--surface-raised); box-shadow: 0 0 0 2px color-mix(in srgb, var(--tool-accent) 22%, transparent); }
 
 /* Checklist keeps capture fast while giving longer lists a calm, scannable home. */
 .checklist-tool { min-height: 0; height: 100%; --tool-accent: #3aa88d; }
@@ -970,8 +1034,23 @@ html[data-motion='reduced'] .home-motion-entry, html[data-motion='reduced'] .hom
 .checklist-view-switch button { height: 25px; padding: 0 9px; border: 0; border-radius: 4px; color: var(--text-faint); background: transparent; cursor: pointer; font-size: 9px; white-space: nowrap; }
 .checklist-view-switch button:hover { color: var(--text-primary); background: var(--surface-hover); }
 .checklist-view-switch button.active { color: var(--text-primary); background: var(--surface); box-shadow: var(--panel-shadow); }
-.checklist-quick-add { display: grid; grid-template-columns: 27px minmax(0, 1fr) 28px; align-items: center; gap: 7px; min-height: 44px; margin-bottom: 9px; padding: 5px 8px; border: 1px solid color-mix(in srgb, var(--tool-accent) 42%, var(--border)); border-radius: 6px; background: color-mix(in srgb, var(--tool-accent) 5%, var(--surface)); }
-.checklist-quick-add > input { width: 100%; min-width: 0; height: 31px; padding: 0 3px; border: 0; outline: 0; color: var(--text-primary); background: transparent; font-size: 11px; }
+.checklist-first-add { display: flex; min-height: 76px; align-items: center; justify-content: space-between; gap: 12px; width: 100%; margin-bottom: 9px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--tool-accent) 43%, var(--border)); border-radius: 7px; color: var(--tool-accent); background: color-mix(in srgb, var(--tool-accent) 6%, var(--surface)); cursor: pointer; text-align: left; transition: transform 140ms var(--ease-out), border-color 120ms ease, background-color 120ms ease; }
+.checklist-first-add:hover { border-color: var(--tool-accent); background: color-mix(in srgb, var(--tool-accent) 11%, var(--surface)); }
+.checklist-first-add:active { transform: scale(.99); }
+.checklist-first-add-copy { display: flex; min-width: 0; align-items: center; gap: 10px; }
+.checklist-first-add-icon { display: grid; width: 33px; height: 33px; flex: 0 0 33px; place-items: center; border: 1px solid color-mix(in srgb, var(--tool-accent) 35%, var(--border)); border-radius: 8px; background: var(--surface); }
+.checklist-first-add-copy > span:last-child { display: grid; min-width: 0; gap: 3px; }
+.checklist-first-add strong { color: var(--text-primary); font-size: 12px; }
+.checklist-first-add small { overflow: hidden; color: var(--text-faint); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.checklist-first-add > svg { flex: 0 0 auto; }
+.checklist-add-entry { display: flex; min-height: 50px; align-items: center; justify-content: space-between; gap: 10px; width: 100%; margin-bottom: 9px; padding: 8px 11px; border: 1px solid color-mix(in srgb, var(--tool-accent) 35%, var(--border)); border-radius: 6px; color: var(--tool-accent); background: color-mix(in srgb, var(--tool-accent) 4%, var(--surface)); cursor: pointer; text-align: left; transition: transform 140ms var(--ease-out), border-color 120ms ease, background-color 120ms ease; }
+.checklist-add-entry:hover { border-color: var(--tool-accent); background: color-mix(in srgb, var(--tool-accent) 9%, var(--surface)); }
+.checklist-add-entry:active { transform: scale(.99); }
+.checklist-add-entry-copy { display: flex; min-width: 0; align-items: center; gap: 8px; }
+.checklist-add-entry-copy > span { display: grid; min-width: 0; gap: 2px; }
+.checklist-add-entry strong { color: var(--text-primary); font-size: 11px; }
+.checklist-add-entry small { overflow: hidden; color: var(--text-faint); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.checklist-add-entry > svg { flex: 0 0 auto; color: var(--text-faint); }
 .checklist-importer { flex: 0 0 auto; margin-bottom: 9px; border: 1px solid color-mix(in srgb, var(--tool-accent) 42%, var(--border)); border-radius: 7px; background: var(--surface-raised); overflow: hidden; }
 .checklist-importer > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 40px; padding: 0 9px; border-bottom: 1px solid var(--border-subtle); background: color-mix(in srgb, var(--tool-accent) 6%, var(--surface-subtle)); }
 .checklist-importer > header > div { display: flex; min-width: 0; align-items: baseline; gap: 8px; }.checklist-importer > header strong { color: var(--text-primary); font-size: 11px; }.checklist-importer > header small { color: var(--text-faint); font-size: 9px; }
@@ -1006,6 +1085,30 @@ html[data-motion='reduced'] .home-motion-entry, html[data-motion='reduced'] .hom
 .checklist-editor-fields input:focus, .checklist-editor-fields select:focus, .checklist-editor-fields textarea:focus { border-color: var(--tool-accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--tool-accent) 13%, transparent); }
 .checklist-editor-title, .checklist-editor-note { grid-column: span 2; }
 .checklist-editor > footer { display: flex; justify-content: flex-end; gap: 6px; padding: 7px 9px; border-top: 1px solid var(--border-subtle); }
+.checklist-editor-backdrop { z-index: 60; background: rgb(8 11 15 / 58%); backdrop-filter: blur(3px); }
+.checklist-editor-dialog { width: min(520px, calc(100vw - 32px)); max-height: min(640px, calc(100vh - 32px)); }
+.checklist-editor-dialog > header { flex: 0 0 auto; min-height: 72px; padding: 16px 16px 14px; background: color-mix(in srgb, var(--tool-accent) 7%, var(--surface-raised)); }
+.checklist-editor-dialog > header > div { min-width: 0; }
+.checklist-editor-dialog h2 { margin-top: 6px; font-size: 17px; }
+.checklist-editor-dialog > header p { max-width: 390px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.checklist-editor-kicker { display: inline-flex; padding: 4px 5px; border-radius: 4px; color: var(--tool-accent); background: color-mix(in srgb, var(--tool-accent) 12%, var(--surface)); font: 700 8px/1 "Cascadia Code", Consolas, monospace; letter-spacing: .06em; }
+.checklist-editor-dialog-body { min-height: 0; overflow: auto; }
+.checklist-editor-dialog .checklist-editor-fields { grid-template-columns: minmax(0, 1fr) 140px; gap: 11px; padding: 16px; }
+.checklist-editor-dialog .checklist-editor-fields label { gap: 5px; font-size: 10px; }
+.checklist-editor-dialog .checklist-editor-fields input, .checklist-editor-dialog .checklist-editor-fields select, .checklist-editor-dialog .checklist-editor-fields textarea { font-size: 11px; }
+.checklist-editor-dialog .checklist-editor-fields input, .checklist-editor-dialog .checklist-editor-fields select { height: 35px; }
+.checklist-editor-dialog .checklist-editor-fields textarea { min-height: 76px; }
+.checklist-date-field { display: grid; min-width: 0; gap: 5px; }
+.checklist-date-control { display: grid; grid-template-columns: 16px minmax(0, 1fr) 25px; min-width: 0; height: 35px; align-items: center; gap: 5px; padding: 0 5px 0 8px; border: 1px solid var(--border); border-radius: 5px; color: var(--text-faint); background: var(--surface); cursor: text; }
+.checklist-date-control:hover, .checklist-date-control:focus-within { border-color: var(--tool-accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--tool-accent) 14%, transparent); }
+.checklist-date-control > svg { color: var(--tool-accent); }
+.checklist-date-control input { width: 100%; height: 100% !important; padding: 0 !important; border: 0 !important; outline: 0; background: transparent !important; box-shadow: none !important; cursor: text; }
+.checklist-date-control .icon-button { width: 25px; height: 25px; }
+.checklist-editor-dialog > footer { min-height: 58px; padding: 10px 16px 14px; }
+.checklist-editor-dialog-enter-active, .checklist-editor-dialog-leave-active { transition: opacity 160ms ease; }
+.checklist-editor-dialog-enter-active .checklist-editor-dialog, .checklist-editor-dialog-leave-active .checklist-editor-dialog { transition: opacity 160ms ease, transform 180ms var(--ease-out); }
+.checklist-editor-dialog-enter-from, .checklist-editor-dialog-leave-to { opacity: 0; }
+.checklist-editor-dialog-enter-from .checklist-editor-dialog, .checklist-editor-dialog-leave-to .checklist-editor-dialog { opacity: 0; transform: translateY(8px) scale(.98); }
 .checklist-item-area { min-height: 0; flex: 1 1 auto; padding: 0 3px 8px; overflow: auto; }
 .checklist-section + .checklist-section { margin-top: 13px; }
 .checklist-section > header { display: flex; align-items: center; justify-content: space-between; min-height: 27px; border-bottom: 1px solid var(--border-subtle); }
@@ -1068,6 +1171,10 @@ html[data-motion='reduced'] .home-motion-entry, html[data-motion='reduced'] .hom
   .checklist-item { grid-template-columns: 24px minmax(0, 1fr) 52px; gap: 5px; }
   .checklist-item-actions .icon-button:first-child { display: none; }
   .checklist-item-actions > svg { display: none; }
-  .checklist-editor-fields { grid-template-columns: minmax(0, 1fr); }
+  .checklist-editor-fields, .checklist-editor-dialog .checklist-editor-fields { grid-template-columns: minmax(0, 1fr); }
   .checklist-editor-title, .checklist-editor-note { grid-column: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .checklist-editor-backdrop, .checklist-editor-dialog { transition-duration: 0ms; }
 }

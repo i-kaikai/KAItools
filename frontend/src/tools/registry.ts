@@ -41,7 +41,7 @@ import ToolLoadingState from '@/components/ToolLoadingState.vue'
 import { t } from '@/i18n'
 import type { ToolId } from '@/types'
 
-export type ToolCategoryId = 'data' | 'encoding' | 'media' | 'document' | 'debugging' | 'code' | 'productivity' | 'text' | 'system'
+export type ToolCategoryId = 'data' | 'encoding' | 'media' | 'document' | 'debugging' | 'code' | 'workflow' | 'productivity' | 'text'
 
 export interface ToolCategory {
   id: ToolCategoryId
@@ -50,15 +50,15 @@ export interface ToolCategory {
 }
 
 const toolCategoryDefinitions: ToolCategory[] = [
-  { id: 'data', name: '数据格式', description: '结构化数据、配置与查询语句' },
-  { id: 'encoding', name: '编码与摘要', description: 'Base64 转换与哈希计算' },
-  { id: 'media', name: '媒体处理', description: '图片、二维码与音视频处理' },
-  { id: 'document', name: '文档转换', description: 'HTML、Word 与 PDF 的本地转换' },
-  { id: 'debugging', name: '开发调试', description: '接口、令牌与正则验证' },
-  { id: 'code', name: '代码工具', description: '转义、图表、命名与标识符' },
-  { id: 'productivity', name: '效率辅助', description: '时间、计划、任务与计算' },
-  { id: 'text', name: '文本处理', description: '差异分析与内容统计' },
-  { id: 'system', name: '系统工具', description: '本机环境与网络配置' },
+  { id: 'data', name: '数据格式', description: 'JSON、配置与标记语言处理' },
+  { id: 'encoding', name: '编码与标识', description: 'Base64、摘要与唯一标识生成' },
+  { id: 'media', name: '图片与媒体', description: '图片、二维码与音视频处理' },
+  { id: 'document', name: '文档与文件', description: '文件库及 HTML、Word、PDF 转换' },
+  { id: 'debugging', name: '接口与调试', description: '请求、令牌与正则验证' },
+  { id: 'code', name: '数据与代码转换', description: '模型、SQL、转义与命名转换' },
+  { id: 'workflow', name: '图表与任务', description: '流程图、看板与清单协作' },
+  { id: 'productivity', name: '时间与效率', description: '时间、计划、计算与本地笔记' },
+  { id: 'text', name: '文本与系统', description: '文本分析、剪切板与 Hosts 配置' },
 ]
 
 function localizeCategory(category: ToolCategory): ToolCategory {
@@ -135,7 +135,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     name: '文件管理器',
     description: '统一管理本机工具档案与文件夹',
     keywords: ['file', 'files', 'archive', 'folder', '文件', '文件夹', '档案', '归档'],
-    category: 'productivity',
+    category: 'document',
     icon: FolderArchive,
     ...lazyTool(() => import('./fileManager/FileManagerTool.vue')),
     singleton: true,
@@ -167,7 +167,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     name: 'JSON / JavaBean',
     description: 'JSON 与 JavaBean 互转',
     keywords: ['json', 'java', 'javabean', 'pojo', '互转'],
-    category: 'data',
+    category: 'code',
     icon: FileJson,
     ...lazyTool(() => import('./jsonJava/JsonJavaTool.vue')),
     initialState: () => ({ input: '{\n  "id": 1,\n  "name": "demo",\n  "enabled": true\n}', mode: 'json-to-java', className: 'RootBean', lombok: false }),
@@ -198,7 +198,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     name: 'Mermaid 流程图',
     description: '编写并导出流程图与时序图',
     keywords: ['mermaid', 'flowchart', 'sequence', 'diagram', '流程图', '时序图', '图表', 'svg'],
-    category: 'code',
+    category: 'workflow',
     icon: Workflow,
     ...lazyTool(() => import('./mermaid/MermaidTool.vue')),
     initialState: () => ({ split: 46, theme: 'auto' }),
@@ -209,7 +209,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     name: '流程图画板',
     description: '可视化编辑流程、连线、样式与本地图纸',
     keywords: ['flowchart', 'diagram', 'canvas', 'workflow', 'node', 'edge', '流程图', '画板', '节点', '连线', '拖拽'],
-    category: 'code',
+    category: 'workflow',
     icon: MousePointer2,
     ...lazyTool(() => import('./flowchart/FlowchartTool.vue')),
     initialState: () => ({}),
@@ -219,7 +219,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     name: '轻量任务看板',
     description: '本地管理待办、进行中与已完成任务',
     keywords: ['kanban', 'task', 'todo', 'board', '任务', '待办', '看板', '办公', '项目'],
-    category: 'productivity',
+    category: 'workflow',
     icon: Kanban,
     ...lazyTool(() => import('./kanban/KanbanTool.vue')),
     initialState: () => ({ tasks: [], filter: 'all', query: '' }),
@@ -229,7 +229,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     name: '清单工作台',
     description: '本地管理多份清单与可勾选条目',
     keywords: ['checklist', 'check list', 'todo', 'task', '清单', '待办', '勾选', '计划', '准备事项'],
-    category: 'productivity',
+    category: 'workflow',
     icon: ListChecks,
     ...lazyTool(() => import('./checklist/ChecklistTool.vue')),
     initialState: () => ({ lists: [], activeListId: '', view: 'all', query: '', collapsedSections: [] }),
@@ -371,7 +371,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     name: 'SQL 美化与转换',
     description: '多数据库 SQL 格式化与方言转换',
     keywords: ['sql', 'mysql', 'mariadb', 'postgresql', 'oracle', 'sql server', 'sqlite', 'format', 'convert', '美化', '格式化', '转换'],
-    category: 'data',
+    category: 'code',
     icon: Database,
     ...lazyTool(() => import('./sql/SqlTool.vue')),
     initialState: () => ({ input: 'select id,name from users where enabled=1 order by id desc;', sourceDialect: 'standard', targetDialect: 'standard', keywordCase: 'upper', tabWidth: 2 }),
@@ -436,7 +436,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     name: '笔记',
     description: 'Markdown 笔记与本地同步',
     keywords: ['notes', 'markdown', 'md', '笔记', '备忘录', '文档'],
-    category: 'text',
+    category: 'productivity',
     icon: BookOpenText,
     ...lazyTool(() => import('./notes/NotesTool.vue')),
     singleton: true,
@@ -447,7 +447,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     name: 'Hosts',
     description: '直接编辑系统 Hosts 文件',
     keywords: ['hosts', 'dns', '域名', '映射'],
-    category: 'system',
+    category: 'text',
     icon: Network,
     ...lazyTool(() => import('./hosts/HostsTool.vue')),
     singleton: true,
@@ -470,7 +470,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     name: '剪切板历史',
     description: '管理 Windows 纯文本剪切板记录',
     keywords: ['clipboard', 'history', '剪切板', '历史', '复制'],
-    category: 'system',
+    category: 'text',
     icon: Clipboard,
     ...lazyTool(() => import('./clipboardHistory/ClipboardHistoryTool.vue')),
     singleton: true,
@@ -504,7 +504,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     name: 'UUID / ULID',
     description: '生成并解析时间有序标识符',
     keywords: ['uuid', 'ulid', 'uuidv7', 'identifier', '标识符', '时间解析'],
-    category: 'code',
+    category: 'encoding',
     icon: Fingerprint,
     ...lazyTool(() => import('./identifiers/IdentifiersTool.vue')),
     initialState: () => ({ kind: 'uuid-v7', count: 1, output: '', inspectInput: '', split: 50 }),

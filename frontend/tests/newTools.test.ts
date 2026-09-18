@@ -101,7 +101,14 @@ describe('new local developer tools', () => {
     expect(calculator?.chainInput?.('2 + 2')).toEqual({ section: 'scientific', expression: '2 + 2' })
     expect(clipboardHistory?.desktopOnly).toBe(true)
     expect(imageFormat).toMatchObject({ name: '图片格式转换', category: 'media' })
-    expect(toolCategories.map((category) => category.id)).toEqual(['data', 'encoding', 'media', 'document', 'debugging', 'code', 'productivity', 'text', 'system'])
+    expect(toolCategories.map((category) => category.id)).toEqual(['data', 'encoding', 'media', 'document', 'debugging', 'code', 'workflow', 'productivity', 'text'])
+    expect(workspaceTools.find((tool) => tool.id === 'base64-text')?.category).toBe('encoding')
+    expect(workspaceTools.find((tool) => tool.id === 'mermaid')?.category).toBe('workflow')
+    expect(workspaceTools.find((tool) => tool.id === 'file-manager')?.category).toBe('document')
+    expect(workspaceTools.find((tool) => tool.id === 'clipboard-history')?.category).toBe('text')
+    expect(Object.fromEntries(toolCategories.map((category) => [category.id, workspaceTools.filter((tool) => tool.category === category.id).length]))).toEqual({
+      data: 4, encoding: 5, media: 4, document: 4, debugging: 3, code: 4, workflow: 4, productivity: 4, text: 4,
+    })
     expect(workspaceTools.filter((tool) => tool.chainInput).length).toBeGreaterThanOrEqual(10)
   })
 })

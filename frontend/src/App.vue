@@ -62,7 +62,7 @@ const sidebarTools = computed(() => app.sidebarShortcuts.toolIds
 const visibleTools = computed(() => {
   const query = sidebarSearch.value.trim().toLowerCase()
   if (!query) return sidebarTools.value
-  return sidebarTools.value.filter((tool) => [tool.name, tool.description, ...tool.keywords].some((value) => value.toLowerCase().includes(query)))
+  return workspaceTools.filter((tool) => [tool.name, tool.description, ...tool.keywords].some((value) => value.toLowerCase().includes(query)))
 })
 const activeTool = computed(() => (app.activeTab ? toolsById[app.activeTab.toolId] : undefined))
 const themeIcon = computed(() => ({ system: Monitor, light: Sun, dark: Moon })[app.settings.theme])
@@ -351,7 +351,7 @@ onBeforeUnmount(() => {
       <IconButton v-else class="sidebar-search-button" :icon="Search" :label="t('shell.searchTools')" @click="openSearch" />
 
       <nav class="tool-nav" :aria-label="t('shell.toolNav')">
-        <div v-if="!app.settings.sidebarCollapsed" class="nav-section-label"><span>{{ t('shell.shortcuts') }}</span><small>{{ sidebarTools.length }}</small></div>
+        <div v-if="!app.settings.sidebarCollapsed" class="nav-section-label"><span>{{ sidebarSearch.trim() ? t('search.results') : t('shell.shortcuts') }}</span><small>{{ visibleTools.length }}</small></div>
         <div
           v-for="tool in visibleTools"
           :key="tool.id"

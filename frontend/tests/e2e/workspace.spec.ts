@@ -1527,7 +1527,6 @@ test('flowchart connects nodes and selects edges with touch', async ({ page }) =
     }))
     expect(nodePoints).toHaveLength(2)
     await page.getByRole('button', { name: '连线工具' }).click()
-    await page.getByRole('button', { name: '连接已有图形' }).click()
     for (const point of nodePoints) {
       await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ ...point, id: 1 }] })
       await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
@@ -1568,7 +1567,6 @@ test('flowchart port drag creates a persistent connection', async ({ page }) => 
   const sourceNode = canvas.locator('.x6-node').first()
   const targetNode = canvas.locator('.x6-node').nth(1)
   await page.getByRole('button', { name: '连线工具' }).click()
-  await page.getByRole('button', { name: '连接已有图形' }).click()
   await sourceNode.hover()
   const sourcePort = sourceNode.locator('[port="right"]').first()
   const targetPort = targetNode.locator('[port="left"]').first()
@@ -1607,7 +1605,7 @@ test('flowchart selected node previews and extends in an open direction', async 
   const sourceBox = await source.boundingBox()
   expect(sourceBox).not.toBeNull()
   await source.click()
-  await expect(page.getByRole('button', { name: /向(?:左|右|上|下)延展/ })).toHaveCount(4)
+  await expect(page.getByRole('button', { name: /向(?:左|右|上|下)延展/ })).toHaveCount(3)
   const extend = page.getByRole('button', { name: '向右延展' })
   await expect(extend).toBeVisible()
   await extend.hover()
@@ -1642,16 +1640,227 @@ test('flowchart extension connects a nearby unlinked node', async ({ page }) => 
   await expect(canvas.locator('.x6-node')).toHaveCount(2)
   await expect(canvas.locator('.x6-edge')).toHaveCount(0)
   await canvas.locator('.x6-node').first().click()
-  const extend = page.getByRole('button', { name: '向右延展' })
+  await expect(page.getByRole('button', { name: '向右延展' })).toHaveCount(0)
+  const extend = page.getByRole('button', { name: '向上延展' })
   await extend.hover()
-  await expect(canvas.locator('.flowchart-extension-target')).toBeVisible()
+  await expect(page.locator('.flowchart-extension-preview')).toBeVisible()
   await extend.click()
-  await expect(canvas.locator('.x6-node')).toHaveCount(2)
+  await expect(canvas.locator('.x6-node')).toHaveCount(3)
   await expect(canvas.locator('.x6-edge')).toHaveCount(1)
   await assertViewportIntegrity(page)
 })
 
-test('flowchart connector menu previews ports without creating a link', async ({ page }, testInfo) => {
+test('flowchart extension controls clear after panning the canvas', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await openWorkspaceTool(page, '流程图画板')
+
+  const canvas = page.getByLabel('流程图编辑画板')
+  await canvas.locator('.x6-node').last().click()
+  await expect(page.getByRole('button', { name: /向(?:左|右|上|下)延展/ })).not.toHaveCount(0)
+  await page.getByRole('button', { name: '抓手工具' }).click()
+  const canvasBox = await canvas.boundingBox()
+  expect(canvasBox).not.toBeNull()
+  if (canvasBox) {
+    await page.mouse.move(canvasBox.x + canvasBox.width * .7, canvasBox.y + canvasBox.height * .7)
+    await page.mouse.down()
+    await page.mouse.move(canvasBox.x + canvasBox.width * .76, canvasBox.y + canvasBox.height * .74, { steps: 6 })
+    await page.mouse.up()
+  }
+  await expect(page.getByRole('button', { name: /向(?:左|右|上|下)延展/ })).toHaveCount(0)
+  await assertViewportIntegrity(page)
+})
+
+test('flowchart recomputes old automatic routes so they do not cross a node', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await openWorkspaceTool(page, '流程图画板')
+
+  const canvas = page.getByLabel('流程图编辑画板')
+  await page.getByLabel('导入流程图文件').setInputFiles({
+    name: 'old-automatic-route.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({
+      title: '旧路径重算',
+      nodes: [
+        { id: 'route-source', shape: 'process', x: 100, y: 100, label: '来源' },
+        { id: 'route-obstacle', shape: 'decision', x: 350, y: 130, label: '障碍' },
+        { id: 'route-target', shape: 'process', x: 650, y: 260, label: '目标' },
+      ],
+      edges: [{ id: 'old-route', source: 'route-source', sourcePort: 'bottom', target: 'route-target', targetPort: 'bottom', vertices: [{ x: 728, y: 168 }], route: 'orthogonal', stroke: '#334155', strokeWidth: 1.5, dash: 'solid', sourceMarker: 'none', targetMarker: 'arrow' }],
+    })),
+  })
+  await expect(canvas.locator('.x6-node')).toHaveCount(3)
+  const crossesAnyNode = await page.evaluate(() => {
+    const path = document.querySelector<SVGPathElement>('.flowchart-canvas .x6-edge path')
+    const nodes = Array.from(document.querySelectorAll<SVGElement>('.flowchart-canvas .x6-node'))
+    if (!path || nodes.length !== 3) return true
+    const matrix = path.getScreenCTM()
+    if (!matrix) return true
+    for (let index = 0; index <= 80; index += 1) {
+      const point = path.getPointAtLength(path.getTotalLength() * index / 80)
+      const screen = new DOMPoint(point.x, point.y).matrixTransform(matrix)
+      if (nodes.some((node) => {
+        const box = node.getBoundingClientRect()
+        return screen.x > box.left + 5 && screen.x < box.right - 5 && screen.y > box.top + 5 && screen.y < box.bottom - 5
+      })) return true
+    }
+    return false
+  })
+  expect(crossesAnyNode).toBe(false)
+  await page.screenshot({ path: resolve(qaDir, 'flowchart-auto-route-no-overlap.png'), fullPage: true })
+  await assertViewportIntegrity(page)
+})
+
+test('flowchart bottom ports leave and enter vertically outside their nodes', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await openWorkspaceTool(page, '流程图画板')
+
+  await page.getByLabel('导入流程图文件').setInputFiles({
+    name: 'bottom-port-route.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({
+      title: '底部端口路径',
+      nodes: [
+        { id: 'bottom-source', shape: 'process', x: 100, y: 120, label: '左侧' },
+        { id: 'bottom-target', shape: 'process', x: 650, y: 280, label: '右侧' },
+      ],
+      edges: [{ id: 'bottom-route', source: 'bottom-source', sourcePort: 'bottom', target: 'bottom-target', targetPort: 'bottom', vertices: [{ x: 650, y: 188 }], route: 'orthogonal', stroke: '#334155', strokeWidth: 1.5, dash: 'solid', sourceMarker: 'none', targetMarker: 'arrow' }],
+    })),
+  })
+  const direction = await page.evaluate(() => {
+    const path = document.querySelector<SVGPathElement>('.flowchart-canvas .x6-edge path')
+    if (!path) return null
+    const matrix = path.getScreenCTM()
+    if (!matrix) return null
+    const length = path.getTotalLength()
+    const at = (distance: number) => {
+      const point = path.getPointAtLength(distance)
+      return new DOMPoint(point.x, point.y).matrixTransform(matrix)
+    }
+    const start = at(1)
+    const afterStart = at(Math.min(14, length * .15))
+    const beforeEnd = at(Math.max(1, length - Math.min(14, length * .15)))
+    const end = at(Math.max(1, length - 1))
+    return { firstVertical: Math.abs(afterStart.x - start.x) < 3 && afterStart.y > start.y + 8, lastVertical: Math.abs(end.x - beforeEnd.x) < 3 && beforeEnd.y > end.y + 8 }
+  })
+  expect(direction).toEqual({ firstVertical: true, lastVertical: true })
+  await page.screenshot({ path: resolve(qaDir, 'flowchart-bottom-port-route.png'), fullPage: true })
+  await assertViewportIntegrity(page)
+})
+
+test('flowchart bottom-port preview matches its final orthogonal route', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await openWorkspaceTool(page, '流程图画板')
+
+  const canvas = page.getByLabel('流程图编辑画板')
+  await page.getByLabel('导入流程图文件').setInputFiles({
+    name: 'bottom-port-preview.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({
+      title: '底部端口预览',
+      nodes: [
+        { id: 'preview-source', shape: 'process', x: 100, y: 120, label: '左侧' },
+        { id: 'preview-target', shape: 'process', x: 650, y: 280, label: '右侧' },
+      ],
+      edges: [],
+    })),
+  })
+  const sourcePort = canvas.locator('.x6-node').first().locator('[port="bottom"]').first()
+  const targetPort = canvas.locator('.x6-node').last().locator('[port="bottom"]').first()
+  const sourceBox = await sourcePort.boundingBox()
+  const targetBox = await targetPort.boundingBox()
+  expect(sourceBox).not.toBeNull()
+  expect(targetBox).not.toBeNull()
+  await page.getByRole('button', { name: '连线工具' }).click()
+  if (sourceBox && targetBox) {
+    await page.mouse.click(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2)
+    await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2)
+  }
+  const direction = await page.evaluate(() => {
+    const path = document.querySelector<SVGPathElement>('.flowchart-canvas .x6-edge path')
+    if (!path) return null
+    const matrix = path.getScreenCTM()
+    if (!matrix) return null
+    const length = path.getTotalLength()
+    const at = (distance: number) => {
+      const point = path.getPointAtLength(distance)
+      return new DOMPoint(point.x, point.y).matrixTransform(matrix)
+    }
+    const start = at(1)
+    const afterStart = at(Math.min(14, length * .15))
+    const beforeEnd = at(Math.max(1, length - Math.min(14, length * .15)))
+    const end = at(Math.max(1, length - 1))
+    return { firstVertical: Math.abs(afterStart.x - start.x) < 3 && afterStart.y > start.y + 8, lastVertical: Math.abs(end.x - beforeEnd.x) < 3 && beforeEnd.y > end.y + 8 }
+  })
+  expect(direction).toEqual({ firstVertical: true, lastVertical: true })
+  await page.screenshot({ path: resolve(qaDir, 'flowchart-bottom-port-preview.png'), fullPage: true })
+  await assertViewportIntegrity(page)
+})
+
+test('flowchart existing endpoint preview uses the hovered target port direction', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await openWorkspaceTool(page, '流程图画板')
+
+  const canvas = page.getByLabel('流程图编辑画板')
+  await page.getByLabel('导入流程图文件').setInputFiles({
+    name: 'existing-endpoint-preview.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({
+      title: '既有端点预览',
+      nodes: [
+        { id: 'existing-source', shape: 'process', x: 100, y: 120, label: '来源' },
+        { id: 'existing-target', shape: 'process', x: 390, y: 240, label: '旧目标' },
+        { id: 'preview-target', shape: 'process', x: 680, y: 280, label: '新目标' },
+      ],
+      edges: [{ id: 'existing-route', source: 'existing-source', sourcePort: 'bottom', target: 'existing-target', targetPort: 'bottom', vertices: [], route: 'orthogonal', stroke: '#334155', strokeWidth: 1.5, dash: 'solid', sourceMarker: 'none', targetMarker: 'arrow' }],
+    })),
+  })
+  const edgePoint = await page.evaluate(() => {
+    const path = document.querySelector<SVGPathElement>('.flowchart-canvas .x6-edge path')
+    if (!path) return null
+    const point = path.getPointAtLength(path.getTotalLength() / 2)
+    const matrix = path.getScreenCTM()
+    return matrix ? new DOMPoint(point.x, point.y).matrixTransform(matrix) : null
+  })
+  expect(edgePoint).not.toBeNull()
+  if (!edgePoint) return
+  await page.mouse.click(edgePoint.x, edgePoint.y)
+  const endpoint = page.locator('.flowchart-line-endpoint-control[data-terminal="target"]')
+  const endpointBox = await endpoint.boundingBox()
+  const targetPort = canvas.locator('.x6-node').nth(2).locator('[port="bottom"]').first()
+  const targetPortBox = await targetPort.boundingBox()
+  expect(endpointBox).not.toBeNull()
+  expect(targetPortBox).not.toBeNull()
+  if (endpointBox && targetPortBox) {
+    await page.mouse.click(endpointBox.x + endpointBox.width / 2, endpointBox.y + endpointBox.height / 2)
+    await page.mouse.move(targetPortBox.x + targetPortBox.width / 2, targetPortBox.y + targetPortBox.height / 2)
+  }
+  const direction = await page.evaluate(() => {
+    const path = document.querySelector<SVGPathElement>('.flowchart-canvas .x6-edge path')
+    if (!path) return null
+    const matrix = path.getScreenCTM()
+    if (!matrix) return null
+    const length = path.getTotalLength()
+    const at = (distance: number) => {
+      const point = path.getPointAtLength(distance)
+      return new DOMPoint(point.x, point.y).matrixTransform(matrix)
+    }
+    const start = at(1)
+    const afterStart = at(Math.min(14, length * .15))
+    const beforeEnd = at(Math.max(1, length - Math.min(14, length * .15)))
+    const end = at(Math.max(1, length - 1))
+    return { firstVertical: Math.abs(afterStart.x - start.x) < 3 && afterStart.y > start.y + 8, lastVertical: Math.abs(end.x - beforeEnd.x) < 3 && beforeEnd.y > end.y + 8 }
+  })
+  expect(direction).toEqual({ firstVertical: true, lastVertical: true })
+  await page.screenshot({ path: resolve(qaDir, 'flowchart-existing-endpoint-preview.png'), fullPage: true })
+  await assertViewportIntegrity(page)
+})
+
+test('flowchart default connector previews ports without creating a link', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto('/')
   await openWorkspaceTool(page, '流程图画板')
@@ -1661,6 +1870,8 @@ test('flowchart connector menu previews ports without creating a link', async ({
   const port = node.locator('[magnet="true"]').first()
   await expect(port).toHaveCSS('opacity', '0')
   await page.getByRole('button', { name: '连线工具' }).click()
+  await expect(page.getByLabel('连线选择')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '连线工具' })).toHaveAttribute('aria-pressed', 'true')
   await expect(canvas.locator('.x6-edge')).toHaveCount(6)
   await node.hover()
   await expect(port).toHaveCSS('opacity', '1')
@@ -1668,46 +1879,37 @@ test('flowchart connector menu previews ports without creating a link', async ({
   await expect(canvas.locator('.x6-edge')).toHaveCount(6)
 
   await page.locator('html').evaluate((element) => element.setAttribute('data-theme', 'dark'))
-  await page.getByRole('button', { name: '连线工具' }).click()
-  await page.getByRole('button', { name: '连线工具' }).click()
-  const connectorPanel = page.getByLabel('连线选择')
-  await expect(connectorPanel).toHaveCSS('background-color', 'rgb(32, 37, 44)')
+  await expect(page.getByRole('button', { name: '连线工具' })).toHaveAttribute('aria-pressed', 'true')
   await page.screenshot({ path: resolve(qaDir, `flowchart-connector-dark-${testInfo.project.name}.png`), fullPage: true })
   await assertViewportIntegrity(page)
 })
 
-test('flowchart route assets drag directly into the canvas', async ({ page }) => {
+test('flowchart default connector draws directly into the canvas', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto('/')
   await openWorkspaceTool(page, '流程图画板')
 
   const canvas = page.getByLabel('流程图编辑画板')
   await page.getByRole('button', { name: '连线工具' }).click()
-  const curve = page.getByRole('button', { name: '使用曲线连线' })
-  const curveBox = await curve.boundingBox()
-  const canvasBox = await canvas.boundingBox()
-  expect(curveBox).not.toBeNull()
-  expect(canvasBox).not.toBeNull()
-  if (curveBox && canvasBox) {
-    await page.mouse.move(curveBox.x + curveBox.width / 2, curveBox.y + curveBox.height / 2)
-    await page.mouse.down()
-    await page.mouse.move(canvasBox.x + canvasBox.width * .62, canvasBox.y + canvasBox.height * .76, { steps: 8 })
-    await page.mouse.up()
-  }
+  const points = await canvas.evaluate((element) => {
+    const rect = element.getBoundingClientRect()
+    return { start: { x: rect.left + rect.width * .54, y: rect.top + rect.height * .76 }, end: { x: rect.left + rect.width * .66, y: rect.top + rect.height * .76 } }
+  })
+  await page.mouse.click(points.start.x, points.start.y)
+  await page.mouse.click(points.end.x, points.end.y)
   await expect(canvas.locator('.x6-edge')).toHaveCount(7)
-  await expect(page.getByLabel('连线路径')).toHaveValue('curve')
+  await expect(page.getByLabel('连线选择')).toHaveCount(0)
   await expect(page.getByRole('button', { name: '选择工具' })).toHaveAttribute('aria-pressed', 'true')
   await assertViewportIntegrity(page)
 })
 
-test('flowchart selected line type draws on blank and binds to a target port', async ({ page }) => {
+test('flowchart default connector draws on blank and binds to a target port', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto('/')
   await openWorkspaceTool(page, '流程图画板')
 
   const canvas = page.getByLabel('流程图编辑画板')
   await page.getByRole('button', { name: '连线工具' }).click()
-  await page.getByRole('button', { name: '使用直线连线' }).click()
   await expect(page.getByLabel('连线选择')).toHaveCount(0)
   await expect(page.getByRole('button', { name: '连线工具' })).toHaveAttribute('aria-pressed', 'true')
 
@@ -1723,7 +1925,6 @@ test('flowchart selected line type draws on blank and binds to a target port', a
   await expect(page.getByRole('button', { name: '选择工具' })).toHaveAttribute('aria-pressed', 'true')
 
   await page.getByRole('button', { name: '连线工具' }).click()
-  await page.getByRole('button', { name: '使用直线连线' }).click()
   const targetNode = canvas.locator('.x6-node').first()
   const targetPort = targetNode.locator('[port="top"]').first()
   const targetBox = await targetNode.boundingBox()
@@ -1752,11 +1953,10 @@ test('flowchart line tool fixes endpoints with two clicks and previews target po
 
   const canvas = page.getByLabel('流程图编辑画板')
   await page.getByRole('button', { name: '连线工具' }).click()
-  await page.getByRole('button', { name: '使用直线连线' }).click()
   const sourceNode = canvas.locator('.x6-node').first()
-  const targetNode = canvas.locator('.x6-node').nth(1)
+  const targetNode = canvas.locator('.x6-node').nth(3)
   const sourcePort = sourceNode.locator('[port="right"]').first()
-  const targetPort = targetNode.locator('[port="left"]').first()
+  const targetPort = targetNode.locator('[port="top"]').first()
   const targetBox = await targetNode.boundingBox()
   const sourcePortBox = await sourcePort.boundingBox()
   const targetPortBox = await targetPort.boundingBox()
@@ -1768,8 +1968,12 @@ test('flowchart line tool fixes endpoints with two clicks and previews target po
     await expect(canvas.locator('.x6-edge')).toHaveCount(7)
     await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2)
     await expect(targetPort).toHaveCSS('opacity', '1')
+    const previewPath = canvas.locator('.x6-edge').last().locator('path').first()
+    await expect.poll(async () => ((await previewPath.getAttribute('d'))?.match(/ L /g) ?? []).length).toBeGreaterThan(1)
     await page.mouse.click(targetPortBox.x + targetPortBox.width / 2, targetPortBox.y + targetPortBox.height / 2)
     await expect(canvas.locator('.x6-edge')).toHaveCount(7)
+    const placedPath = canvas.locator('.x6-edge').last().locator('path').first()
+    await expect.poll(async () => ((await placedPath.getAttribute('d'))?.match(/ L /g) ?? []).length).toBeGreaterThan(1)
     await expect(page.getByText('连线属性')).toBeVisible()
   }
   await assertViewportIntegrity(page)
@@ -1816,7 +2020,44 @@ test('flowchart existing line endpoint rebinds with two clicks and previews port
   await assertViewportIntegrity(page)
 })
 
-test('flowchart rail draws and persists a floating line', async ({ page }) => {
+test('flowchart existing line endpoint can bind by clicking the node body', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await openWorkspaceTool(page, '流程图画板')
+
+  const canvas = page.getByLabel('流程图编辑画板')
+  await expect(canvas.locator('.x6-edge')).toHaveCount(6)
+  const edgePoint = await page.evaluate(() => {
+    const path = document.querySelector<SVGPathElement>('.flowchart-canvas .x6-edge path')
+    if (!path) return null
+    const point = path.getPointAtLength(path.getTotalLength() / 2)
+    const matrix = path.getScreenCTM()
+    return matrix ? new DOMPoint(point.x, point.y).matrixTransform(matrix) : null
+  })
+  expect(edgePoint).not.toBeNull()
+  if (!edgePoint) return
+  await page.mouse.click(edgePoint.x, edgePoint.y)
+  const endpoint = page.locator('.flowchart-line-endpoint-control[data-terminal="target"]')
+  const endpointBox = await endpoint.boundingBox()
+  const targetNode = canvas.locator('.x6-node').nth(2)
+  const targetBox = await targetNode.boundingBox()
+  expect(endpointBox).not.toBeNull()
+  expect(targetBox).not.toBeNull()
+  if (endpointBox && targetBox) {
+    await page.mouse.click(endpointBox.x + endpointBox.width / 2, endpointBox.y + endpointBox.height / 2)
+    await expect(endpoint).toHaveClass(/active/)
+    await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2)
+    await page.mouse.click(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2)
+    await expect(endpoint).not.toHaveClass(/active/)
+    await expect.poll(async () => {
+      const box = await endpoint.boundingBox()
+      return Boolean(box && box.x + box.width / 2 >= targetBox.x - 14 && box.x + box.width / 2 <= targetBox.x + targetBox.width + 14 && box.y + box.height / 2 >= targetBox.y - 14 && box.y + box.height / 2 <= targetBox.y + targetBox.height + 14)
+    }).toBe(true)
+  }
+  await assertViewportIntegrity(page)
+})
+
+test('flowchart default connector draws and persists a floating line', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto('/')
   await openWorkspaceTool(page, '流程图画板')
@@ -1827,21 +2068,14 @@ test('flowchart rail draws and persists a floating line', async ({ page }) => {
   const lineTool = page.getByRole('button', { name: '连线工具' })
   await expect(lineTool).toHaveAttribute('data-tooltip', '连线')
   await lineTool.click()
-  await expect(page.getByLabel('连线选择')).toBeVisible()
-  const basicLine = page.getByRole('button', { name: '拖拽添加基础线条' })
-  const basicLineBox = await basicLine.boundingBox()
-  expect(basicLineBox).not.toBeNull()
+  await expect(page.getByLabel('连线选择')).toHaveCount(0)
 
   const placement = await canvas.evaluate((element) => {
     const rect = element.getBoundingClientRect()
     return { x: rect.left + rect.width * .58, y: rect.top + rect.height * .76 }
   })
-  if (basicLineBox) {
-    await page.mouse.move(basicLineBox.x + basicLineBox.width / 2, basicLineBox.y + basicLineBox.height / 2)
-    await page.mouse.down()
-    await page.mouse.move(placement.x, placement.y, { steps: 8 })
-    await page.mouse.up()
-  }
+  await page.mouse.click(placement.x - 80, placement.y)
+  await page.mouse.click(placement.x + 80, placement.y)
   await expect(canvas.locator('.x6-edge')).toHaveCount(7)
   await expect(page.getByText('连线属性')).toBeVisible()
   await expect(page.getByRole('button', { name: '选择工具' })).toHaveAttribute('aria-pressed', 'true')
@@ -1892,7 +2126,6 @@ test('flowchart selected line endpoint can be moved to blank canvas', async ({ p
 
   const canvas = page.getByLabel('流程图编辑画板')
   await page.getByRole('button', { name: '连线工具' }).click()
-  await page.getByRole('button', { name: '使用直线连线' }).click()
   const points = await canvas.evaluate((element) => {
     const rect = element.getBoundingClientRect()
     return {
@@ -1936,9 +2169,6 @@ test('flowchart canvas edits local nodes and connections', async ({ page }, test
   await expect(page.getByRole('button', { name: '拖拽添加数据库' })).toBeVisible()
   await expect(page.getByRole('button', { name: '拖拽添加注释' })).toBeVisible()
   await page.getByRole('button', { name: '连线工具' }).click()
-  const straightPreset = page.getByRole('button', { name: '使用直线连线' })
-  await expect(straightPreset).toBeVisible()
-  await straightPreset.click()
   await expect(page.getByLabel('连线选择')).toHaveCount(0)
   await expect(page.getByRole('button', { name: '连线工具' })).toHaveAttribute('aria-pressed', 'true')
   await page.screenshot({ path: resolve(qaDir, `flowchart-connector-tools-${testInfo.project.name}.png`), fullPage: true })
@@ -1966,7 +2196,6 @@ test('flowchart canvas edits local nodes and connections', async ({ page }, test
   await page.getByRole('button', { name: '粘贴内容' }).click()
   await expect(canvas.locator('.x6-node')).toHaveCount(8)
   await page.getByRole('button', { name: '连线工具' }).click()
-  await page.getByRole('button', { name: '连接已有图形' }).click()
   const sourceNode = canvas.locator('.x6-node').last()
   const targetNode = canvas.locator('.x6-node').nth(1)
   const sourcePort = sourceNode.locator('[port="right"]').first()
@@ -2007,7 +2236,6 @@ test('flowchart canvas edits local nodes and connections', async ({ page }, test
   await expect(page.locator('.flowchart-line-endpoint-control')).toHaveCount(2)
   await page.screenshot({ path: resolve(qaDir, `flowchart-edge-tools-${testInfo.project.name}.png`), fullPage: true })
   await page.getByLabel('连线标签').fill('继续')
-  await page.getByLabel('连线路径').selectOption('curve')
   await expect(canvas).toContainText('继续')
   const jsonDownload = page.waitForEvent('download')
   await page.getByRole('button', { name: '导出流程图 JSON' }).click()
@@ -2061,18 +2289,29 @@ test('lightweight task board manages local task flow', async ({ page }) => {
   await page.goto('/')
   await openWorkspaceTool(page, '轻量任务看板')
 
-  await page.getByRole('button', { name: '新建任务' }).click()
+  await expect(page.getByRole('button', { name: '在待办列底部添加任务' })).toBeVisible()
+  await page.getByRole('button', { name: '在待办列底部添加任务' }).click()
+  const taskDialog = page.getByRole('dialog', { name: '新建任务' })
+  await expect(taskDialog).toBeVisible()
   await page.getByLabel('任务名称').fill('整理项目周报')
   await page.getByLabel('优先级').selectOption('high')
-  await page.getByLabel('截止日').fill('2030-01-02')
+  await page.getByRole('button', { name: '明天', exact: true }).click()
+  await expect(page.getByLabel('截止日期')).not.toHaveValue('')
+  await page.getByRole('button', { name: '清除日期', exact: true }).click()
+  await expect(page.getByLabel('截止日期')).toHaveValue('')
+  await page.getByLabel('截止日期').fill('2030-01-02')
   await page.getByRole('button', { name: '添加任务', exact: true }).click()
+  await expect(taskDialog).toBeHidden()
   await expect(page.getByRole('list', { name: '待办', exact: true })).toContainText('整理项目周报')
 
   await page.getByRole('button', { name: '将 整理项目周报 移到下一列' }).click()
   await expect(page.getByRole('list', { name: '进行中', exact: true })).toContainText('整理项目周报')
   await page.getByRole('button', { name: '编辑任务：整理项目周报' }).click()
+  const editDialog = page.getByRole('dialog', { name: '编辑任务' })
+  await expect(editDialog).toBeVisible()
   await page.getByLabel('备注').fill('等待数据汇总')
   await page.getByRole('button', { name: '保存修改' }).click()
+  await expect(editDialog).toBeHidden()
   await expect(page.getByRole('list', { name: '进行中', exact: true })).toContainText('等待数据汇总')
 
   await page.setViewportSize({ width: 390, height: 844 })
@@ -2352,7 +2591,7 @@ test('tool search is localized, keyboard friendly and available while collapsed'
   await input.fill('定时')
   await expect(page.getByRole('option')).toHaveCount(1)
   await expect(page.getByRole('option')).toContainText('生成并校验 Cron 表达式')
-  await expect(page.getByRole('option')).toContainText('效率辅助')
+  await expect(page.getByRole('option')).toContainText('时间与效率')
   await page.screenshot({ path: resolve(qaDir, 'tool-search-desktop-light.png'), fullPage: true })
   await input.press('Enter')
   await expect(page.getByRole('heading', { name: 'Crontab 生成器' })).toBeVisible()
@@ -2371,6 +2610,20 @@ test('tool search is localized, keyboard friendly and available while collapsed'
   await expect(dialog).toBeVisible()
   await assertViewportIntegrity(page)
   await page.screenshot({ path: resolve(qaDir, 'tool-search-mobile-light.png'), fullPage: true })
+})
+
+test('sidebar inline search finds tools outside the shortcut list', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await page.getByRole('button', { name: '展开侧栏' }).click()
+
+  const sidebarInput = page.getByLabel('筛选工具')
+  await sidebarInput.fill('清单')
+  const result = page.locator('.tool-nav-row').filter({ has: page.getByRole('button', { name: '清单工作台', exact: true }) })
+  await expect(result).toHaveCount(1)
+  await expect(result).toContainText('清单工作台')
+  await result.getByRole('button', { name: '清单工作台', exact: true }).click()
+  await expect(page.getByRole('heading', { name: '清单工作台', exact: true })).toBeVisible()
 })
 
 test('editor selection highlights only the real partial range above semantic marks', async ({ page }) => {

@@ -56,6 +56,7 @@ export interface FlowEdgeState {
   targetPort: string
   targetPoint?: FlowEdgeVertex
   vertices: FlowEdgeVertex[]
+  manualVertices?: boolean
   route: EdgeRoute
   label: string
   stroke: string
@@ -130,7 +131,6 @@ const shapeMap = new Map(flowShapeDefinitions.map((definition) => [definition.id
 const legacyShapes: Record<string, FlowShape> = { start: 'terminator', process: 'process', decision: 'decision', data: 'data' }
 const validDashes = new Set<StrokeDash>(['solid', 'dashed', 'dotted'])
 const validTextAlign = new Set<TextAlign>(['left', 'center', 'right'])
-const validRoutes = new Set<EdgeRoute>(['orthogonal', 'straight', 'curve'])
 const validMarkers = new Set<EdgeMarker>(['none', 'arrow', 'diamond', 'circle'])
 
 export function createId(prefix: string): string {
@@ -176,6 +176,7 @@ export function createFlowEdge(source: FlowNodeState, target: FlowNodeState, ove
     targetPort: 'left',
     targetPoint: undefined,
     vertices: [],
+    manualVertices: false,
     route: 'orthogonal',
     label: '',
     stroke: '#475569',
@@ -203,7 +204,7 @@ function approvalTemplate(): FlowchartState {
       createFlowEdge(decision, approve, { label: '是' }),
       createFlowEdge(decision, reject, { label: '否', stroke: '#be123c' }),
       createFlowEdge(approve, end),
-      createFlowEdge(reject, review, { sourcePort: 'left', targetPort: 'bottom', route: 'curve', stroke: '#be123c' }),
+      createFlowEdge(reject, review, { sourcePort: 'left', targetPort: 'bottom', stroke: '#be123c' }),
     ],
   }
 }
@@ -274,10 +275,6 @@ function dash(value: unknown): StrokeDash {
 
 function align(value: unknown): TextAlign {
   return typeof value === 'string' && validTextAlign.has(value as TextAlign) ? value as TextAlign : 'center'
-}
-
-function route(value: unknown): EdgeRoute {
-  return typeof value === 'string' && validRoutes.has(value as EdgeRoute) ? value as EdgeRoute : 'orthogonal'
 }
 
 function marker(value: unknown, fallback: EdgeMarker): EdgeMarker {
@@ -351,7 +348,8 @@ function readEdge(value: unknown, ids: Set<string>): FlowEdgeState | null {
     targetPort: targetId && typeof source.targetPort === 'string' && portIds.includes(source.targetPort as typeof portIds[number]) ? source.targetPort : '',
     targetPoint,
     vertices: vertices(source.vertices),
-    route: route(source.route),
+    manualVertices: source.manualVertices === true,
+    route: 'orthogonal',
     label: typeof source.label === 'string' ? source.label.slice(0, 120) : '',
     stroke: color(source.stroke, '#475569'),
     strokeWidth: numberInRange(source.strokeWidth, 1.5, 1, 12),
