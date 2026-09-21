@@ -108,6 +108,12 @@ async function openWorkspaceTool(page: Page, name: string): Promise<void> {
   await expect(dialog).toBeHidden()
 }
 
+async function waitForFlowchartSvgPaths(page: Page): Promise<void> {
+  const paths = page.locator('.flowchart-canvas .x6-edge path')
+  await expect.poll(() => paths.count()).toBeGreaterThan(0)
+  await expect.poll(() => paths.evaluateAll((elements) => elements.every((element) => (element as SVGPathElement).getTotalLength() > 0))).toBe(true)
+}
+
 async function activeEditorLine(page: Page, label: string): Promise<string | null> {
   return page.getByLabel(label).evaluate(() => {
     const anchor = window.getSelection()?.anchorNode
@@ -2250,6 +2256,7 @@ test('flowchart canvas edits local nodes and connections', async ({ page }, test
   await page.getByRole('button', { name: '载入本地图纸' }).click()
   await expect(page.getByLabel('流程图名称')).toHaveValue('审批流程')
   await expect(canvas).toContainText('补充材料')
+  await waitForFlowchartSvgPaths(page)
   const svgDownload = page.waitForEvent('download')
   await page.getByRole('button', { name: '导出 SVG' }).click()
   await expect((await svgDownload).suggestedFilename()).toMatch(/审批流程.*\.svg/)
@@ -2265,6 +2272,7 @@ test('flowchart canvas edits local nodes and connections', async ({ page }, test
   await expect(canvas).toContainText('导入节点')
   await page.getByRole('button', { name: '载入本地图纸' }).click()
   await expect(canvas).toContainText('补充材料')
+  await waitForFlowchartSvgPaths(page)
   await page.getByRole('button', { name: '固定标签' }).last().click()
   await expect.poll(() => page.evaluate(() => localStorage.getItem('devtoolkit.browser.state.v1') ?? '')).toContain('"toolId":"flowchart"')
   if (testInfo.project.name === 'web') {
@@ -2330,6 +2338,8 @@ test('all tools render and remain usable', async ({ page }, testInfo) => {
     await openWorkspaceTool(page, tool)
     await expect(page.getByRole('heading', { name: tool, exact: true })).toBeVisible()
     if (tool === '日期转换') {
+      await page.getByLabel('目标时区').fill('Asia/Shanghai')
+      await expect(page.getByLabel('目标时区')).toHaveValue('Asia/Shanghai')
       await page.getByLabel('日期、时间或时间戳').fill('2024年1月1日 08时00分00秒')
       await expect(page.getByText('1704067200', { exact: true })).toBeVisible()
       await expect(page.getByText('2024-01-01 08:00:00', { exact: true })).toBeVisible()

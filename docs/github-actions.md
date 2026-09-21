@@ -7,12 +7,13 @@ Windows Runner 在发布标签上构建，不能在 Linux Web 发布任务中生
 
 - `Web CI` 在推送和 Pull Request 时运行 Node 24、Python 3.13、前端类型检查、单元测试、
   两套 Playwright 测试、浏览器构建和 Python 测试。成功后保留 7 天 `build/web` 制品。
-- `Release Web` 仅能手动输入已存在的 `web-vx.y.z` 标签和确认词 `DEPLOY` 执行。标签必须与
-  `VERSION` 一致；流水线重新验证并构建一次，再将同一制品交给部署任务。
+- `Release Web` 在 `master` 分支收到推送后自动执行。流水线重新验证并构建当前提交，再将
+  同一制品交给部署任务。每个发布目录使用 `web-v版本号-提交SHA` 命名，避免同一版本重复
+  推送互相覆盖。
 
-生产发布任务使用 GitHub `production` Environment。请配置 required reviewers、Prevent
-self-review，并将允许发布的标签限制为 `web-v*`。这样公开仓库可以保持 CI 对外可见，但部署
-任务必须经过审批后才能读取生产 Secrets。
+生产发布任务使用 GitHub `production` Environment 读取 Secrets。若要求推送 `master` 后
+立即部署，不要在该 Environment 配置 required reviewers；可以将允许部署的分支限制为
+`master`。如保留 required reviewers，每次推送都会在部署阶段等待审批。
 
 ## GitHub Secrets
 

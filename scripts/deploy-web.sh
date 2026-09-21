@@ -20,7 +20,7 @@ require_release_root() {
 }
 
 require_release_id() {
-  [[ "$release_id" =~ ^web-v[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "invalid release identifier"
+  [[ "$release_id" =~ ^web-v[0-9]+\.[0-9]+\.[0-9]+-[0-9a-f]{12}$ ]] || fail "invalid release identifier"
 }
 
 resolve_managed_release() {

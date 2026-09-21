@@ -2,8 +2,8 @@ name: Web CI
 
 on:
   push:
-    branches:
-      - "**"
+    branches-ignore:
+      - master
   pull_request:
 
 permissions:

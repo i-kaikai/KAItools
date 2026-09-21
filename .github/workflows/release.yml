@@ -1,16 +1,9 @@
 name: Release Web
 
 on:
-  workflow_dispatch:
-    inputs:
-      release_tag:
-        description: Existing web release tag, for example web-v1.4.13
-        required: true
-        type: string
-      confirm_production:
-        description: Type DEPLOY to activate the production deployment after the release build succeeds
-        required: true
-        type: string
+  push:
+    branches:
+      - master
 
 permissions:
   contents: read
@@ -26,27 +19,16 @@ jobs:
     timeout-minutes: 30
     outputs:
       artifact_name: ${{ steps.package.outputs.artifact_name }}
+      release_id: ${{ steps.package.outputs.release_id }}
     defaults:
       run:
         shell: bash
 
     steps:
-      - name: Check out release tag
+      - name: Check out master commit
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.release_tag }}
           fetch-depth: 0
-
-      - name: Validate release tag
-        env:
-          RELEASE_TAG: ${{ inputs.release_tag }}
-        run: |
-          set -euo pipefail
-          [[ "$RELEASE_TAG" =~ ^web-v[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          git fetch --force --tags
-          git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"
-          test "$(git rev-parse "refs/tags/$RELEASE_TAG^{}")" = "$(git rev-parse HEAD)"
-          test "$RELEASE_TAG" = "web-v$(tr -d '\r\n' < VERSION)"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -65,13 +47,15 @@ jobs:
       - name: Package browser artifact
         id: package
         env:
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          archive="${RUNNER_TEMP}/kaitools-web-${RELEASE_TAG}.tar.gz"
+          release_id="web-v$(tr -d '\r\n' < VERSION)-${COMMIT_SHA:0:12}"
+          archive="${RUNNER_TEMP}/kaitools-web-${release_id}.tar.gz"
           tar -C build/web -czf "$archive" .
           test -s "$archive"
-          echo "artifact_name=kaitools-web-release-${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
+          echo "artifact_name=kaitools-web-release-${release_id}" >> "$GITHUB_OUTPUT"
           echo "archive=$archive" >> "$GITHUB_OUTPUT"
 
       - name: Upload release artifact
@@ -85,7 +69,6 @@ jobs:
   deploy:
     name: Deploy production web
     needs: build
-    if: ${{ inputs.confirm_production == 'DEPLOY' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment: production
@@ -94,10 +77,8 @@ jobs:
         shell: bash
 
     steps:
-      - name: Check out deployment script
+      - name: Check out deployed commit
         uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.release_tag }}
 
       - name: Download release artifact
         uses: actions/download-artifact@v4
@@ -126,21 +107,21 @@ jobs:
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
           WEB_RELEASES_DIR: ${{ secrets.WEB_RELEASES_DIR }}
           WEB_HEALTH_URL: ${{ secrets.WEB_HEALTH_URL }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_ID: ${{ needs.build.outputs.release_id }}
         run: |
           set -euo pipefail
-          for required in DEPLOY_HOST DEPLOY_USER DEPLOY_PORT WEB_RELEASES_DIR WEB_HEALTH_URL RELEASE_TAG; do
+          for required in DEPLOY_HOST DEPLOY_USER DEPLOY_PORT WEB_RELEASES_DIR WEB_HEALTH_URL RELEASE_ID; do
             [[ -n "${!required:-}" ]] || { echo "Missing required production secret: $required" >&2; exit 1; }
           done
           [[ "$DEPLOY_PORT" =~ ^[0-9]{1,5}$ ]] || { echo "DEPLOY_PORT must be a valid port" >&2; exit 1; }
           target="$DEPLOY_USER@$DEPLOY_HOST"
           releases_b64="$(printf '%s' "$WEB_RELEASES_DIR" | base64 -w 0)"
-          remote_archive="$(ssh -p "$DEPLOY_PORT" -i "$HOME/.ssh/id_ed25519" "$target" "release_dir=\$(printf '%s' '$releases_b64' | base64 --decode); mkdir -p -- \"\$release_dir/.incoming\"; printf '%s/.incoming/%s.tar.gz' \"\$release_dir\" '$RELEASE_TAG'")"
+          remote_archive="$(ssh -p "$DEPLOY_PORT" -i "$HOME/.ssh/id_ed25519" "$target" "release_dir=\$(printf '%s' '$releases_b64' | base64 --decode); mkdir -p -- \"\$release_dir/.incoming\"; printf '%s/.incoming/%s.tar.gz' \"\$release_dir\" '$RELEASE_ID'")"
           archive="$(find release-artifact -maxdepth 1 -type f -name '*.tar.gz' -print -quit)"
           test -n "$archive"
           scp -P "$DEPLOY_PORT" -i "$HOME/.ssh/id_ed25519" "$archive" "$target:$remote_archive"
           archive_b64="$(printf '%s' "$remote_archive" | base64 -w 0)"
-          ssh -p "$DEPLOY_PORT" -i "$HOME/.ssh/id_ed25519" "$target" "export KAITOOLS_RELEASES_DIR=\$(printf '%s' '$releases_b64' | base64 --decode); export KAITOOLS_RELEASE_ID='$RELEASE_TAG'; export KAITOOLS_ARCHIVE=\$(printf '%s' '$archive_b64' | base64 --decode); bash -s deploy" < scripts/deploy-web.sh
+          ssh -p "$DEPLOY_PORT" -i "$HOME/.ssh/id_ed25519" "$target" "export KAITOOLS_RELEASES_DIR=\$(printf '%s' '$releases_b64' | base64 --decode); export KAITOOLS_RELEASE_ID='$RELEASE_ID'; export KAITOOLS_ARCHIVE=\$(printf '%s' '$archive_b64' | base64 --decode); bash -s deploy" < scripts/deploy-web.sh
           if ! curl --fail --show-error --silent --retry 5 --retry-delay 2 --retry-all-errors "$WEB_HEALTH_URL" > /dev/null; then
             ssh -p "$DEPLOY_PORT" -i "$HOME/.ssh/id_ed25519" "$target" "export KAITOOLS_RELEASES_DIR=\$(printf '%s' '$releases_b64' | base64 --decode); bash -s rollback" < scripts/deploy-web.sh
             exit 1
