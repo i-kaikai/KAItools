@@ -1,17 +1,40 @@
 <script setup lang="ts">
-import { CalendarDays, Check, ChevronRight, CircleDot, Rocket, ScrollText, Sparkles, Wrench, X } from '@lucide/vue'
+import { AlertTriangle, CalendarDays, Check, ChevronRight, CircleCheck, CircleDot, Download, LoaderCircle, RefreshCw, Rocket, ScrollText, Sparkles, Wrench, X } from '@lucide/vue'
 import { computed, nextTick, ref, watch } from 'vue'
 
+import { desktopApi } from '@/api/desktopApi'
 import { t } from '@/i18n'
 import { releaseNotes } from '@/releaseNotes'
+import { isWebRuntime } from '@/runtime'
+import type { UpdateCheckResult } from '@/types'
 
 const props = defineProps<{ open: boolean; version: string }>()
 const emit = defineEmits<{ close: [] }>()
 const dialog = ref<HTMLElement | null>(null)
 const closeButton = ref<HTMLButtonElement | null>(null)
+const update = ref<UpdateCheckResult | null>(null)
+const updateError = ref<string | null>(null)
+const checkingUpdate = ref(false)
+const installingUpdate = ref(false)
 let previouslyFocused: HTMLElement | null = null
 
 const visibleNotes = computed(() => releaseNotes.filter((note) => !note.draft || note.version === props.version))
+const updatePanelState = computed(() => {
+  if (installingUpdate.value) return 'installing'
+  if (checkingUpdate.value) return 'checking'
+  if (updateError.value) return 'error'
+  if (isWebRuntime) return 'web'
+  if (update.value?.status === 'update-available') return 'available'
+  if (update.value?.status === 'repair-available') return 'repair'
+  if (update.value?.status === 'newer-local-version') return 'newer'
+  return 'current'
+})
+const updatePanelIcon = computed(() => {
+  if (checkingUpdate.value || installingUpdate.value) return LoaderCircle
+  if (updateError.value) return AlertTriangle
+  if (update.value?.available) return Download
+  return CircleCheck
+})
 
 function publishedChanges(changes: string[]): string[] {
   return changes.filter((change) => change !== 'TBD')
@@ -19,6 +42,40 @@ function publishedChanges(changes: string[]): string[] {
 
 function close(): void {
   emit('close')
+}
+
+function formatBytes(value: number): string {
+  if (value < 1024) return `${value} B`
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`
+}
+
+async function checkForUpdates(): Promise<void> {
+  if (isWebRuntime) return
+  checkingUpdate.value = true
+  updateError.value = null
+  try {
+    const result = await desktopApi.checkForUpdates()
+    if (!result.ok) {
+      update.value = null
+      updateError.value = result.error.message
+      return
+    }
+    update.value = result.data
+  } finally {
+    checkingUpdate.value = false
+  }
+}
+
+async function installUpdate(): Promise<void> {
+  if (!update.value?.available || installingUpdate.value) return
+  installingUpdate.value = true
+  updateError.value = null
+  const result = await desktopApi.installUpdate()
+  if (!result.ok) {
+    installingUpdate.value = false
+    updateError.value = result.error.message
+  }
 }
 
 function onKeydown(event: KeyboardEvent): void {
@@ -48,6 +105,7 @@ watch(() => props.open, async (open) => {
     previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
     await nextTick()
     closeButton.value?.focus()
+    void checkForUpdates()
     return
   }
   previouslyFocused?.focus()
@@ -77,6 +135,29 @@ watch(() => props.open, async (open) => {
           <span><ScrollText :size="15" />{{ t('releaseNotes.entries', { count: visibleNotes.length }) }}</span>
           <code>KAITOOLS / {{ t('releaseNotes.localBuild') }}</code>
         </div>
+
+        <section class="release-update-panel" :class="`state-${updatePanelState}`" aria-live="polite">
+          <div class="release-update-mark" aria-hidden="true"><component :is="updatePanelIcon" :class="{ 'release-update-spinner': checkingUpdate || installingUpdate }" :size="17" :stroke-width="2" /></div>
+          <div class="release-update-copy">
+            <div class="release-update-label"><span>{{ t('releaseNotes.updateTitle') }}</span><b v-if="update?.available">v{{ update.latestVersion }}</b></div>
+            <strong v-if="installingUpdate">{{ t('releaseNotes.installing') }}</strong>
+            <strong v-else-if="checkingUpdate"><LoaderCircle class="release-update-spinner" :size="16" />{{ t('releaseNotes.checking') }}</strong>
+            <strong v-else-if="isWebRuntime">{{ t('releaseNotes.webUpdateUnavailable') }}</strong>
+            <strong v-else-if="updateError">{{ t('releaseNotes.updateFailed') }}</strong>
+            <strong v-else-if="update?.status === 'up-to-date'">{{ t('releaseNotes.upToDate') }}</strong>
+            <strong v-else-if="update?.status === 'newer-local-version'">{{ t('releaseNotes.newerLocal') }}</strong>
+            <strong v-else-if="update?.status === 'repair-available'">{{ t('releaseNotes.repairAvailable') }}</strong>
+            <strong v-else-if="update">{{ t('releaseNotes.updateAvailable', { version: update.latestVersion }) }}</strong>
+            <small v-if="updateError">{{ updateError }}</small>
+            <small v-else-if="update?.lastInstallError">{{ t('releaseNotes.lastUpdateFailed', { message: update.lastInstallError }) }}</small>
+            <small v-else-if="update?.available">{{ t('releaseNotes.updateDetail', { files: update.filesToDownload, size: formatBytes(update.bytesToDownload) }) }}</small>
+          </div>
+          <button v-if="!isWebRuntime && !installingUpdate" class="release-update-action" type="button" :disabled="checkingUpdate" @click="update?.available ? installUpdate() : checkForUpdates()">
+            <Download v-if="update?.available" :size="15" />
+            <RefreshCw v-else :size="15" />
+            {{ update?.available ? t('releaseNotes.updateNow') : t('releaseNotes.recheck') }}
+          </button>
+        </section>
 
         <div class="release-notes-scroll">
           <ol class="release-notes-timeline">

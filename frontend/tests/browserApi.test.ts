@@ -148,6 +148,12 @@ describe('browser API storage', () => {
     expect(result.data.application).toHaveProperty('indexedDbAvailable')
   })
 
+  it('does not provide an in-app program updater without the native desktop bridge', async () => {
+    const result = await desktopApi.checkForUpdates()
+
+    expect(result).toEqual({ ok: false, error: { code: 'BRIDGE_UNAVAILABLE', message: '桌面更新服务尚未就绪' } })
+  })
+
   it('uses browser battery and JS heap data when the runtime exposes them', async () => {
     const batteryDescriptor = Object.getOwnPropertyDescriptor(navigator, 'getBattery')
     const memoryDescriptor = Object.getOwnPropertyDescriptor(performance, 'memory')

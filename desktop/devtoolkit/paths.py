@@ -16,6 +16,14 @@ class AppPaths:
         return self.resource_root / "web"
 
     @property
+    def update_policy_file(self) -> Path:
+        return self.resource_root / "update" / "update-policy.json"
+
+    @property
+    def update_public_key_file(self) -> Path:
+        return self.resource_root / "update" / "update-public-key.pem"
+
+    @property
     def settings_file(self) -> Path:
         return self.data_root / "settings.json"
 

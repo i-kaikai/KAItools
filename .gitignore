@@ -24,3 +24,6 @@ bin-release/
 
 # Context management data (session-local, not committed)
 .ctx/
+
+# Local Ed25519 private key used only when publishing signed update manifests
+packaging/update-signing-private.local.pem

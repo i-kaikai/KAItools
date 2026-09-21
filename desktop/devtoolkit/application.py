@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import json
 import logging
 import os
 import sys
@@ -13,7 +14,7 @@ from .document_conversion import execute_conversion_request
 from .hotkeys import GlobalActivationHotkey, HotkeyError
 from .hosts import execute_request
 from .logging_config import configure_logging
-from .paths import resolve_paths
+from .paths import AppPaths, resolve_paths
 from .runtime import (
     is_supported_windows,
     resolve_web_entry,
@@ -95,7 +96,24 @@ def _apply_dark_title_bar(window: object) -> bool:
         return False
 
 
-def _configure_native_window(window: object, tray: TrayController) -> None:
+def _write_update_health(paths: AppPaths, target: str | None) -> None:
+    if not target:
+        return
+    try:
+        path = Path(target).resolve()
+        path.relative_to(paths.pending_dir.resolve())
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(path.suffix + ".tmp")
+        try:
+            temporary.write_text(json.dumps({"ok": True, "version": APP_VERSION}), encoding="utf-8")
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
+    except (OSError, ValueError):
+        LOGGER.exception("update_health_write_failed")
+
+
+def _configure_native_window(window: object, tray: TrayController, paths: AppPaths, update_health_path: str | None = None) -> None:
     events = getattr(window, "events", None)
     shown = getattr(events, "shown", None)
     if shown is None or not shown.wait(15):
@@ -104,6 +122,7 @@ def _configure_native_window(window: object, tray: TrayController) -> None:
     _apply_dark_title_bar(window)
     try:
         tray.initialize()
+        _write_update_health(paths, update_health_path)
     except TrayError as exc:
         LOGGER.exception("tray_initialization_failed")
         raise RuntimeError(str(exc)) from exc
@@ -113,6 +132,7 @@ def _arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--apply-hosts-request", nargs=2, metavar=("PATH", "SHA256"))
     parser.add_argument("--document-conversion-request", nargs=2, metavar=("PATH", "SHA256"))
+    parser.add_argument("--update-health-check", metavar="PATH")
     parser.add_argument("--debug", action="store_true")
     return parser.parse_args()
 
@@ -210,7 +230,7 @@ def main() -> int:
         LOGGER.info("application_start version=%s webview2=%s", APP_VERSION, detected_webview2)
         webview.start(
             func=_configure_native_window,
-            args=(window, tray),
+            args=(window, tray, paths, getattr(args, "update_health_check", None)),
             gui="edgechromium",
             icon=_resolve_application_icon(paths),
             debug=args.debug,

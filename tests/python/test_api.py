@@ -11,6 +11,14 @@ from devtoolkit.paths import AppPaths
 from devtoolkit.storage import AppStorage
 
 
+class FakeUpdateManager:
+    def check(self) -> dict[str, object]:
+        return {"status": "up-to-date", "currentVersion": "1.4.12", "latestVersion": "1.4.12"}
+
+    def start_install(self) -> dict[str, object]:
+        return {"version": "1.4.13", "restarting": True, "filesToDownload": 1}
+
+
 def app_paths(tmp_path: Path) -> AppPaths:
     return AppPaths(tmp_path, tmp_path / "resources", tmp_path / "data")
 
@@ -121,6 +129,16 @@ def test_api_reports_project_repository_open_failure(tmp_path: Path, monkeypatch
 
     assert result["ok"] is False
     assert result["error"]["code"] == "OPEN_EXTERNAL_FAILED"
+
+
+def test_api_checks_updates_through_the_fixed_update_manager(tmp_path: Path) -> None:
+    paths = app_paths(tmp_path)
+    storage = AppStorage(paths)
+    storage.ensure_directories()
+
+    result = DesktopApi(paths, storage, update_manager=FakeUpdateManager()).check_for_updates()
+
+    assert result == {"ok": True, "data": {"status": "up-to-date", "currentVersion": "1.4.12", "latestVersion": "1.4.12"}}
 
 
 def test_api_opens_devtools_only_after_developer_mode_is_enabled(tmp_path: Path, monkeypatch) -> None:

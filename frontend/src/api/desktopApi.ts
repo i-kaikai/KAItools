@@ -19,6 +19,8 @@ import type {
   ShortcutSyncState,
   ToolId,
   ToolTab,
+  UpdateCheckResult,
+  UpdateInstallResult,
 } from '@/types'
 import { isWebRuntime } from '@/runtime'
 import { loadBrowserNotes, saveBrowserNotes } from '@/api/notesStorage'
@@ -48,6 +50,7 @@ const DESKTOP_ONLY_METHODS = new Set([
   'convert_docx_to_pdf',
   'convert_pdf_to_docx',
 ])
+const NATIVE_UPDATE_METHODS = new Set(['check_for_updates', 'install_update'])
 const SYSTEM_STATUS_REFRESH_MIGRATION_VERSION = 1
 const BROWSER_DIAGNOSTICS_CACHE_MS = 30_000
 
@@ -250,6 +253,15 @@ async function invoke<T>(method: string, ...args: unknown[]): Promise<ApiResult<
 }
 
 async function browserInvoke<T>(method: string, args: unknown[]): Promise<ApiResult<T>> {
+  if (NATIVE_UPDATE_METHODS.has(method)) {
+    return {
+      ok: false,
+      error: {
+        code: isWebRuntime ? 'DESKTOP_ONLY' : 'BRIDGE_UNAVAILABLE',
+        message: isWebRuntime ? '应用内更新仅 Windows 桌面版可用' : '桌面更新服务尚未就绪',
+      },
+    }
+  }
   if (method === 'open_project_repository') return openRepositoryInBrowser() as ApiResult<T>
   if (method === 'open_github_repository') return openGithubRepositoryInBrowser() as ApiResult<T>
   if (method === 'open_desktop_download') return openDesktopDownloadInBrowser() as ApiResult<T>
@@ -446,6 +458,8 @@ export const desktopApi = {
   openProjectRepository: () => invoke<void>('open_project_repository'),
   openGithubRepository: () => invoke<void>('open_github_repository'),
   openDesktopDownload: () => invoke<void>('open_desktop_download'),
+  checkForUpdates: () => invoke<UpdateCheckResult>('check_for_updates'),
+  installUpdate: () => invoke<UpdateInstallResult>('install_update'),
   openDeveloperTools: () => invoke<void>('open_developer_tools'),
   setActivationHotkey: (hotkey: string) => invoke<{ activationHotkey: string }>('set_activation_hotkey', hotkey),
   hideToTray: () => invoke<void>('hide_to_tray'),

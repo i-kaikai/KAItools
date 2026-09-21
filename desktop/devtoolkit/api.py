@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 import time
 import webbrowser
 import base64
@@ -35,6 +36,7 @@ from .runtime import open_desktop_download, open_developer_tools, open_github_re
 from .storage import AppStorage, StorageError
 from .tray import TrayController, TrayError
 from .system_status import SystemStatusCollector
+from .update_manager import UpdateError, UpdateManager
 from .version import APP_VERSION
 
 LOGGER = logging.getLogger(__name__)
@@ -61,6 +63,7 @@ class DesktopApi:
         clipboard: ClipboardHistoryService | None = None,
         document_capabilities: Callable[[], dict[str, Any]] = document_conversion_capabilities,
         document_converter: Callable[[str, bytes, Path, Path], dict[str, Any]] = convert_document,
+        update_manager: UpdateManager | None = None,
     ) -> None:
         self._paths = paths
         self._storage = storage
@@ -70,6 +73,7 @@ class DesktopApi:
         self._clipboard = clipboard
         self._document_capabilities = document_capabilities
         self._document_converter = document_converter
+        self._update_manager = update_manager or UpdateManager(paths)
         self._window: object | None = None
         self._system_status = SystemStatusCollector()
 
@@ -443,6 +447,38 @@ class DesktopApi:
             return _success()
         except (OSError, webbrowser.Error) as exc:
             return _failure("OPEN_EXTERNAL_FAILED", "无法使用系统默认浏览器打开桌面版下载页面", str(exc))
+
+    def check_for_updates(self) -> dict[str, Any]:
+        """Check the signed static update manifest; this does not alter the application."""
+
+        try:
+            return _success(self._update_manager.check())
+        except UpdateError as exc:
+            LOGGER.info("update_check_failed code=%s reason=%s", exc.code, exc)
+            return _failure(exc.code, str(exc), exc.details)
+
+    def install_update(self) -> dict[str, Any]:
+        """Stage a verified update, then let the separate updater replace unlocked files."""
+
+        try:
+            if self._window is None:
+                return _failure("UPDATER_UNAVAILABLE", "应用窗口尚未就绪")
+            destroy = getattr(self._window, "destroy", None)
+            if not callable(destroy):
+                return _failure("UPDATER_UNAVAILABLE", "应用窗口不支持重启更新")
+            result = self._update_manager.start_install()
+
+            def close_for_update() -> None:
+                try:
+                    destroy()
+                except Exception:
+                    LOGGER.exception("update_window_close_failed")
+
+            threading.Timer(0.5, close_for_update).start()
+            return _success(result)
+        except UpdateError as exc:
+            LOGGER.info("update_install_failed code=%s reason=%s", exc.code, exc)
+            return _failure(exc.code, str(exc), exc.details)
 
     def open_developer_tools(self) -> dict[str, Any]:
         try:

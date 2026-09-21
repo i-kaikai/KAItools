@@ -6,6 +6,8 @@ ROOT = Path(SPECPATH)
 WEB_ROOT = ROOT / "build" / "web"
 APP_ICON = ROOT / "frontend" / "public" / "brand" / "kaitools-app-icon.ico"
 VERSION_FILE = ROOT / "VERSION"
+UPDATE_POLICY = ROOT / "packaging" / "update-policy.json"
+UPDATE_PUBLIC_KEY = ROOT / "packaging" / "update-public-key.pem"
 WINDOWS_VERSION_RESOURCE = ROOT / "build" / "kaitools-version-info.txt"
 
 APP_VERSION = VERSION_FILE.read_text(encoding="utf-8").strip()
@@ -50,12 +52,19 @@ if not (WEB_ROOT / "index.html").is_file():
     raise SystemExit("Frontend build is missing. Run pnpm build first.")
 if not APP_ICON.is_file():
     raise SystemExit(f"Application icon is missing: {APP_ICON}")
+if not UPDATE_POLICY.is_file() or not UPDATE_PUBLIC_KEY.is_file():
+    raise SystemExit("Update policy or public key is missing. Initialize the update signing key before packaging.")
 
 a = Analysis(
     [str(ROOT / "desktop" / "main.py")],
     pathex=[str(ROOT / "desktop")],
     binaries=[],
-    datas=[(str(WEB_ROOT), "web"), (str(VERSION_FILE), ".")],
+    datas=[
+        (str(WEB_ROOT), "web"),
+        (str(VERSION_FILE), "."),
+        (str(UPDATE_POLICY), "update"),
+        (str(UPDATE_PUBLIC_KEY), "update"),
+    ],
     hiddenimports=["webview.platforms.edgechromium", "pythoncom", "pywintypes", "win32com", "win32com.client"],
     hookspath=[],
     hooksconfig={},

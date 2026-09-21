@@ -484,4 +484,6 @@
 .home-file-library-hit-area:focus-visible { outline: 2px solid #63d4b7; outline-offset: 3px; background: rgb(79 208 173 / 8%); }
 @media (max-width: 1200px) { .home-next .home-launchpad { min-height: 332px; }.home-next-deck .home-tool-orbit { height: 264px; } }
 @media (max-width: 720px) { .home-next .home-launchpad { min-height: 0; }.home-launchpad-title-row { margin-top: 10px; }.home-launchpad-title-row .home-section-eyebrow { font-size: 9px; }.home-file-library { min-height: 126px; margin-top: 14px; padding: 10px 0; flex-basis: 126px; }.home-next-deck .home-tool-orbit { height: 236px; }.home-file-library-type { grid-template-columns: 78px minmax(0, 1fr) 24px; }.home-file-library-copy h3 { font-size: 17px; } }
+@media (min-width: 1800px) { .home-next-deck .home-tool-orbit { height: 354px; } }
+@media (min-width: 3200px) { .home-next-deck .home-tool-orbit { height: 410px; } }
 @media (prefers-reduced-motion: reduce) { .home-file-library-hit-area { transition-duration: 0ms; } }

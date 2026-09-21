@@ -160,6 +160,26 @@ export interface RuntimeInfo {
   dataDirectory: string
 }
 
+export type UpdateStatus = 'up-to-date' | 'update-available' | 'repair-available' | 'newer-local-version'
+
+export interface UpdateCheckResult {
+  currentVersion: string
+  latestVersion: string
+  status: UpdateStatus
+  available: boolean
+  filesToDownload: number
+  bytesToDownload: number
+  releaseNotes: string[]
+  publishedAt: string | null
+  lastInstallError: string | null
+}
+
+export interface UpdateInstallResult {
+  version: string
+  restarting: boolean
+  filesToDownload: number
+}
+
 export interface ClipboardHistoryItem {
   id: string
   text: string

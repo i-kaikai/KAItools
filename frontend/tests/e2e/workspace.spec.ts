@@ -798,7 +798,8 @@ test('application settings apply local performance, workspace and editor prefere
   await page.waitForTimeout(420)
   await page.reload()
   await expect(page.locator('.app-shell')).toHaveClass(/sidebar-collapsed/)
-  await expect(page.locator('.workspace-tab[data-tool="json"]')).toHaveCount(0)
+  // Refresh restores the current browser session; the launch preference only controls a cold desktop start.
+  await expect(page.locator('.workspace-tab[data-tool="json"]')).toHaveCount(1)
   await expect(page.locator('.particle-field')).toHaveAttribute('data-quality', 'balanced')
   await expect(page.locator('html')).toHaveAttribute('data-motion', 'reduced')
   await page.getByRole('button', { name: 'JSON', exact: true }).click()
@@ -1033,7 +1034,7 @@ test('ring geometry stays compact across card counts and viewports', async ({ pa
     })
     expect(geometry).not.toBeNull()
     expect(geometry?.cardCount).toBe(scenario.count)
-    expect(geometry?.frontWithinStage).toBe(true)
+    expect(geometry?.frontWithinStage, JSON.stringify({ scenario, geometry })).toBe(true)
     if (scenario.count === 1) expect(geometry?.radius).toBe(0)
     else expect(geometry?.radius).toBeGreaterThan(0)
     if (scenario.count >= 3) expect(geometry?.neighborGap).toBeLessThanOrEqual((geometry?.frontWidth ?? 0) * 0.25)
@@ -1402,6 +1403,8 @@ test('flowchart canvas pans with a one-finger drag', async ({ page }) => {
 
     const canvas = page.getByLabel('流程图编辑画板')
     const viewport = canvas.locator('.x6-graph-svg-viewport')
+    await expect(canvas.locator('.x6-node')).toHaveCount(6)
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
     const start = await canvas.evaluate((element) => {
       const rect = element.getBoundingClientRect()
       const candidates = [[.14, .16], [.82, .16], [.15, .8], [.52, .84]]
@@ -1819,9 +1822,10 @@ test('flowchart existing endpoint preview uses the hovered target port direction
       edges: [{ id: 'existing-route', source: 'existing-source', sourcePort: 'bottom', target: 'existing-target', targetPort: 'bottom', vertices: [], route: 'orthogonal', stroke: '#334155', strokeWidth: 1.5, dash: 'solid', sourceMarker: 'none', targetMarker: 'arrow' }],
     })),
   })
-  const edgePoint = await page.evaluate(() => {
-    const path = document.querySelector<SVGPathElement>('.flowchart-canvas .x6-edge path')
-    if (!path) return null
+  const edgePath = canvas.locator('.x6-edge path').first()
+  await expect(edgePath).toBeVisible()
+  const edgePoint = await edgePath.evaluate((element) => {
+    const path = element as SVGPathElement
     const point = path.getPointAtLength(path.getTotalLength() / 2)
     const matrix = path.getScreenCTM()
     return matrix ? new DOMPoint(point.x, point.y).matrixTransform(matrix) : null
@@ -2793,7 +2797,7 @@ test('expanded sidebar version opens release notes without a footer duplicate', 
   await expect(dialog).toBeVisible()
   await expect(dialog.getByText(`v${appVersion}`, { exact: true }).first()).toBeVisible()
   await expect(dialog.getByRole('heading', { name: '更新内容' }).first()).toBeVisible()
-  await expect(dialog.getByText('更新内置“关于 KAITools”笔记的默认排版，使产品说明更紧凑易读。')).toBeVisible()
+  await expect(dialog.locator('.release-notes-timeline li.current .release-note-section ul li').first()).toBeVisible()
 
   const bounds = await dialog.evaluate((element) => element.getBoundingClientRect())
   expect(bounds.left).toBeGreaterThanOrEqual(0)
@@ -2805,6 +2809,33 @@ test('expanded sidebar version opens release notes without a footer duplicate', 
   await expect(dialog).toHaveCount(0)
   await expect(versionButton).toBeFocused()
   await assertViewportIntegrity(page)
+})
+
+test('desktop version dialog checks signed update metadata and starts the managed update', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name === 'web', 'The browser build must not expose a program updater.')
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await page.evaluate(() => {
+    window.pywebview = {
+      api: {
+        check_for_updates: async () => ({
+          ok: true,
+          data: {
+            currentVersion: '1.4.12', latestVersion: '1.4.13', status: 'update-available', available: true,
+            filesToDownload: 3, bytesToDownload: 1536, releaseNotes: ['应用内更新'], publishedAt: '2026-09-21', lastInstallError: null,
+          },
+        }),
+        install_update: async () => ({ ok: true, data: { version: '1.4.13', restarting: true, filesToDownload: 3 } }),
+      },
+    }
+  })
+  await page.getByRole('button', { name: '展开侧栏' }).click()
+  await page.locator('.runtime-version').click()
+  const dialog = page.getByRole('dialog', { name: 'KAITools 版本说明' })
+  await expect(dialog.getByText('发现 v1.4.13')).toBeVisible()
+  await expect(dialog.getByText('将下载 3 个文件，共 1.5 KB。用户数据不会被修改。')).toBeVisible()
+  await dialog.getByRole('button', { name: '立即更新' }).click()
+  await expect(dialog.getByText('正在准备更新，应用即将重新启动…')).toBeVisible()
 })
 
 test('developer mode unlocks from the version and exposes local service tools', async ({ page }, testInfo) => {

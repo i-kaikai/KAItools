@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "product": "KAITools",
+  "channel": "stable",
+  "mode": "file-sync",
+  "latestUrl": "https://tools.imkai.top/downloads/kaitools/latest.json"
+}

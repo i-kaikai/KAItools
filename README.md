@@ -132,6 +132,9 @@ $env:DEVTOOLKIT_DEV_URL = 'http://127.0.0.1:5173'
 
 便携目录输出到 `dist/KAITools`，ZIP 和 SHA-256 文件输出到 `release`。
 
+桌面端应用内文件同步更新的密钥、构建、静态服务器上传和回滚流程见
+[桌面端自动更新发版手册](docs/KAITools-桌面端自动更新发版手册.md)。
+
 ## Web 构建
 
 Web 版是无需业务后端的纯静态站点：
