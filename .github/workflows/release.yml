@@ -147,6 +147,8 @@ jobs:
     outputs:
       artifact_name: ${{ steps.package.outputs.artifact_name }}
       release_id: ${{ steps.package.outputs.release_id }}
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+      archive_sha256: ${{ steps.package.outputs.archive_sha256 }}
     defaults:
       run:
         shell: pwsh
@@ -201,11 +203,14 @@ jobs:
           $archive = Join-Path $env:RUNNER_TEMP "kaitools-desktop-updates-$releaseId.tar.gz"
           tar -C .\release\updates -czf $archive .
           if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $archive)) { throw 'Desktop update artifact packaging failed' }
+          $archiveSha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
           "release_id=$releaseId" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "artifact_name=kaitools-desktop-release-$releaseId" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "archive_sha256=$archiveSha256" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "archive=$archive" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Upload desktop update artifact
+        id: upload
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.package.outputs.artifact_name }}
@@ -217,7 +222,7 @@ jobs:
     name: Publish desktop update from Linux
     needs: desktop
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     environment: production
     defaults:
       run:
@@ -225,12 +230,6 @@ jobs:
     steps:
       - name: Check out deployment script
         uses: actions/checkout@v4
-
-      - name: Download desktop update artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ needs.desktop.outputs.artifact_name }}
-          path: release-artifact
 
       - name: Configure deployment SSH client
         env:
@@ -246,28 +245,29 @@ jobs:
           printf '%s\n' "$DEPLOY_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
 
-      - name: Upload and activate desktop update
+      - name: Pull and activate desktop update on the server
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
           KAITOOLS_UPDATE_ROOT: ${{ secrets.KAITOOLS_UPDATE_ROOT }}
           RELEASE_ID: ${{ needs.desktop.outputs.release_id }}
+          ARTIFACT_ID: ${{ needs.desktop.outputs.artifact_id }}
+          ARCHIVE_SHA256: ${{ needs.desktop.outputs.archive_sha256 }}
+          GITHUB_REPOSITORY_NAME: ${{ github.repository }}
         run: |
           set -euo pipefail
-          for required in DEPLOY_HOST DEPLOY_USER DEPLOY_PORT KAITOOLS_UPDATE_ROOT RELEASE_ID; do
+          for required in DEPLOY_HOST DEPLOY_USER DEPLOY_PORT KAITOOLS_UPDATE_ROOT RELEASE_ID ARTIFACT_ID ARCHIVE_SHA256 GITHUB_REPOSITORY_NAME; do
             [[ -n "${!required:-}" ]] || { echo "Missing required production secret: $required" >&2; exit 1; }
           done
           [[ "$DEPLOY_PORT" =~ ^[0-9]{1,5}$ ]] || { echo "DEPLOY_PORT must be numeric" >&2; exit 1; }
           [[ "$KAITOOLS_UPDATE_ROOT" =~ ^/[^[:space:]]+$ ]] || { echo "KAITOOLS_UPDATE_ROOT must be an absolute path without spaces" >&2; exit 1; }
+          [[ "$ARTIFACT_ID" =~ ^[0-9]+$ ]] || { echo "ARTIFACT_ID must be numeric" >&2; exit 1; }
+          [[ "$ARCHIVE_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "ARCHIVE_SHA256 must be a lowercase SHA-256 digest" >&2; exit 1; }
+          [[ "$GITHUB_REPOSITORY_NAME" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { echo "GITHUB_REPOSITORY_NAME is invalid" >&2; exit 1; }
           target="$DEPLOY_USER@$DEPLOY_HOST"
           releases_b64="$(printf '%s' "$KAITOOLS_UPDATE_ROOT" | base64 -w 0)"
-          remote_archive="$(ssh -p "$DEPLOY_PORT" -i "$HOME/.ssh/id_ed25519" "$target" "root=\$(printf '%s' '$releases_b64' | base64 --decode); mkdir -p -- \"\$root/.incoming\"; printf '%s/.incoming/%s.tar.gz' \"\$root\" '$RELEASE_ID'")"
-          archive="$(find release-artifact -maxdepth 1 -type f -name '*.tar.gz' -print -quit)"
-          test -n "$archive"
-          scp -P "$DEPLOY_PORT" -i "$HOME/.ssh/id_ed25519" "$archive" "$target:$remote_archive"
-          archive_b64="$(printf '%s' "$remote_archive" | base64 -w 0)"
-          ssh -p "$DEPLOY_PORT" -i "$HOME/.ssh/id_ed25519" "$target" "export KAITOOLS_UPDATE_ROOT=\$(printf '%s' '$releases_b64' | base64 --decode); export KAITOOLS_UPDATE_RELEASE_ID='$RELEASE_ID'; export KAITOOLS_UPDATE_ARCHIVE=\$(printf '%s' '$archive_b64' | base64 --decode); bash -s deploy" < scripts/deploy-updates.sh
+          ssh -p "$DEPLOY_PORT" -i "$HOME/.ssh/id_ed25519" "$target" "export KAITOOLS_UPDATE_ROOT=\$(printf '%s' '$releases_b64' | base64 --decode); export KAITOOLS_UPDATE_RELEASE_ID='$RELEASE_ID'; export KAITOOLS_GITHUB_ARTIFACT_ID='$ARTIFACT_ID'; export KAITOOLS_GITHUB_ARTIFACT_SHA256='$ARCHIVE_SHA256'; export KAITOOLS_GITHUB_REPOSITORY='$GITHUB_REPOSITORY_NAME'; bash -s deploy" < scripts/deploy-updates.sh
 
       - name: Set up Python for public update verification
         uses: actions/setup-python@v5

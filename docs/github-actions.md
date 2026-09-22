@@ -11,8 +11,8 @@ Windows Runner，不在 Linux Web 发布任务中生成或覆盖用户数据。
   同一制品交给部署任务。每个发布目录使用 `web-v版本号-提交SHA` 命名，避免同一版本重复
   推送互相覆盖。
 - `Release Web / desktop` 与 Web 发布并行运行，同样由每次 `master` 推送触发。Windows `desktop`
-  Job 只构建、签名、校验并上传更新压缩包；Ubuntu `desktop-deploy` Job 下载该 artifact，
-  再使用 Linux SSH/SCP 环境发布并切换桌面更新目录的 `current` 软链接。发布失败不会影响
+  Job 只构建、签名、校验并上传更新压缩包；Ubuntu `desktop-deploy` Job 仅通过 SSH 触发服务器
+  从 GitHub Actions Artifact 拉取归档，再切换桌面更新目录的 `current` 软链接。发布失败不会影响
   Web Job 的独立回滚。
 
 生产发布任务使用 GitHub `production` Environment 读取 Secrets。若要求推送 `master` 后
@@ -41,7 +41,7 @@ Gitee master
   -> GitHub Release Web / desktop (Windows)
   -> desktop update artifact
   -> Release Web / desktop-deploy (Ubuntu)
-  -> SSH/SCP 上传到 Linux
+  -> SSH 触发 Linux 服务器经本机 GitHub 代理拉取 artifact
   -> deploy-updates.sh 解压并切换 current
   -> 公网 latest.json 签名/摘要校验
 ```
@@ -69,8 +69,9 @@ Gitee master
 - 上传步骤失败：检查 `WEB_RELEASES_DIR`、远程目录权限和服务器 SSH 端口。
 - 桌面 Windows 构建失败：检查签名私钥、PyInstaller、更新清单和 Windows Runner 日志；
   Windows Job 不再连接 Linux，也不会产生服务器 SSH 登录。
-- 桌面 Linux 发布失败：检查 `KAITOOLS_UPDATE_ROOT`、artifact 下载结果和 `deploy-updates.sh`；
-  该阶段使用与 Web 发布相同的 Linux SSH 参数和 `known_hosts`。
+- 桌面 Linux 发布失败：检查 `KAITOOLS_UPDATE_ROOT`、服务器的 GitHub Artifact 凭据、本机 GitHub
+  代理、artifact 校验摘要和 `deploy-updates.sh`；该阶段使用与 Web 发布相同的 Linux SSH 参数和
+  `known_hosts`，但不再通过 SCP 传输桌面归档。
 - 健康检查失败：检查 Nginx、静态目录 `current` 和 `WEB_HEALTH_URL`；失败后应自动恢复
   `previous`，不要直接删除旧版本。
 
@@ -116,3 +117,16 @@ Nginx 静态根目录应指向 `WEB_RELEASES_DIR/current`，并保持 `/api/` �
 桌面更新目录的 Nginx 路由应将 `/downloads/kaitools/latest.json` 和签名文件指向
 `KAITOOLS_UPDATE_ROOT/current/`，并将 `manifests/`、`objects/` 指向更新根目录。桌面发布
 Job 与 Web 发布 Job 都由 `master` 推送触发，但分别使用独立的发布目录和校验流程。
+
+服务器还需为部署账号准备一个不被 Web 服务映射、且与 `web` 目录同级的私有目录：
+`/srv/kaitools/deploy-secrets`。其中的 `github-artifact.env` 仅包含本机 GitHub 代理地址和
+令牌文件路径；令牌本身保存为 `github-artifact-token`，使用 GitHub 细粒度 `Actions: Read`
+凭据写入。`github-artifact.env` 应使用以下键名：
+
+```bash
+KAITOOLS_GITHUB_PROXY=http://127.0.0.1:<proxy-port>
+KAITOOLS_GITHUB_TOKEN_FILE=/srv/kaitools/deploy-secrets/github-artifact-token
+```
+
+目录权限必须为 `700`，两个文件权限必须为 `600`；它们不能进入 Git 仓库、发布目录或 GitHub
+Actions Secrets。
