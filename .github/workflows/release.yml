@@ -231,6 +231,25 @@ jobs:
       - name: Check out deployment script
         uses: actions/checkout@v4
 
+      # 保存上一版公开元数据及签名；验签脚本会重新验证它们，不能信任未认证的路径提示。
+      - name: Capture previous public update metadata
+        id: previous_update
+        run: |
+          set -euo pipefail
+          previous_dir="$RUNNER_TEMP/kaitools-previous-update"
+          install -d -m 700 "$previous_dir"
+          latest="$previous_dir/latest.json"
+          signature="$previous_dir/latest.json.sig"
+          if curl --fail --silent --show-error --retry 3 --retry-delay 2 --retry-all-errors --output "$latest" https://tools.imkai.top/downloads/kaitools/latest.json \
+            && curl --fail --silent --show-error --retry 3 --retry-delay 2 --retry-all-errors --output "$signature" https://tools.imkai.top/downloads/kaitools/latest.json.sig; then
+            echo "Captured previous public update metadata."
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No usable previous public metadata; public verification will be full." >&2
+            rm -f -- "$latest" "$signature"
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Configure deployment SSH client
         env:
           DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
@@ -275,6 +294,13 @@ jobs:
           python-version: '3.13'
 
       - name: Verify published desktop update from the public URL
+        env:
+          PREVIOUS_UPDATE_AVAILABLE: ${{ steps.previous_update.outputs.available }}
         run: |
-          python -m pip install cryptography
-          python scripts/verify_update_release.py --remote-latest-url https://tools.imkai.top/downloads/kaitools/latest.json --public-key packaging/update-public-key.pem
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check -r requirements-release.txt
+          args=(--remote-latest-url https://tools.imkai.top/downloads/kaitools/latest.json --public-key packaging/update-public-key.pem)
+          if [[ "$PREVIOUS_UPDATE_AVAILABLE" = true ]]; then
+            args+=(--previous-latest "$RUNNER_TEMP/kaitools-previous-update/latest.json" --previous-latest-signature "$RUNNER_TEMP/kaitools-previous-update/latest.json.sig")
+          fi
+          python scripts/verify_update_release.py "${args[@]}"

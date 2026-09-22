@@ -43,7 +43,7 @@ Gitee master
   -> Release Web / desktop-deploy (Ubuntu)
   -> SSH 触发 Linux 服务器经本机 GitHub 代理拉取 artifact
   -> deploy-updates.sh 解压并切换 current
-  -> 公网 latest.json 签名/摘要校验
+  -> 公网 latest.json 与更新对象校验
 ```
 ```
 
@@ -57,8 +57,10 @@ Gitee master
   会在读取生产 Secrets 前暂停；要求推送后立即部署时不要配置审批人。
 - Web 脚本先把压缩包解到新目录，再原子切换 `current`。公网健康检查失败时会执行 rollback，
   恢复 `previous`。
-- 桌面更新的公网验签会用 16 个并发 worker 校验全部对象的大小和 SHA-256；它不跳过任何
-  已发布文件。
+- 桌面更新的公网验签会优先通过 HTTP/2 自动协商；服务端不支持时使用 HTTP/1.1 长连接池，并保持 16 个
+  并发 worker。对象按流式 SHA-256 校验，不会完整读入内存。
+- 发布前会保存上一版公开 `latest.json` 及签名；发布后会重新验证新旧元数据与清单签名，仅下载
+  并校验条目发生变化的对象。首次发布或上一版元数据、清单无法使用时，自动回退为全量校验。
 
 ## 如何定位失败
 
