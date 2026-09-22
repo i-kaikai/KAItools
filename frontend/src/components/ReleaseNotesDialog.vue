@@ -136,7 +136,7 @@ watch(() => props.open, async (open) => {
           <code>KAITOOLS / {{ t('releaseNotes.localBuild') }}</code>
         </div>
 
-        <section class="release-update-panel" :class="`state-${updatePanelState}`" aria-live="polite">
+        <section v-if="!isWebRuntime" class="release-update-panel" :class="`state-${updatePanelState}`" aria-live="polite">
           <div class="release-update-mark" aria-hidden="true"><component :is="updatePanelIcon" :class="{ 'release-update-spinner': checkingUpdate || installingUpdate }" :size="17" :stroke-width="2" /></div>
           <div class="release-update-copy">
             <div class="release-update-label"><span>{{ t('releaseNotes.updateTitle') }}</span><b v-if="update?.available">v{{ update.latestVersion }}</b></div>

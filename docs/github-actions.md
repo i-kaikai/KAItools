@@ -1,7 +1,7 @@
 # GitHub Actions Web Pipeline
 
-本仓库的 GitHub Actions 只负责构建、测试和上传浏览器制品。Windows EXE 仍应由独立的
-Windows Runner 在发布标签上构建，不能在 Linux Web 发布任务中生成或覆盖用户数据。
+本仓库的 GitHub Actions 负责 Web 发布和 Windows 桌面更新发布。桌面 Job 使用独立的
+Windows Runner，不在 Linux Web 发布任务中生成或覆盖用户数据。
 
 ## 工作流
 
@@ -10,10 +10,50 @@ Windows Runner 在发布标签上构建，不能在 Linux Web 发布任务中生
 - `Release Web` 在 `master` 分支收到推送后自动执行。流水线重新验证并构建当前提交，再将
   同一制品交给部署任务。每个发布目录使用 `web-v版本号-提交SHA` 命名，避免同一版本重复
   推送互相覆盖。
+- `Release Web / desktop` 与 Web 发布并行运行，同样由每次 `master` 推送触发。它构建
+  `KAITools.exe` 和 `KAIToolsUpdater.exe`，生成签名更新对象并切换桌面更新目录的 `current`
+  软链接；发布失败不会影响 Web Job 的独立回滚。
 
 生产发布任务使用 GitHub `production` Environment 读取 Secrets。若要求推送 `master` 后
 立即部署，不要在该 Environment 配置 required reviewers；可以将允许部署的分支限制为
 `master`。如保留 required reviewers，每次推送都会在部署阶段等待审批。
+
+## 运行原理
+
+一次代码推送的链路如下：
+
+```text
+Gitee master
+  -> Gitee Push 镜像
+  -> GitHub master
+  -> Release Web / build
+  -> GitHub Actions artifact
+  -> Release Web / deploy
+  -> SSH 上传到 Linux
+  -> current 软链接切换
+  -> WEB_HEALTH_URL 检查
+```
+
+- 非 `master` 分支和 Pull Request 只触发 `Web CI`，不会部署生产。
+- `master` 不触发普通 CI 的 push Job，而是触发 `Release Web`，避免同一提交重复跑完整测试。
+- `build` Job 的 `release_id` 和 `artifact_name` 通过 Job outputs 传给 `deploy` Job；部署 Job
+  不重新构建，也不在服务器执行 pnpm。
+- `release_id` 格式为 `web-v<全局 VERSION>-<提交 SHA 前 12 位>`，所以每个 master 提交都有
+  独立目录，可以通过 `previous` 回退。
+- `environment: production` 决定部署 Job 读取哪组 Secrets。配置 required reviewers 时，Job
+  会在读取生产 Secrets 前暂停；要求推送后立即部署时不要配置审批人。
+- Web 脚本先把压缩包解到新目录，再原子切换 `current`。公网健康检查失败时会执行 rollback，
+  恢复 `previous`。
+
+## 如何定位失败
+
+- `Web CI` 失败：代码、依赖、类型检查或 E2E 有问题，尚未进入生产部署。
+- `Release Web / build` 失败：构建或制品打包失败，服务器不会被访问。
+- `Release Web / deploy` 在读取 Secrets 前等待：检查 `production` Environment 的审批规则。
+- SSH 配置步骤失败：检查五个 SSH/主机相关 Secrets，以及发布用户的公钥和权限。
+- 上传步骤失败：检查 `WEB_RELEASES_DIR`、远程目录权限和服务器 SSH 端口。
+- 健康检查失败：检查 Nginx、静态目录 `current` 和 `WEB_HEALTH_URL`；失败后应自动恢复
+  `previous`，不要直接删除旧版本。
 
 ## GitHub Secrets
 
@@ -28,6 +68,13 @@ Windows Runner 在发布标签上构建，不能在 Linux Web 发布任务中生
 | `DEPLOY_SSH_KNOWN_HOSTS` | 已核验的服务器主机密钥行，禁止工作流执行 `ssh-keyscan` |
 | `WEB_RELEASES_DIR` | 绝对发布目录，例如 `/srv/kaitools/web` |
 | `WEB_HEALTH_URL` | 部署后从 GitHub Runner 访问的 HTTPS 站点地址 |
+
+桌面自动更新还需要以下 `production` Environment Secrets：
+
+| 名称 | 用途 |
+| --- | --- |
+| `KAITOOLS_UPDATE_SIGNING_PRIVATE_KEY` | 与 `packaging/update-public-key.pem` 匹配的 Ed25519 私钥 |
+| `KAITOOLS_UPDATE_ROOT` | 服务器静态更新根目录，例如 `/srv/kaitools-downloads` |
 
 ## 服务器准备
 
@@ -46,3 +93,7 @@ WEB_RELEASES_DIR/
 Nginx 静态根目录应指向 `WEB_RELEASES_DIR/current`，并保持 `/api/` 使用独立的反向代理。
 部署用户不需要、也不应拥有修改 Nginx、DNS 或证书的权限。脚本不会删除旧版本；清理策略
 应在确认回滚窗口后由运维人员单独执行。
+
+桌面更新目录的 Nginx 路由应将 `/downloads/kaitools/latest.json` 和签名文件指向
+`KAITOOLS_UPDATE_ROOT/current/`，并将 `manifests/`、`objects/` 指向更新根目录。桌面发布
+Job 与 Web 发布 Job 都由 `master` 推送触发，但分别使用独立的发布目录和校验流程。

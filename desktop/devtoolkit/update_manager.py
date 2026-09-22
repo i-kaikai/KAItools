@@ -82,6 +82,9 @@ def _version_parts(value: Any) -> tuple[int, int, int]:
 
 
 def _read_json(raw: bytes, label: str) -> dict[str, Any]:
+    preview = raw.lstrip()[:128].lower()
+    if preview.startswith(b"<!doctype html") or preview.startswith(b"<html"):
+        raise UpdateSecurityError(f"{label} 返回了 HTML，服务器可能将更新地址回退到了 index.html")
     try:
         value = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:

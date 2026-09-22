@@ -71,6 +71,7 @@ kbd { padding: 2px 4px; border: 1px solid #3a3e44; border-bottom-width: 2px; bor
 .runtime-actions { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 5px; }
 .runtime-version, .runtime-developer { display: inline-flex; width: fit-content; flex: 0 0 auto; align-items: center; padding: 0; border: 0; color: #b3b8bf; background: transparent; cursor: pointer; text-align: left; transition: transform 140ms var(--ease-out), color 120ms ease; }
 .runtime-version { font-size: 12px; }
+.runtime-update-dot { display: inline-block; width: 7px; height: 7px; margin-left: 5px; border-radius: 50%; background: #56d78a; box-shadow: 0 0 0 2px rgb(86 215 138 / 16%), 0 0 9px rgb(86 215 138 / 54%); }
 .runtime-developer { padding: 1px 4px; border: 1px solid #3f766a; border-radius: 3px; color: #75d9c1; font: 10px "Cascadia Code", monospace; }
 .runtime-version:active, .runtime-developer:active { transform: scale(.97); }
 @media (hover: hover) and (pointer: fine) { .runtime-version:hover { color: var(--sidebar-text); }.runtime-developer:hover { border-color: #60aa99; color: #a2ead9; } }

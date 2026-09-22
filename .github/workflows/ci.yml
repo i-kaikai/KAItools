@@ -1,14 +1,18 @@
 name: Web CI
 
+# Gitee Push 镜像把提交同步到 GitHub 后，非 master 分支和 PR 在这里做验证。
+# master 由 release.yml 负责：它会重复必要检查并继续部署，避免同一提交重复跑两条发布链。
 on:
   push:
     branches-ignore:
       - master
   pull_request:
 
+# CI 只需要读取代码；不允许工作流用 GITHUB_TOKEN 修改仓库。
 permissions:
   contents: read
 
+# 新提交到来时取消同一分支上仍在排队的旧 CI，节省 Runner 分钟。
 concurrency:
   group: kaitools-web-ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -23,14 +27,17 @@ jobs:
         shell: bash
 
     steps:
+      # 所有后续检查都针对触发本次 CI 的精确提交。
       - name: Check out source
         uses: actions/checkout@v4
 
+      # 前端声明 Node 24；pnpm 通过 Corepack 按 package.json 的 packageManager 使用。
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 24
 
+      # Python 测试覆盖桌面宿主的可移植逻辑；真正的 EXE 打包在 Windows 发布链完成。
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -38,30 +45,36 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-dev.txt
 
+      # frozen-lockfile 保证 CI 不会偷偷更新依赖版本。
       - name: Install frontend dependencies
         working-directory: frontend
         run: |
           corepack enable
           pnpm install --frozen-lockfile --config.confirmModulesPurge=false
 
+      # VERSION 是客户端版本唯一来源，避免发布元数据漂移。
       - name: Validate version metadata
         shell: pwsh
         run: ./scripts/check_version.ps1
 
+      # 先做快速静态检查和单测，再启动浏览器测试。
       - name: Run frontend type checks and unit tests
         working-directory: frontend
         run: |
           corepack pnpm typecheck
           corepack pnpm test
 
+      # Runner 是全新 Ubuntu，需要显式安装 Chromium 及系统依赖。
       - name: Install Playwright browser
         working-directory: frontend
         run: corepack pnpm exec playwright install --with-deps chromium
 
+      # 这里的 desktop-mode 指前端运行模式，不是 Windows EXE 打包。
       - name: Run desktop-mode browser tests
         working-directory: frontend
         run: corepack pnpm test:e2e
 
+      # Web 发布物输出到仓库根目录 build/web。
       - name: Build browser distribution
         working-directory: frontend
         run: corepack pnpm build:web
@@ -77,6 +90,7 @@ jobs:
           python -m compileall -q desktop
           python -m pytest
 
+      # 失败时保留 Playwright 截图/trace，成功时不上传失败诊断。
       - name: Upload browser test diagnostics
         if: ${{ failure() }}
         uses: actions/upload-artifact@v4
@@ -88,6 +102,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      # CI 制品只用于检查和下载；生产部署由 master 发布工作流重新构建同一提交。
       - name: Upload browser deployment artifact
         if: ${{ success() }}
         uses: actions/upload-artifact@v4

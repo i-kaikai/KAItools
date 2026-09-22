@@ -2340,9 +2340,20 @@ test('all tools render and remain usable', async ({ page }, testInfo) => {
     if (tool === '日期转换') {
       await page.getByLabel('目标时区').fill('Asia/Shanghai')
       await expect(page.getByLabel('目标时区')).toHaveValue('Asia/Shanghai')
+      await expect(page.locator('#timezone-input')).not.toHaveAttribute('list')
+      await expect(page.locator('.timestamp-now-strip')).toBeVisible()
       await page.getByLabel('日期、时间或时间戳').fill('2024年1月1日 08时00分00秒')
       await expect(page.getByText('1704067200', { exact: true })).toBeVisible()
       await expect(page.getByText('2024-01-01 08:00:00', { exact: true })).toBeVisible()
+      await expect(page.locator('.copyable-result')).toHaveCount(9)
+      await expect(page.locator('.copyable-result').first()).toHaveRole('button')
+      await page.evaluate(() => {
+        let copied = ''
+        Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (value: string) => { copied = value } } })
+        Object.defineProperty(window, '__timestampCopied', { configurable: true, get: () => copied })
+      })
+      await page.locator('.result-row').filter({ has: page.getByText('秒时间戳', { exact: true }) }).locator('.copyable-result').click()
+      await expect.poll(() => page.evaluate(() => (window as Window & { __timestampCopied?: string }).__timestampCopied)).toBe('1704067200')
     }
     await assertViewportIntegrity(page)
     if (tool === 'Hosts') {
@@ -2794,7 +2805,7 @@ test('account entry remains fixed at the top right and detects the configured se
   await assertViewportIntegrity(page)
 })
 
-test('expanded sidebar version opens release notes without a footer duplicate', async ({ page }) => {
+test('expanded sidebar version opens release notes without a footer duplicate', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 960, height: 640 })
   await page.goto('/')
 
@@ -2808,6 +2819,7 @@ test('expanded sidebar version opens release notes without a footer duplicate', 
   await expect(dialog.getByText(`v${appVersion}`, { exact: true }).first()).toBeVisible()
   await expect(dialog.getByRole('heading', { name: '更新内容' }).first()).toBeVisible()
   await expect(dialog.locator('.release-notes-timeline li.current .release-note-section ul li').first()).toBeVisible()
+  if (testInfo.project.name === 'web') await expect(dialog.locator('.release-update-panel')).toHaveCount(0)
 
   const bounds = await dialog.evaluate((element) => element.getBoundingClientRect())
   expect(bounds.left).toBeGreaterThanOrEqual(0)

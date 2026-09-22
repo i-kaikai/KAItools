@@ -1,13 +1,17 @@
 name: Release Web
 
+# Gitee 推送 master -> GitHub 镜像同步 -> 本工作流自动执行。
+# 不使用手动 tag；每个 master 提交都会产生一个可追踪的版本目录。
 on:
   push:
     branches:
       - master
 
+# 部署凭据通过 production Environment Secrets 注入，不需要写仓库权限。
 permissions:
   contents: read
 
+# 生产发布串行执行，避免两个提交同时切换 current 符号链接。
 concurrency:
   group: kaitools-web-production
   cancel-in-progress: false
@@ -25,6 +29,7 @@ jobs:
         shell: bash
 
     steps:
+      # 构建 Job 只负责验证和打包，不接触生产服务器。
       - name: Check out master commit
         uses: actions/checkout@v4
         with:
@@ -35,6 +40,7 @@ jobs:
         with:
           node-version: 24
 
+      # 发布前重新验证当前 master；不能直接复用过期 CI 制品。
       - name: Install and verify frontend
         working-directory: frontend
         run: |
@@ -44,6 +50,7 @@ jobs:
           pnpm test
           pnpm build:web
 
+      # release_id 同时写入 Job output、制品名和服务器目录，便于回滚定位。
       - name: Package browser artifact
         id: package
         env:
@@ -58,6 +65,7 @@ jobs:
           echo "artifact_name=kaitools-web-release-${release_id}" >> "$GITHUB_OUTPUT"
           echo "archive=$archive" >> "$GITHUB_OUTPUT"
 
+      # build 和 deploy 之间通过 GitHub Actions artifact 传递压缩包。
       - name: Upload release artifact
         uses: actions/upload-artifact@v4
         with:
@@ -71,12 +79,14 @@ jobs:
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    # 进入 Environment 后才能读取生产 Secrets；required reviewers 会在这里暂停。
     environment: production
     defaults:
       run:
         shell: bash
 
     steps:
+      # 部署 Job 使用同一触发提交中的脚本，并下载 build Job 生成的制品。
       - name: Check out deployed commit
         uses: actions/checkout@v4
 
@@ -86,6 +96,7 @@ jobs:
           name: ${{ needs.build.outputs.artifact_name }}
           path: release-artifact
 
+      # known_hosts 必须由用户预先核验，工作流不会执行不安全的 ssh-keyscan。
       - name: Configure deployment SSH client
         env:
           DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
@@ -100,6 +111,7 @@ jobs:
           printf '%s\n' "$DEPLOY_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
 
+      # 远程脚本先上传到新版本目录，再原子切换 current；公网健康检查失败会回滚。
       - name: Upload and activate browser release
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
@@ -126,3 +138,96 @@ jobs:
             ssh -p "$DEPLOY_PORT" -i "$HOME/.ssh/id_ed25519" "$target" "export KAITOOLS_RELEASES_DIR=\$(printf '%s' '$releases_b64' | base64 --decode); bash -s rollback" < scripts/deploy-web.sh
             exit 1
           fi
+
+  desktop:
+    name: Build and publish desktop update
+    runs-on: windows-2022
+    timeout-minutes: 45
+    environment: production
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Check out master commit
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: |
+          corepack enable
+          pnpm install --dir frontend --frozen-lockfile --config.confirmModulesPurge=false
+          py -3.13 -m venv .venv
+          .\.venv\Scripts\python.exe -m pip install --upgrade pip
+          .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+
+      - name: Validate release metadata
+        run: |
+          .\scripts\check_version.ps1
+          .\scripts\check_release_notes.ps1
+
+      - name: Write signing key to runner temporary storage
+        env:
+          KAITOOLS_UPDATE_SIGNING_PRIVATE_KEY: ${{ secrets.KAITOOLS_UPDATE_SIGNING_PRIVATE_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:KAITOOLS_UPDATE_SIGNING_PRIVATE_KEY)) { throw 'Missing KAITOOLS_UPDATE_SIGNING_PRIVATE_KEY' }
+          $keyPath = Join-Path $env:RUNNER_TEMP 'kaitools-update-signing-key.pem'
+          [System.IO.File]::WriteAllText($keyPath, $env:KAITOOLS_UPDATE_SIGNING_PRIVATE_KEY, [System.Text.UTF8Encoding]::new($false))
+          "KAITOOLS_UPDATE_KEY_PATH=$keyPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build and verify desktop update artifacts
+        run: |
+          .\scripts\build_portable.ps1 -SkipE2E -SigningKeyPath $env:KAITOOLS_UPDATE_KEY_PATH
+          .\.venv\Scripts\python.exe .\scripts\verify_update_release.py --updates-root .\release\updates --public-key .\packaging\update-public-key.pem
+
+      - name: Configure SSH client
+        env:
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:DEPLOY_SSH_PRIVATE_KEY) -or [string]::IsNullOrWhiteSpace($env:DEPLOY_SSH_KNOWN_HOSTS)) { throw 'Missing SSH deployment secrets' }
+          $sshDir = Join-Path $env:RUNNER_TEMP 'ssh'
+          New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
+          $keyPath = Join-Path $sshDir 'id_ed25519'
+          $knownHostsPath = Join-Path $sshDir 'known_hosts'
+          [System.IO.File]::WriteAllText($keyPath, $env:DEPLOY_SSH_PRIVATE_KEY, [System.Text.UTF8Encoding]::new($false))
+          [System.IO.File]::WriteAllText($knownHostsPath, $env:DEPLOY_SSH_KNOWN_HOSTS, [System.Text.UTF8Encoding]::new($false))
+          icacls $keyPath /inheritance:r /grant:r "$($env:USERNAME):(R)" | Out-Null
+          "DEPLOY_SSH_KEY_PATH=$keyPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "DEPLOY_SSH_KNOWN_HOSTS_PATH=$knownHostsPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Upload and activate desktop update
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          KAITOOLS_UPDATE_ROOT: ${{ secrets.KAITOOLS_UPDATE_ROOT }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          foreach ($name in @('DEPLOY_HOST', 'DEPLOY_USER', 'DEPLOY_PORT', 'KAITOOLS_UPDATE_ROOT')) {
+            if ([string]::IsNullOrWhiteSpace((Get-Item "env:$name").Value)) { throw "Missing $name" }
+          }
+          if ($env:DEPLOY_PORT -notmatch '^[0-9]{1,5}$') { throw 'DEPLOY_PORT must be numeric' }
+          if ($env:KAITOOLS_UPDATE_ROOT -notmatch '^/[^ ]+$') { throw 'KAITOOLS_UPDATE_ROOT must be an absolute path without spaces' }
+          $version = (Get-Content VERSION -Raw -Encoding UTF8).Trim()
+          $releaseId = "desktop-v$version-$($env:RELEASE_SHA.Substring(0, 12))"
+          $target = "$($env:DEPLOY_USER)@$($env:DEPLOY_HOST)"
+          $sshArgs = @('-p', $env:DEPLOY_PORT, '-i', $env:DEPLOY_SSH_KEY_PATH, '-o', "UserKnownHostsFile=$env:DEPLOY_SSH_KNOWN_HOSTS_PATH", '-o', 'StrictHostKeyChecking=yes')
+          ssh @sshArgs $target "mkdir -p '$env:KAITOOLS_UPDATE_ROOT/.incoming/$releaseId/objects' '$env:KAITOOLS_UPDATE_ROOT/.incoming/$releaseId/manifests'"
+          scp @('-P', $env:DEPLOY_PORT, '-i', $env:DEPLOY_SSH_KEY_PATH, '-o', "UserKnownHostsFile=$env:DEPLOY_SSH_KNOWN_HOSTS_PATH", '-o', 'StrictHostKeyChecking=yes', '-r', '.\release\updates\objects', '.\release\updates\manifests', "${target}:$env:KAITOOLS_UPDATE_ROOT/.incoming/$releaseId/")
+          scp @('-P', $env:DEPLOY_PORT, '-i', $env:DEPLOY_SSH_KEY_PATH, '-o', "UserKnownHostsFile=$env:DEPLOY_SSH_KNOWN_HOSTS_PATH", '-o', 'StrictHostKeyChecking=yes', '.\release\updates\latest.json', '.\release\updates\latest.json.sig', "${target}:$env:KAITOOLS_UPDATE_ROOT/.incoming/$releaseId/")
+          $remoteScript = (Get-Content .\scripts\deploy-updates.sh -Raw) -replace "`r`n", "`n"
+          $remoteEnv = "export KAITOOLS_UPDATE_ROOT='$env:KAITOOLS_UPDATE_ROOT'; export KAITOOLS_UPDATE_RELEASE_ID='$releaseId';"
+          $remoteScript | ssh @sshArgs $target "$remoteEnv bash -s"
+
+      - name: Verify published desktop update from the public URL
+        run: |
+          .\.venv\Scripts\python.exe .\scripts\verify_update_release.py --remote-latest-url https://tools.imkai.top/downloads/kaitools/latest.json --public-key .\packaging\update-public-key.pem

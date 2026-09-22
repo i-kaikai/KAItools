@@ -40,8 +40,10 @@ latest.json + latest.json.sig
 
 ```text
 /srv/kaitools-downloads/
-├─ latest.json
-├─ latest.json.sig
+├─ current -> /srv/kaitools-downloads/releases/desktop-vX.Y.Z-<sha>
+├─ releases/
+├─ latest.json                 # 可选兼容副本
+├─ latest.json.sig             # 可选兼容副本
 ├─ manifests/
 └─ objects/
 ```
@@ -50,14 +52,14 @@ latest.json + latest.json.sig
 
 ```nginx
 location = /downloads/kaitools/latest.json {
-    alias /srv/kaitools-downloads/latest.json;
+    alias /srv/kaitools-downloads/current/latest.json;
     default_type application/json;
     add_header Cache-Control "no-store, max-age=0" always;
     add_header X-Content-Type-Options "nosniff" always;
 }
 
 location = /downloads/kaitools/latest.json.sig {
-    alias /srv/kaitools-downloads/latest.json.sig;
+    alias /srv/kaitools-downloads/current/latest.json.sig;
     default_type application/octet-stream;
     add_header Cache-Control "no-store, max-age=0" always;
     add_header X-Content-Type-Options "nosniff" always;
@@ -71,7 +73,7 @@ location ^~ /downloads/kaitools/ {
 }
 ```
 
-确保 `https://tools.imkai.top/downloads/kaitools/latest.json` 与 [update-policy.json](../packaging/update-policy.json) 一致。Nginx 配置完成后只需校验并 reload 一次；以后每次发版上传静态文件，无需重启 Nginx、Java、Redis 或数据库。
+确保 `https://tools.imkai.top/downloads/kaitools/latest.json` 与 [update-policy.json](../packaging/update-policy.json) 一致。Nginx 配置完成后只需校验并 reload 一次；以后每次发版上传静态文件并切换 `current` 软链接，无需重启 Nginx、Java、Redis 或数据库。
 
 ## 每次发版
 
@@ -108,14 +110,14 @@ release/updates/
 
 ### 3. 上传与生效顺序
 
-发布账号只上传静态文件，严格按以下顺序操作：
+GitHub Actions 会在每次推送 `master` 时自动完成构建和发布，发布账号只上传静态文件，严格按以下顺序操作：
 
 1. 上传 `objects/` 中的新摘要对象；已有同名摘要对象无需覆盖。
 2. 校验已上传对象的大小和 SHA-256。
 3. 上传 `manifests/KAITools-vX.Y.Z.json` 与对应 `.sig`。
 4. 从公网 HTTPS 读取版本清单及签名，确认均可访问。
 5. 上传 `latest.json` 和 `latest.json.sig` 到临时远程文件名。
-6. 在服务器同一文件系统内原子替换正式 `latest.json` 和 `latest.json.sig`。
+6. 将完整发布目录移动到 `releases/`，再在服务器同一文件系统内原子替换 `current` 软链接。
 7. 从公网再次读取 `latest.json`，确认版本号、摘要和签名为本次发布内容。
 
 若使用 CDN，只刷新 `latest.json` 与 `latest.json.sig`。版本化清单和哈希对象应长期缓存，不需要刷新。

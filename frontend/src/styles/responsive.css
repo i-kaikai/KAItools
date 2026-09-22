@@ -111,8 +111,11 @@
   .cron-runs li > small { grid-column: 2; }
   .stats-grid { grid-template-columns: repeat(7, 100px); }
   .timestamp-input-band { align-items: stretch; flex-direction: column; }
+  .timestamp-tool .tool-header { align-items: stretch; }
+  .timestamp-now-strip { width: 100%; grid-template-columns: minmax(0, 1fr); }
   .timezone-field { width: 100%; }
-  .result-row { grid-template-columns: 90px minmax(0, 1fr) 32px; }
+  .result-table { display: flex; flex-direction: column; }
+  .result-row { grid-template-columns: 90px minmax(0, 1fr) 32px; border-right: 0 !important; }
   .desktop-only-state { flex: 0 0 300px; min-height: 300px; padding: 18px; }
   .preview-columns { grid-template-columns: minmax(0, 1fr); overflow-y: auto; }
   .preview-columns > div + div { border-top: 1px solid var(--border); border-left: 0; }

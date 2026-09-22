@@ -53,6 +53,7 @@ const languageMenuOpen = ref(false)
 const developerPanelOpen = ref(false)
 const applicationSettingsOpen = ref(false)
 const releaseNotesOpen = ref(false)
+const updateAvailable = ref(false)
 let developerUnlockClicks = 0
 let developerUnlockTimer: number | undefined
 const tabMenu = ref({ visible: false, x: 0, y: 0, tabId: '' })
@@ -84,6 +85,16 @@ function handleVersionClick(event: MouseEvent): void {
     return
   }
   releaseNotesOpen.value = true
+}
+
+async function checkStartupUpdate(): Promise<void> {
+  if (isWebRuntime) return
+  try {
+    const result = await desktopApi.checkForUpdates()
+    if (result.ok) updateAvailable.value = result.data.available
+  } catch {
+    // Update checks are advisory and must never block local desktop startup.
+  }
 }
 
 async function handleDeveloperVersionClick(): Promise<void> {
@@ -283,6 +294,7 @@ function preserveWorkspaceForRefresh(): void {
 
 onMounted(() => {
   void app.bootstrap(homeTool.initialState())
+  void checkStartupUpdate()
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('pointerdown', closeTabMenu)
   window.addEventListener('blur', closeTabMenu)
@@ -322,7 +334,7 @@ onBeforeUnmount(() => {
         </div>
         <div v-if="!app.settings.sidebarCollapsed" class="runtime-copy sidebar-runtime">
           <div class="runtime-actions">
-            <button class="runtime-version" type="button" aria-haspopup="dialog" :aria-expanded="releaseNotesOpen" :aria-label="t('shell.releaseNotes')" @click="handleVersionClick"><span>v{{ app.runtime?.version ?? APP_VERSION }}</span></button>
+            <button class="runtime-version" type="button" aria-haspopup="dialog" :aria-expanded="releaseNotesOpen" :aria-label="t('shell.releaseNotes')" @click="handleVersionClick"><span>v{{ app.runtime?.version ?? APP_VERSION }}</span><span v-if="!isWebRuntime && updateAvailable" class="runtime-update-dot" :aria-label="t('shell.updateAvailable')" :title="t('shell.updateAvailable')" /></button>
             <button v-if="developerModeActive" class="runtime-developer" type="button" aria-haspopup="dialog" :aria-expanded="developerPanelOpen" :aria-label="t('shell.developerPanel')" @click="developerPanelOpen = true">DEV</button>
           </div>
           <small v-if="isWebRuntime">{{ t('shell.browserStorage') }}</small>

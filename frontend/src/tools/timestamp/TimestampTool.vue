@@ -7,7 +7,7 @@ import IconButton from '@/components/IconButton.vue'
 import { useToolState } from '@/composables/useToolState'
 import { useToastStore } from '@/stores/toast'
 import { copyText } from '@/utils/clipboard'
-import { parseFlexibleDateTime, timeZones, type TimeResult } from '@/utils/timestamp'
+import { parseFlexibleDateTime, type TimeResult } from '@/utils/timestamp'
 
 const props = defineProps<{ state: Record<string, unknown> }>()
 const emit = defineEmits<{ 'update:state': [state: Record<string, unknown>] }>()
@@ -27,8 +27,6 @@ const model = useToolState(
 )
 const now = ref(Date.now())
 let timer = 0
-const zones = timeZones()
-
 onMounted(() => {
   if (!model.input) model.input = DateTime.local().toFormat('yyyy-LL-dd HH:mm:ss')
   timer = window.setInterval(() => (now.value = Date.now()), 1000)
@@ -47,15 +45,15 @@ const resultRows = computed(() => {
   const value = conversion.value.value
   if (!value) return []
   return [
-    { label: '识别格式', value: value.detectedFormat },
-    { label: '秒时间戳', value: String(value.seconds) },
-    { label: '毫秒时间戳', value: String(value.milliseconds) },
-    { label: 'yyyy-MM-dd HH:mm:ss', value: value.dateTime },
-    { label: 'ISO 8601', value: value.iso },
-    { label: '本地时间', value: value.local },
-    { label: 'UTC', value: value.utc },
-    { label: value.zone, value: value.zoned },
-    { label: 'UTC 偏移', value: value.offset },
+    { label: '识别格式', value: value.detectedFormat, copyOnClick: true },
+    { label: '秒时间戳', value: String(value.seconds), copyOnClick: true },
+    { label: '毫秒时间戳', value: String(value.milliseconds), copyOnClick: true },
+    { label: 'yyyy-MM-dd HH:mm:ss', value: value.dateTime, copyOnClick: true },
+    { label: 'ISO 8601', value: value.iso, copyOnClick: true },
+    { label: '本地时间', value: value.local, copyOnClick: true },
+    { label: 'UTC', value: value.utc, copyOnClick: true },
+    { label: value.zone, value: value.zoned, copyOnClick: true },
+    { label: 'UTC 偏移', value: value.offset, copyOnClick: true },
   ]
 })
 
@@ -79,14 +77,19 @@ function useNow(): void {
           <template v-else><Check :size="14" />自动识别完成</template>
         </p>
       </div>
+      <div class="timestamp-now-strip">
+        <div class="timestamp-now-item">
+          <Clock3 :size="15" aria-hidden="true" />
+          <span class="timestamp-now-label">当前时间</span>
+          <time>{{ DateTime.fromMillis(now).toFormat('yyyy-LL-dd HH:mm:ss') }}</time>
+        </div>
+        <div class="timestamp-now-item timestamp-now-item-epoch">
+          <span class="timestamp-now-label">Linux 秒时间戳</span>
+          <code>{{ Math.floor(now / 1000) }}</code>
+          <IconButton :icon="Copy" label="复制当前秒时间戳" size="small" @click="copy(String(Math.floor(now / 1000)))" />
+        </div>
+      </div>
     </header>
-
-    <div class="now-strip">
-      <Clock3 :size="17" aria-hidden="true" />
-      <span>{{ DateTime.fromMillis(now).toFormat('yyyy-LL-dd HH:mm:ss') }}</span>
-      <code>{{ Math.floor(now / 1000) }}</code>
-      <IconButton :icon="Copy" label="复制当前秒时间戳" size="small" @click="copy(String(Math.floor(now / 1000)))" />
-    </div>
 
     <div class="timestamp-input-band">
       <div class="field-group grow">
@@ -98,17 +101,15 @@ function useNow(): void {
       </div>
       <div class="field-group timezone-field">
         <label for="timezone-input">目标时区</label>
-        <input id="timezone-input" v-model="model.zone" list="timezone-options" autocomplete="off" />
-        <datalist id="timezone-options">
-          <option v-for="zone in zones" :key="zone" :value="zone" />
-        </datalist>
+        <input id="timezone-input" v-model="model.zone" autocomplete="off" />
       </div>
     </div>
 
     <div class="result-table" :class="{ disabled: !conversion.value }">
       <div v-for="row in resultRows" :key="row.label" class="result-row">
         <span>{{ row.label }}</span>
-        <code>{{ row.value }}</code>
+        <button v-if="row.copyOnClick" class="copyable-result" type="button" @click="copy(row.value)">{{ row.value }}</button>
+        <code v-else>{{ row.value }}</code>
         <IconButton :icon="Copy" :label="`复制${row.label}`" size="small" @click="copy(row.value)" />
       </div>
       <div v-if="!resultRows.length" class="empty-state"><Clock3 :size="22" /><span>暂无转换结果</span></div>

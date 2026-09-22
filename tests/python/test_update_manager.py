@@ -135,6 +135,16 @@ def test_check_rejects_invalid_latest_signature_before_comparing_files(tmp_path:
     assert error.value.code == "UPDATE_METADATA_INVALID"
 
 
+def test_check_explains_when_server_returns_spa_html_for_latest_manifest(tmp_path: Path) -> None:
+    paths = fixture_paths(tmp_path)
+    entries = {"https://updates.example.test/kaitools/latest.json": b"<!doctype html><html><body>KAITools</body></html>"}
+
+    with pytest.raises(UpdateError, match="回退到了 index.html") as error:
+        UpdateManager(paths, urlopen=fake_urlopen(entries)).check()
+
+    assert error.value.code == "UPDATE_METADATA_INVALID"
+
+
 def test_check_rejects_a_signed_manifest_that_targets_user_data(tmp_path: Path) -> None:
     paths = fixture_paths(tmp_path)
     entries = signed_feed(paths, [("data/settings.json", b"malicious")])
