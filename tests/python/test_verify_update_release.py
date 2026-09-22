@@ -159,11 +159,16 @@ class FakeClient:
         return FakeResponse(self.chunks)
 
 
-def test_verify_remote_object_streams_sha256_without_buffering_the_object() -> None:
+def test_verify_remote_object_streams_sha256_without_buffering_the_object(monkeypatch) -> None:
+    class FakeHttpx:
+        HTTPStatusError = RuntimeError
+        TransportError = OSError
+
     chunks = [b"KAIT", b"ools"]
     raw = b"".join(chunks)
     client = FakeClient(chunks)
     item = {"path": "KAITools.exe", "object": "objects/example", "size": len(raw), "sha256": sha256_bytes(raw)}
+    monkeypatch.setattr(verifier, "require_httpx", lambda: FakeHttpx)
 
     verifier.verify_remote_object(client, "https://updates.example/downloads/kaitools/latest.json", item)
 
