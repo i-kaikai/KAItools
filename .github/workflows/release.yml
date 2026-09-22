@@ -265,12 +265,19 @@ jobs:
             throw "SSH preflight failed for $target"
           }
           $probeOutput | ForEach-Object { Write-Host ([string]$_) }
+          $remoteDestination = "${target}:$env:KAITOOLS_UPDATE_ROOT/.incoming/$releaseId/"
           ssh @sshArgs $target "mkdir -p '$env:KAITOOLS_UPDATE_ROOT/.incoming/$releaseId/objects' '$env:KAITOOLS_UPDATE_ROOT/.incoming/$releaseId/manifests'"
-          scp @scpArgs -r '.\release\updates\objects', '.\release\updates\manifests', "${target}:$env:KAITOOLS_UPDATE_ROOT/.incoming/$releaseId/"
-          scp @scpArgs '.\release\updates\latest.json', '.\release\updates\latest.json.sig', "${target}:$env:KAITOOLS_UPDATE_ROOT/.incoming/$releaseId/"
+          if ($LASTEXITCODE -ne 0) { throw 'Remote update staging directory creation failed' }
+          $directorySources = @('.\release\updates\objects', '.\release\updates\manifests')
+          scp @scpArgs -r @directorySources $remoteDestination
+          if ($LASTEXITCODE -ne 0) { throw 'Desktop update directory upload failed' }
+          $metadataSources = @('.\release\updates\latest.json', '.\release\updates\latest.json.sig')
+          scp @scpArgs @metadataSources $remoteDestination
+          if ($LASTEXITCODE -ne 0) { throw 'Desktop update metadata upload failed' }
           $remoteScript = (Get-Content .\scripts\deploy-updates.sh -Raw) -replace "`r`n", "`n"
           $remoteEnv = "export KAITOOLS_UPDATE_ROOT='$env:KAITOOLS_UPDATE_ROOT'; export KAITOOLS_UPDATE_RELEASE_ID='$releaseId';"
           $remoteScript | ssh @sshArgs $target "$remoteEnv bash -s"
+          if ($LASTEXITCODE -ne 0) { throw 'Remote desktop update activation failed' }
 
       - name: Verify published desktop update from the public URL
         run: |
