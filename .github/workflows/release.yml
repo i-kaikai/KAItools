@@ -277,4 +277,4 @@ jobs:
       - name: Verify published desktop update from the public URL
         run: |
           python -m pip install cryptography
-          python .\scripts\verify_update_release.py --remote-latest-url https://tools.imkai.top/downloads/kaitools/latest.json --public-key .\packaging\update-public-key.pem
+          python scripts/verify_update_release.py --remote-latest-url https://tools.imkai.top/downloads/kaitools/latest.json --public-key packaging/update-public-key.pem
