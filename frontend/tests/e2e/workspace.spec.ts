@@ -1738,6 +1738,7 @@ test('flowchart bottom ports leave and enter vertically outside their nodes', as
       edges: [{ id: 'bottom-route', source: 'bottom-source', sourcePort: 'bottom', target: 'bottom-target', targetPort: 'bottom', vertices: [{ x: 650, y: 188 }], route: 'orthogonal', stroke: '#334155', strokeWidth: 1.5, dash: 'solid', sourceMarker: 'none', targetMarker: 'arrow' }],
     })),
   })
+  await waitForFlowchartSvgPaths(page)
   const direction = await page.evaluate(() => {
     const path = document.querySelector<SVGPathElement>('.flowchart-canvas .x6-edge path')
     if (!path) return null
