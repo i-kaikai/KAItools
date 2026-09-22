@@ -198,9 +198,19 @@ jobs:
           New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
           $keyPath = Join-Path $sshDir 'id_ed25519'
           $knownHostsPath = Join-Path $sshDir 'known_hosts'
-          [System.IO.File]::WriteAllText($keyPath, $env:DEPLOY_SSH_PRIVATE_KEY, [System.Text.UTF8Encoding]::new($false))
-          [System.IO.File]::WriteAllText($knownHostsPath, $env:DEPLOY_SSH_KNOWN_HOSTS, [System.Text.UTF8Encoding]::new($false))
+          # GitHub Secrets may contain CRLF or omit the final newline. Normalize both files
+          # to UTF-8 without BOM and LF termination so Windows OpenSSH parses them reliably.
+          $privateKey = ($env:DEPLOY_SSH_PRIVATE_KEY -replace "`r`n|`r|`n", "`n").TrimEnd("`n") + "`n"
+          $knownHosts = ($env:DEPLOY_SSH_KNOWN_HOSTS -replace "`r`n|`r|`n", "`n").TrimEnd("`n") + "`n"
+          $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+          [System.IO.File]::WriteAllText($keyPath, $privateKey, $utf8NoBom)
+          [System.IO.File]::WriteAllText($knownHostsPath, $knownHosts, $utf8NoBom)
           icacls $keyPath /inheritance:r /grant:r "$($env:USERNAME):(R)" | Out-Null
+          $keyCheck = @(& ssh-keygen -y -f $keyPath 2>&1)
+          if ($LASTEXITCODE -ne 0) {
+            $keyCheck | ForEach-Object { Write-Error ([string]$_) }
+            throw 'DEPLOY_SSH_PRIVATE_KEY is not a valid OpenSSH private key on the Windows runner'
+          }
           "DEPLOY_SSH_KEY_PATH=$keyPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "DEPLOY_SSH_KNOWN_HOSTS_PATH=$knownHostsPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
