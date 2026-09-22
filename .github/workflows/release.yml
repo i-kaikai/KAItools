@@ -220,10 +220,44 @@ jobs:
           $version = (Get-Content VERSION -Raw -Encoding UTF8).Trim()
           $releaseId = "desktop-v$version-$($env:RELEASE_SHA.Substring(0, 12))"
           $target = "$($env:DEPLOY_USER)@$($env:DEPLOY_HOST)"
-          $sshArgs = @('-p', $env:DEPLOY_PORT, '-i', $env:DEPLOY_SSH_KEY_PATH, '-o', "UserKnownHostsFile=$env:DEPLOY_SSH_KNOWN_HOSTS_PATH", '-o', 'StrictHostKeyChecking=yes')
+          # GitHub-hosted Windows runners use changing source IPs. Keep SSH fully non-interactive
+          # and fail fast so a rejected handshake cannot consume the whole job timeout.
+          $sshArgs = @(
+            '-p', $env:DEPLOY_PORT,
+            '-i', $env:DEPLOY_SSH_KEY_PATH,
+            '-o', "UserKnownHostsFile=$env:DEPLOY_SSH_KNOWN_HOSTS_PATH",
+            '-o', 'StrictHostKeyChecking=yes',
+            '-o', 'IdentitiesOnly=yes',
+            '-o', 'BatchMode=yes',
+            '-o', 'PasswordAuthentication=no',
+            '-o', 'ConnectTimeout=20',
+            '-o', 'ConnectionAttempts=1',
+            '-o', 'ServerAliveInterval=15',
+            '-o', 'ServerAliveCountMax=2'
+          )
+          $scpArgs = @(
+            '-P', $env:DEPLOY_PORT,
+            '-i', $env:DEPLOY_SSH_KEY_PATH,
+            '-o', "UserKnownHostsFile=$env:DEPLOY_SSH_KNOWN_HOSTS_PATH",
+            '-o', 'StrictHostKeyChecking=yes',
+            '-o', 'IdentitiesOnly=yes',
+            '-o', 'BatchMode=yes',
+            '-o', 'PasswordAuthentication=no',
+            '-o', 'ConnectTimeout=20',
+            '-o', 'ConnectionAttempts=1',
+            '-o', 'ServerAliveInterval=15',
+            '-o', 'ServerAliveCountMax=2'
+          )
+          Write-Host "Probing SSH connection to $target on port $($env:DEPLOY_PORT)..."
+          $probeOutput = @(& ssh @sshArgs $target 'printf KAITOOLS_SSH_OK' 2>&1)
+          if ($LASTEXITCODE -ne 0) {
+            $probeOutput | ForEach-Object { Write-Error ([string]$_) }
+            throw "SSH preflight failed for $target"
+          }
+          $probeOutput | ForEach-Object { Write-Host ([string]$_) }
           ssh @sshArgs $target "mkdir -p '$env:KAITOOLS_UPDATE_ROOT/.incoming/$releaseId/objects' '$env:KAITOOLS_UPDATE_ROOT/.incoming/$releaseId/manifests'"
-          scp @('-P', $env:DEPLOY_PORT, '-i', $env:DEPLOY_SSH_KEY_PATH, '-o', "UserKnownHostsFile=$env:DEPLOY_SSH_KNOWN_HOSTS_PATH", '-o', 'StrictHostKeyChecking=yes', '-r', '.\release\updates\objects', '.\release\updates\manifests', "${target}:$env:KAITOOLS_UPDATE_ROOT/.incoming/$releaseId/")
-          scp @('-P', $env:DEPLOY_PORT, '-i', $env:DEPLOY_SSH_KEY_PATH, '-o', "UserKnownHostsFile=$env:DEPLOY_SSH_KNOWN_HOSTS_PATH", '-o', 'StrictHostKeyChecking=yes', '.\release\updates\latest.json', '.\release\updates\latest.json.sig', "${target}:$env:KAITOOLS_UPDATE_ROOT/.incoming/$releaseId/")
+          scp @scpArgs -r '.\release\updates\objects', '.\release\updates\manifests', "${target}:$env:KAITOOLS_UPDATE_ROOT/.incoming/$releaseId/"
+          scp @scpArgs '.\release\updates\latest.json', '.\release\updates\latest.json.sig', "${target}:$env:KAITOOLS_UPDATE_ROOT/.incoming/$releaseId/"
           $remoteScript = (Get-Content .\scripts\deploy-updates.sh -Raw) -replace "`r`n", "`n"
           $remoteEnv = "export KAITOOLS_UPDATE_ROOT='$env:KAITOOLS_UPDATE_ROOT'; export KAITOOLS_UPDATE_RELEASE_ID='$releaseId';"
           $remoteScript | ssh @sshArgs $target "$remoteEnv bash -s"
