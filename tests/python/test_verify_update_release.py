@@ -53,6 +53,34 @@ def test_changed_files_only_returns_manifest_entries_that_differ() -> None:
     assert verifier.changed_files([unchanged, changed], None) == [unchanged, changed]
 
 
+def test_retry_remote_request_retries_transient_transport_failures(monkeypatch) -> None:
+    class FakeTransportError(Exception):
+        pass
+
+    class FakeHttpx:
+        HTTPStatusError = RuntimeError
+        TransportError = FakeTransportError
+
+    attempts = 0
+    delays: list[float] = []
+
+    def operation() -> str:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise OSError(11, "Resource temporarily unavailable")
+        if attempts == 2:
+            raise FakeTransportError("temporary failure")
+        return "ok"
+
+    monkeypatch.setattr(verifier, "require_httpx", lambda: FakeHttpx)
+    monkeypatch.setattr(verifier.time, "sleep", delays.append)
+
+    assert verifier.retry_remote_request(operation, "https://updates.example/object") == "ok"
+    assert attempts == 3
+    assert delays == [0.5, 1.0]
+
+
 def test_verify_remote_rejects_only_one_previous_metadata_path(tmp_path: Path) -> None:
     with pytest.raises(verifier.UpdateSecurityError, match="必须同时提供"):
         verifier.verify_remote("https://updates.example/latest.json", tmp_path / "public.pem", tmp_path / "latest.json")

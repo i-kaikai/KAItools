@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
 import json
 import sys
+import time
 import urllib.parse
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "desktop"))
@@ -29,6 +31,11 @@ REMOTE_VERIFY_WORKERS = 16
 REMOTE_VERIFY_TIMEOUT_SECONDS = 30.0
 REMOTE_VERIFY_CHUNK_BYTES = 1024 * 1024
 REMOTE_METADATA_MAX_BYTES = 4 * 1024 * 1024
+REMOTE_VERIFY_RETRY_ATTEMPTS = 4
+REMOTE_VERIFY_RETRY_DELAY_SECONDS = 0.5
+RETRYABLE_HTTP_STATUS_CODES = {408, 429, 500, 502, 503, 504}
+
+T = TypeVar("T")
 
 
 def read_json(raw: bytes, label: str) -> dict[str, Any]:
@@ -116,15 +123,38 @@ def create_remote_client(httpx: Any) -> Any:
     )
 
 
+def retry_remote_request(operation: Callable[[], T], resource: str) -> T:
+    httpx = require_httpx()
+    for attempt in range(1, REMOTE_VERIFY_RETRY_ATTEMPTS + 1):
+        try:
+            return operation()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code not in RETRYABLE_HTTP_STATUS_CODES or attempt == REMOTE_VERIFY_RETRY_ATTEMPTS:
+                raise
+        except (OSError, httpx.TransportError):
+            if attempt == REMOTE_VERIFY_RETRY_ATTEMPTS:
+                raise
+        delay = REMOTE_VERIFY_RETRY_DELAY_SECONDS * (2 ** (attempt - 1))
+        print(
+            f"UPDATE_VERIFY_RETRY attempt={attempt}/{REMOTE_VERIFY_RETRY_ATTEMPTS} resource={resource} delay={delay:.1f}s",
+            file=sys.stderr,
+        )
+        time.sleep(delay)
+    raise RuntimeError("unreachable")
+
+
 def fetch(client: Any, url: str) -> bytes:
-    raw = bytearray()
-    with client.stream("GET", url) as response:
-        response.raise_for_status()
-        for chunk in response.iter_bytes(REMOTE_VERIFY_CHUNK_BYTES):
-            raw.extend(chunk)
-            if len(raw) > REMOTE_METADATA_MAX_BYTES:
-                raise UpdateSecurityError("公网更新元数据超过大小限制")
-    return bytes(raw)
+    def read() -> bytes:
+        raw = bytearray()
+        with client.stream("GET", url) as response:
+            response.raise_for_status()
+            for chunk in response.iter_bytes(REMOTE_VERIFY_CHUNK_BYTES):
+                raw.extend(chunk)
+                if len(raw) > REMOTE_METADATA_MAX_BYTES:
+                    raise UpdateSecurityError("公网更新元数据超过大小限制")
+        return bytes(raw)
+
+    return retry_remote_request(read, url)
 
 
 def manifest_url(latest_url: str, path: str) -> str:
@@ -135,16 +165,20 @@ def manifest_url(latest_url: str, path: str) -> str:
 
 
 def verify_remote_object(client: Any, latest_url: str, item: dict[str, Any]) -> None:
-    size = 0
-    digest = hashlib.sha256()
     object_url = urllib.parse.urljoin(latest_url, item["object"])
-    with client.stream("GET", object_url) as response:
-        response.raise_for_status()
-        for chunk in response.iter_bytes(REMOTE_VERIFY_CHUNK_BYTES):
-            size += len(chunk)
-            digest.update(chunk)
-    if size != item["size"] or digest.hexdigest() != item["sha256"]:
-        raise UpdateSecurityError(f"公网更新对象校验失败: {item['path']}")
+
+    def verify() -> None:
+        size = 0
+        digest = hashlib.sha256()
+        with client.stream("GET", object_url) as response:
+            response.raise_for_status()
+            for chunk in response.iter_bytes(REMOTE_VERIFY_CHUNK_BYTES):
+                size += len(chunk)
+                digest.update(chunk)
+        if size != item["size"] or digest.hexdigest() != item["sha256"]:
+            raise UpdateSecurityError(f"公网更新对象校验失败: {item['path']}")
+
+    retry_remote_request(verify, object_url)
 
 
 def changed_files(files: list[dict[str, Any]], previous: dict[str, Any] | None) -> list[dict[str, Any]]:
