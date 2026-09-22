@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import sys
 import urllib.error
@@ -23,6 +24,9 @@ from devtoolkit.update_security import (  # noqa: E402
     sha256_file,
     verify_json,
 )
+
+
+REMOTE_VERIFY_WORKERS = 16
 
 
 def read_json(raw: bytes, label: str) -> dict[str, Any]:
@@ -94,6 +98,19 @@ def fetch(url: str) -> bytes:
         return response.read(2 * 1024 * 1024 * 1024)
 
 
+def verify_remote_object(latest_url: str, item: dict[str, Any]) -> None:
+    object_raw = fetch(urllib.parse.urljoin(latest_url, item["object"]))
+    if len(object_raw) != item["size"] or sha256_bytes(object_raw) != item["sha256"]:
+        raise UpdateSecurityError(f"公网更新对象校验失败: {item['path']}")
+
+
+def verify_remote_objects(latest_url: str, files: list[dict[str, Any]]) -> None:
+    with ThreadPoolExecutor(max_workers=REMOTE_VERIFY_WORKERS) as executor:
+        futures = [executor.submit(verify_remote_object, latest_url, item) for item in files]
+        for future in as_completed(futures):
+            future.result()
+
+
 def verify_remote(latest_url: str, public_key_path: Path) -> None:
     public_key = load_public_key(public_key_path)
     latest_raw = fetch(latest_url)
@@ -107,10 +124,7 @@ def verify_remote(latest_url: str, public_key_path: Path) -> None:
     manifest = read_json(manifest_raw, "公网版本文件清单")
     verify_document(manifest, fetch(manifest_url + ".sig"), public_key)
     validate_manifest(manifest, latest["version"])
-    for item in manifest["files"]:
-        object_raw = fetch(urllib.parse.urljoin(latest_url, item["object"]))
-        if len(object_raw) != item["size"] or sha256_bytes(object_raw) != item["sha256"]:
-            raise UpdateSecurityError(f"公网更新对象校验失败: {item['path']}")
+    verify_remote_objects(latest_url, manifest["files"])
 
 
 def main() -> int:
