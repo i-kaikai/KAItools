@@ -144,6 +144,9 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 45
     environment: production
+    outputs:
+      artifact_name: ${{ steps.package.outputs.artifact_name }}
+      release_id: ${{ steps.package.outputs.release_id }}
     defaults:
       run:
         shell: pwsh
@@ -188,31 +191,60 @@ jobs:
           .\scripts\build_portable.ps1 -SkipE2E -SigningKeyPath $env:KAITOOLS_UPDATE_KEY_PATH
           .\.venv\Scripts\python.exe .\scripts\verify_update_release.py --updates-root .\release\updates --public-key .\packaging\update-public-key.pem
 
-      - name: Configure SSH client
+      - name: Package desktop update artifact
+        id: package
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          $version = (Get-Content VERSION -Raw -Encoding UTF8).Trim()
+          $releaseId = "desktop-v$version-$($env:RELEASE_SHA.Substring(0, 12))"
+          $archive = Join-Path $env:RUNNER_TEMP "kaitools-desktop-updates-$releaseId.tar.gz"
+          tar -C .\release\updates -czf $archive .
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $archive)) { throw 'Desktop update artifact packaging failed' }
+          "release_id=$releaseId" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "artifact_name=kaitools-desktop-release-$releaseId" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "archive=$archive" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Upload desktop update artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.artifact_name }}
+          path: ${{ steps.package.outputs.archive }}
+          if-no-files-found: error
+          retention-days: 30
+
+  desktop-deploy:
+    name: Publish desktop update from Linux
+    needs: desktop
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: production
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out deployment script
+        uses: actions/checkout@v4
+
+      - name: Download desktop update artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.desktop.outputs.artifact_name }}
+          path: release-artifact
+
+      - name: Configure deployment SSH client
         env:
           DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
           DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:DEPLOY_SSH_PRIVATE_KEY) -or [string]::IsNullOrWhiteSpace($env:DEPLOY_SSH_KNOWN_HOSTS)) { throw 'Missing SSH deployment secrets' }
-          $sshDir = Join-Path $env:RUNNER_TEMP 'ssh'
-          New-Item -ItemType Directory -Path $sshDir -Force | Out-Null
-          $keyPath = Join-Path $sshDir 'id_ed25519'
-          $knownHostsPath = Join-Path $sshDir 'known_hosts'
-          # GitHub Secrets may contain CRLF or omit the final newline. Normalize both files
-          # to UTF-8 without BOM and LF termination so Windows OpenSSH parses them reliably.
-          $privateKey = ($env:DEPLOY_SSH_PRIVATE_KEY -replace "`r`n|`r|`n", "`n").TrimEnd("`n") + "`n"
-          $knownHosts = ($env:DEPLOY_SSH_KNOWN_HOSTS -replace "`r`n|`r|`n", "`n").TrimEnd("`n") + "`n"
-          $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
-          [System.IO.File]::WriteAllText($keyPath, $privateKey, $utf8NoBom)
-          [System.IO.File]::WriteAllText($knownHostsPath, $knownHosts, $utf8NoBom)
-          icacls $keyPath /inheritance:r /grant:r "$($env:USERNAME):(R)" | Out-Null
-          $keyCheck = @(& ssh-keygen -y -f $keyPath 2>&1)
-          if ($LASTEXITCODE -ne 0) {
-            $keyCheck | ForEach-Object { Write-Error ([string]$_) }
-            throw 'DEPLOY_SSH_PRIVATE_KEY is not a valid OpenSSH private key on the Windows runner'
-          }
-          "DEPLOY_SSH_KEY_PATH=$keyPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "DEPLOY_SSH_KNOWN_HOSTS_PATH=$knownHostsPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          set -euo pipefail
+          for required in DEPLOY_SSH_PRIVATE_KEY DEPLOY_SSH_KNOWN_HOSTS; do
+            [[ -n "${!required:-}" ]] || { echo "Missing required production secret: $required" >&2; exit 1; }
+          done
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$DEPLOY_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/id_ed25519" "$HOME/.ssh/known_hosts"
 
       - name: Upload and activate desktop update
         env:
@@ -220,65 +252,29 @@ jobs:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
           KAITOOLS_UPDATE_ROOT: ${{ secrets.KAITOOLS_UPDATE_ROOT }}
-          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_ID: ${{ needs.desktop.outputs.release_id }}
         run: |
-          foreach ($name in @('DEPLOY_HOST', 'DEPLOY_USER', 'DEPLOY_PORT', 'KAITOOLS_UPDATE_ROOT')) {
-            if ([string]::IsNullOrWhiteSpace((Get-Item "env:$name").Value)) { throw "Missing $name" }
-          }
-          if ($env:DEPLOY_PORT -notmatch '^[0-9]{1,5}$') { throw 'DEPLOY_PORT must be numeric' }
-          if ($env:KAITOOLS_UPDATE_ROOT -notmatch '^/[^ ]+$') { throw 'KAITOOLS_UPDATE_ROOT must be an absolute path without spaces' }
-          $version = (Get-Content VERSION -Raw -Encoding UTF8).Trim()
-          $releaseId = "desktop-v$version-$($env:RELEASE_SHA.Substring(0, 12))"
-          $target = "$($env:DEPLOY_USER)@$($env:DEPLOY_HOST)"
-          # GitHub-hosted Windows runners use changing source IPs. Keep SSH fully non-interactive
-          # and fail fast so a rejected handshake cannot consume the whole job timeout.
-          $sshArgs = @(
-            '-p', $env:DEPLOY_PORT,
-            '-i', $env:DEPLOY_SSH_KEY_PATH,
-            '-o', "UserKnownHostsFile=$env:DEPLOY_SSH_KNOWN_HOSTS_PATH",
-            '-o', 'StrictHostKeyChecking=yes',
-            '-o', 'IdentitiesOnly=yes',
-            '-o', 'BatchMode=yes',
-            '-o', 'PasswordAuthentication=no',
-            '-o', 'ConnectTimeout=20',
-            '-o', 'ConnectionAttempts=1',
-            '-o', 'ServerAliveInterval=15',
-            '-o', 'ServerAliveCountMax=2'
-          )
-          $scpArgs = @(
-            '-P', $env:DEPLOY_PORT,
-            '-i', $env:DEPLOY_SSH_KEY_PATH,
-            '-o', "UserKnownHostsFile=$env:DEPLOY_SSH_KNOWN_HOSTS_PATH",
-            '-o', 'StrictHostKeyChecking=yes',
-            '-o', 'IdentitiesOnly=yes',
-            '-o', 'BatchMode=yes',
-            '-o', 'PasswordAuthentication=no',
-            '-o', 'ConnectTimeout=20',
-            '-o', 'ConnectionAttempts=1',
-            '-o', 'ServerAliveInterval=15',
-            '-o', 'ServerAliveCountMax=2'
-          )
-          Write-Host "Probing SSH connection to $target on port $($env:DEPLOY_PORT)..."
-          $probeOutput = @(& ssh @sshArgs $target 'printf KAITOOLS_SSH_OK' 2>&1)
-          if ($LASTEXITCODE -ne 0) {
-            $probeOutput | ForEach-Object { Write-Error ([string]$_) }
-            throw "SSH preflight failed for $target"
-          }
-          $probeOutput | ForEach-Object { Write-Host ([string]$_) }
-          $remoteDestination = "${target}:$env:KAITOOLS_UPDATE_ROOT/.incoming/$releaseId/"
-          ssh @sshArgs $target "mkdir -p '$env:KAITOOLS_UPDATE_ROOT/.incoming/$releaseId/objects' '$env:KAITOOLS_UPDATE_ROOT/.incoming/$releaseId/manifests'"
-          if ($LASTEXITCODE -ne 0) { throw 'Remote update staging directory creation failed' }
-          $directorySources = @('.\release\updates\objects', '.\release\updates\manifests')
-          scp @scpArgs -r @directorySources $remoteDestination
-          if ($LASTEXITCODE -ne 0) { throw 'Desktop update directory upload failed' }
-          $metadataSources = @('.\release\updates\latest.json', '.\release\updates\latest.json.sig')
-          scp @scpArgs @metadataSources $remoteDestination
-          if ($LASTEXITCODE -ne 0) { throw 'Desktop update metadata upload failed' }
-          $remoteScript = (Get-Content .\scripts\deploy-updates.sh -Raw) -replace "`r`n", "`n"
-          $remoteEnv = "export KAITOOLS_UPDATE_ROOT='$env:KAITOOLS_UPDATE_ROOT'; export KAITOOLS_UPDATE_RELEASE_ID='$releaseId';"
-          $remoteScript | ssh @sshArgs $target "$remoteEnv bash -s"
-          if ($LASTEXITCODE -ne 0) { throw 'Remote desktop update activation failed' }
+          set -euo pipefail
+          for required in DEPLOY_HOST DEPLOY_USER DEPLOY_PORT KAITOOLS_UPDATE_ROOT RELEASE_ID; do
+            [[ -n "${!required:-}" ]] || { echo "Missing required production secret: $required" >&2; exit 1; }
+          done
+          [[ "$DEPLOY_PORT" =~ ^[0-9]{1,5}$ ]] || { echo "DEPLOY_PORT must be numeric" >&2; exit 1; }
+          [[ "$KAITOOLS_UPDATE_ROOT" =~ ^/[^[:space:]]+$ ]] || { echo "KAITOOLS_UPDATE_ROOT must be an absolute path without spaces" >&2; exit 1; }
+          target="$DEPLOY_USER@$DEPLOY_HOST"
+          releases_b64="$(printf '%s' "$KAITOOLS_UPDATE_ROOT" | base64 -w 0)"
+          remote_archive="$(ssh -p "$DEPLOY_PORT" -i "$HOME/.ssh/id_ed25519" "$target" "root=\$(printf '%s' '$releases_b64' | base64 --decode); mkdir -p -- \"\$root/.incoming\"; printf '%s/.incoming/%s.tar.gz' \"\$root\" '$RELEASE_ID'")"
+          archive="$(find release-artifact -maxdepth 1 -type f -name '*.tar.gz' -print -quit)"
+          test -n "$archive"
+          scp -P "$DEPLOY_PORT" -i "$HOME/.ssh/id_ed25519" "$archive" "$target:$remote_archive"
+          archive_b64="$(printf '%s' "$remote_archive" | base64 -w 0)"
+          ssh -p "$DEPLOY_PORT" -i "$HOME/.ssh/id_ed25519" "$target" "export KAITOOLS_UPDATE_ROOT=\$(printf '%s' '$releases_b64' | base64 --decode); export KAITOOLS_UPDATE_RELEASE_ID='$RELEASE_ID'; export KAITOOLS_UPDATE_ARCHIVE=\$(printf '%s' '$archive_b64' | base64 --decode); bash -s deploy" < scripts/deploy-updates.sh
+
+      - name: Set up Python for public update verification
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
 
       - name: Verify published desktop update from the public URL
         run: |
-          .\.venv\Scripts\python.exe .\scripts\verify_update_release.py --remote-latest-url https://tools.imkai.top/downloads/kaitools/latest.json --public-key .\packaging\update-public-key.pem
+          python -m pip install cryptography
+          python .\scripts\verify_update_release.py --remote-latest-url https://tools.imkai.top/downloads/kaitools/latest.json --public-key .\packaging\update-public-key.pem

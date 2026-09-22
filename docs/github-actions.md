@@ -10,9 +10,10 @@ Windows Runner，不在 Linux Web 发布任务中生成或覆盖用户数据。
 - `Release Web` 在 `master` 分支收到推送后自动执行。流水线重新验证并构建当前提交，再将
   同一制品交给部署任务。每个发布目录使用 `web-v版本号-提交SHA` 命名，避免同一版本重复
   推送互相覆盖。
-- `Release Web / desktop` 与 Web 发布并行运行，同样由每次 `master` 推送触发。它构建
-  `KAITools.exe` 和 `KAIToolsUpdater.exe`，生成签名更新对象并切换桌面更新目录的 `current`
-  软链接；发布失败不会影响 Web Job 的独立回滚。
+- `Release Web / desktop` 与 Web 发布并行运行，同样由每次 `master` 推送触发。Windows `desktop`
+  Job 只构建、签名、校验并上传更新压缩包；Ubuntu `desktop-deploy` Job 下载该 artifact，
+  再使用 Linux SSH/SCP 环境发布并切换桌面更新目录的 `current` 软链接。发布失败不会影响
+  Web Job 的独立回滚。
 
 生产发布任务使用 GitHub `production` Environment 读取 Secrets。若要求推送 `master` 后
 立即部署，不要在该 Environment 配置 required reviewers；可以将允许部署的分支限制为
@@ -32,6 +33,18 @@ Gitee master
   -> SSH 上传到 Linux
   -> current 软链接切换
   -> WEB_HEALTH_URL 检查
+
+桌面更新使用独立链路：
+
+```text
+Gitee master
+  -> GitHub Release Web / desktop (Windows)
+  -> desktop update artifact
+  -> Release Web / desktop-deploy (Ubuntu)
+  -> SSH/SCP 上传到 Linux
+  -> deploy-updates.sh 解压并切换 current
+  -> 公网 latest.json 签名/摘要校验
+```
 ```
 
 - 非 `master` 分支和 Pull Request 只触发 `Web CI`，不会部署生产。
@@ -50,8 +63,14 @@ Gitee master
 - `Web CI` 失败：代码、依赖、类型检查或 E2E 有问题，尚未进入生产部署。
 - `Release Web / build` 失败：构建或制品打包失败，服务器不会被访问。
 - `Release Web / deploy` 在读取 Secrets 前等待：检查 `production` Environment 的审批规则。
+- `Release Web / desktop-deploy` 在读取 Secrets 前等待：检查桌面发布 Job 的 `production`
+  Environment 审批状态。
 - SSH 配置步骤失败：检查五个 SSH/主机相关 Secrets，以及发布用户的公钥和权限。
 - 上传步骤失败：检查 `WEB_RELEASES_DIR`、远程目录权限和服务器 SSH 端口。
+- 桌面 Windows 构建失败：检查签名私钥、PyInstaller、更新清单和 Windows Runner 日志；
+  Windows Job 不再连接 Linux，也不会产生服务器 SSH 登录。
+- 桌面 Linux 发布失败：检查 `KAITOOLS_UPDATE_ROOT`、artifact 下载结果和 `deploy-updates.sh`；
+  该阶段使用与 Web 发布相同的 Linux SSH 参数和 `known_hosts`。
 - 健康检查失败：检查 Nginx、静态目录 `current` 和 `WEB_HEALTH_URL`；失败后应自动恢复
   `previous`，不要直接删除旧版本。
 
