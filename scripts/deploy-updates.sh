@@ -15,6 +15,7 @@ incoming_root="${updates_root}/.incoming"
 incoming="${incoming_root}/${release_id}"
 release_dir="${updates_root}/releases/${release_id}"
 artifact_work_dir=""
+artifact_heartbeat_pid=""
 
 fail() {
   echo "$*" >&2
@@ -27,7 +28,98 @@ cleanup_artifact_download() {
   fi
 }
 
-trap cleanup_artifact_download EXIT
+stop_artifact_download_heartbeat() {
+  if [[ -n "$artifact_heartbeat_pid" ]]; then
+    kill "$artifact_heartbeat_pid" 2>/dev/null || true
+    wait "$artifact_heartbeat_pid" 2>/dev/null || true
+    artifact_heartbeat_pid=""
+  fi
+}
+
+cleanup() {
+  stop_artifact_download_heartbeat
+  cleanup_artifact_download
+}
+
+trap cleanup EXIT
+
+start_artifact_download_heartbeat() {
+  (
+    while :; do
+      sleep 30
+      printf '%s\n' 'GitHub artifact download still in progress'
+    done
+  ) &
+  artifact_heartbeat_pid=$!
+}
+
+probe_artifact_size() {
+  local curl_config="$1"
+  local github_proxy="$2"
+  local download_url="$3"
+  local probe_headers probe_file response artifact_size
+
+  probe_headers="${artifact_work_dir}/artifact.range.headers"
+  probe_file="${artifact_work_dir}/artifact.range.probe"
+  response="$(curl --silent --show-error --fail --location --config "$curl_config" --proxy "$github_proxy" --connect-timeout 10 --max-time 60 --retry 4 --retry-delay 2 --retry-all-errors --range 0-0 --dump-header "$probe_headers" --output "$probe_file" --write-out '%{http_code} %{size_download}' "$download_url")" || return 1
+  [[ "$response" = "206 1" ]] || return 1
+  artifact_size="$(awk 'BEGIN { IGNORECASE = 1 } /^content-range:/ { sub(/^[^:]*:[[:space:]]*/, ""); sub(/\r$/, ""); split($0, range, "/"); print range[2]; exit }' "$probe_headers")"
+  [[ "$artifact_size" =~ ^[1-9][0-9]*$ ]] || return 1
+  printf '%s\n' "$artifact_size"
+}
+
+download_artifact_part() {
+  local curl_config="$1"
+  local github_proxy="$2"
+  local download_url="$3"
+  local start="$4"
+  local end="$5"
+  local part_file="$6"
+  local expected_size=$((end - start + 1))
+  local response
+
+  response="$(curl --silent --show-error --fail --location --config "$curl_config" --proxy "$github_proxy" --connect-timeout 10 --max-time 900 --retry 4 --retry-delay 2 --retry-all-errors --range "${start}-${end}" --output "$part_file" --write-out '%{http_code} %{size_download}' "$download_url")" || return 1
+  [[ "$response" = "206 ${expected_size}" ]]
+}
+
+download_artifact_in_parts() {
+  local curl_config="$1"
+  local github_proxy="$2"
+  local download_url="$3"
+  local zip_file="$4"
+  local parallelism="$5"
+  local artifact_size chunk_size index start end part_file failed=0
+  local -a part_files=()
+  local -a part_pids=()
+
+  artifact_size="$(probe_artifact_size "$curl_config" "$github_proxy" "$download_url")" || return 1
+  if (( artifact_size < parallelism * 1048576 )); then
+    parallelism=$(( (artifact_size + 1048575) / 1048576 ))
+  fi
+  (( parallelism >= 1 )) || parallelism=1
+  chunk_size=$(( (artifact_size + parallelism - 1) / parallelism ))
+
+  for ((index = 0; index < parallelism; index++)); do
+    start=$((index * chunk_size))
+    end=$((start + chunk_size - 1))
+    (( end < artifact_size )) || end=$((artifact_size - 1))
+    part_file="${artifact_work_dir}/artifact.part.${index}"
+    part_files+=("$part_file")
+    download_artifact_part "$curl_config" "$github_proxy" "$download_url" "$start" "$end" "$part_file" &
+    part_pids+=("$!")
+  done
+
+  for pid in "${part_pids[@]}"; do
+    wait "$pid" || failed=1
+  done
+  (( failed == 0 )) || return 1
+
+  : > "$zip_file"
+  for part_file in "${part_files[@]}"; do
+    cat "$part_file" >> "$zip_file"
+  done
+  [[ "$(stat -c %s "$zip_file")" = "$artifact_size" ]]
+}
 
 download_artifact_archive() {
   [[ -z "$archive" ]] || fail "cannot combine an uploaded archive with a GitHub artifact"
@@ -41,8 +133,10 @@ download_artifact_archive() {
   source "$artifact_settings_file"
   local token_file="${KAITOOLS_GITHUB_TOKEN_FILE:-}"
   local github_proxy="${KAITOOLS_GITHUB_PROXY:-}"
+  local parallelism="${KAITOOLS_GITHUB_ARTIFACT_PARALLELISM:-4}"
   [[ "$token_file" = /* && -r "$token_file" ]] || fail "GitHub artifact token is unavailable"
   [[ "$github_proxy" =~ ^http://127\.0\.0\.1:[0-9]{1,5}$ ]] || fail "GitHub artifact proxy must be a local HTTP endpoint"
+  [[ "$parallelism" =~ ^[1-8]$ ]] || fail "GitHub artifact parallelism must be between 1 and 8"
   command -v curl >/dev/null || fail "curl is required to download a GitHub artifact"
   command -v unzip >/dev/null || fail "unzip is required to unpack a GitHub artifact"
   command -v sha256sum >/dev/null || fail "sha256sum is required to verify a GitHub artifact"
@@ -63,7 +157,9 @@ download_artifact_archive() {
   [[ "$download_url" =~ ^https:// ]] || fail "GitHub artifact download URL is invalid"
 
   zip_file="${artifact_work_dir}/artifact.zip"
-  curl --silent --show-error --fail --location --proxy "$github_proxy" --connect-timeout 10 --max-time 900 --retry 4 --retry-delay 2 --retry-all-errors --output "$zip_file" "$download_url" || fail "GitHub artifact download failed"
+  start_artifact_download_heartbeat
+  download_artifact_in_parts "$curl_config" "$github_proxy" "$download_url" "$zip_file" "$parallelism" || fail "GitHub artifact ranged download failed"
+  stop_artifact_download_heartbeat
   [[ -s "$zip_file" ]] || fail "GitHub artifact archive is empty"
 
   local -a entries

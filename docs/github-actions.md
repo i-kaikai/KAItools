@@ -126,6 +126,8 @@ Job 与 Web 发布 Job 都由 `master` 推送触发，但分别使用独立的�
 ```bash
 KAITOOLS_GITHUB_PROXY=http://127.0.0.1:<proxy-port>
 KAITOOLS_GITHUB_TOKEN_FILE=/srv/kaitools/deploy-secrets/github-artifact-token
+# Optional: concurrent HTTP range requests for one Artifact ZIP (default: 4; max: 8).
+KAITOOLS_GITHUB_ARTIFACT_PARALLELISM=4
 ```
 
 目录权限必须为 `700`，两个文件权限必须为 `600`；它们不能进入 Git 仓库、发布目录或 GitHub
