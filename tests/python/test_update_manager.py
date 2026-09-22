@@ -155,6 +155,16 @@ def test_check_rejects_a_signed_manifest_that_targets_user_data(tmp_path: Path) 
     assert error.value.code == "UPDATE_METADATA_INVALID"
 
 
+def test_check_reports_the_path_for_a_zero_size_manifest_entry(tmp_path: Path) -> None:
+    paths = fixture_paths(tmp_path)
+    entries = signed_feed(paths, [("_internal/empty.bin", b"")])
+
+    with pytest.raises(UpdateError, match=r"_internal/empty\.bin") as error:
+        UpdateManager(paths, urlopen=fake_urlopen(entries)).check()
+
+    assert error.value.code == "UPDATE_METADATA_INVALID"
+
+
 def test_start_install_stages_only_changed_files_and_never_stages_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     paths = fixture_paths(tmp_path)
     (paths.application_root / "KAITools.exe").write_bytes(b"old")

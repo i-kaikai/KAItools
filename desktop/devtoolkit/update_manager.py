@@ -291,7 +291,7 @@ class UpdateManager:
             digest = require_sha256(raw["sha256"])
             size = raw["size"]
             if not isinstance(size, int) or isinstance(size, bool) or not 0 < size <= MAX_OBJECT_BYTES:
-                raise UpdateSecurityError("更新文件大小无效")
+                raise UpdateSecurityError(f"更新文件大小无效: {path}")
             url = self._resolve_static_url(raw["object"], latest_url)
             files.append(UpdateFile(path, digest, size, url))
         return tuple(files)
@@ -345,11 +345,11 @@ class UpdateManager:
                 while chunk := response.read(1024 * 1024):
                     received += len(chunk)
                     if received > item.size:
-                        raise UpdateSecurityError("更新文件大小超出清单")
+                        raise UpdateSecurityError(f"更新文件大小超出清单: {item.path}")
                     digest.update(chunk)
                     output.write(chunk)
             if received != item.size or digest.hexdigest() != item.sha256:
-                raise UpdateSecurityError("更新文件摘要不匹配")
+                raise UpdateSecurityError(f"更新文件摘要不匹配: {item.path}")
             os.replace(temporary, destination)
         finally:
             temporary.unlink(missing_ok=True)

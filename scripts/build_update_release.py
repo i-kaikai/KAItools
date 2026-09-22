@@ -27,6 +27,11 @@ SCHEMA_VERSION = 1
 EXCLUDED_ROOTS = {"data", "app-manifest.json"}
 
 
+def is_optional_empty_marker(relative_path: str) -> bool:
+    path = Path(relative_path)
+    return path.name == "REQUESTED" and any(part.endswith(".dist-info") for part in path.parts)
+
+
 def read_json(path: Path, label: str) -> dict[str, Any]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
@@ -61,6 +66,7 @@ def release_date(version: str) -> str:
 
 def managed_files(portable_root: Path, object_base: str) -> list[dict[str, Any]]:
     files: list[dict[str, Any]] = []
+    excluded_empty: list[str] = []
     for path in sorted(portable_root.rglob("*")):
         if not path.is_file():
             continue
@@ -68,15 +74,25 @@ def managed_files(portable_root: Path, object_base: str) -> list[dict[str, Any]]
         if relative.split("/", 1)[0] in EXCLUDED_ROOTS:
             continue
         normalized = normalize_relative_path(relative)
+        size = path.stat().st_size
+        if size == 0:
+            if is_optional_empty_marker(normalized):
+                excluded_empty.append(normalized)
+                continue
+            raise SystemExit(f"Managed update file has zero size: {normalized}")
         digest = sha256_file(path)
         files.append({
             "path": normalized,
             "sha256": digest,
-            "size": path.stat().st_size,
+            "size": size,
             "object": f"{object_base}/{digest}",
         })
     if not files:
         raise SystemExit("No managed program files found in the portable directory")
+    if excluded_empty:
+        print("UPDATE_EXCLUDED_EMPTY_FILES:")
+        for relative in excluded_empty:
+            print(f"  {relative}")
     return files
 
 

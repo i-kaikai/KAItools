@@ -42,6 +42,20 @@ replace_link() {
   mv -Tf -- "$candidate" "$link"
 }
 
+archive_matches_release() {
+  local release_dir="$1"
+  local verification_dir
+  verification_dir="$(mktemp -d --tmpdir="$releases_dir" ".${release_id}.verify.XXXXXX")"
+  if ! tar -xzf "$archive" -C "$verification_dir" --no-same-owner --no-same-permissions; then
+    rm -rf -- "$verification_dir"
+    return 1
+  fi
+  local status=0
+  diff -qr --no-dereference "$verification_dir" "$release_dir" > /dev/null || status=$?
+  rm -rf -- "$verification_dir"
+  return "$status"
+}
+
 deploy() {
   require_release_root
   require_release_id
@@ -51,7 +65,13 @@ deploy() {
   active_release="$(resolve_managed_release "$current_link")"
   release_dir="${releases_dir}/${release_id}"
   staging_dir="${releases_dir}/.${release_id}.staging.$$"
-  [[ ! -e "$release_dir" && ! -L "$release_dir" ]] || fail "release directory already exists: $release_dir"
+  if [[ -e "$release_dir" || -L "$release_dir" ]]; then
+    if [[ "$(readlink -f -- "$current_link")" == "$(readlink -f -- "$release_dir")" ]] && archive_matches_release "$release_dir"; then
+      echo "Release $release_id is already active with identical contents; deployment is already complete"
+      return 0
+    fi
+    fail "release directory already exists with different contents or is not current: $release_dir"
+  fi
   [[ ! -e "$staging_dir" && ! -L "$staging_dir" ]] || fail "staging directory already exists: $staging_dir"
 
   mkdir -m 0755 -- "$staging_dir"
