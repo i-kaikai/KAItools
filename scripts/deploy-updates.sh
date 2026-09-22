@@ -182,6 +182,9 @@ if [[ -n "$artifact_id" ]]; then
   download_artifact_archive
 fi
 
+# The release contents are served by Nginx after activation. Keep only the download work area private.
+umask 022
+
 if [[ -n "$archive" ]]; then
   [[ -f "$archive" ]] || { echo "missing uploaded update archive: $archive" >&2; exit 1; }
   staging="${incoming_root}/.${release_id}.staging.$$"
