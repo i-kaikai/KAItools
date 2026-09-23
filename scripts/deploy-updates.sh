@@ -18,6 +18,7 @@ release_dir="${updates_root}/releases/${release_id}"
 artifact_work_dir=""
 artifact_heartbeat_pid=""
 github_artifact_part_attempts=5
+github_proxy_probe_bytes=262144
 selected_github_proxy=""
 
 fail() {
@@ -105,9 +106,9 @@ select_github_proxy() {
     [[ "$candidate" =~ ^http://127\.0\.0\.1:[0-9]{1,5}$ ]] || continue
     download_url="$(request_artifact_download_url "$candidate" "$curl_config" "$artifact_api_url")" || continue
     probe_file="$(mktemp "${artifact_work_dir}/artifact.probe.XXXXXX")" || continue
-    if response="$(curl --silent --show-error --fail --location --proxy "$candidate" --connect-timeout 10 --max-time 20 --speed-time 10 --speed-limit 16384 --range 0-1048575 --output "$probe_file" --write-out '%{http_code} %{size_download} %{time_total}' "$download_url")"; then
+    if response="$(curl --silent --show-error --fail --location --proxy "$candidate" --connect-timeout 10 --max-time 45 --range "0-$((github_proxy_probe_bytes - 1))" --output "$probe_file" --write-out '%{http_code} %{size_download} %{time_total}' "$download_url")"; then
       read -r http_code bytes elapsed <<< "$response"
-      if [[ "$http_code" = "206" && "$bytes" =~ ^[1-9][0-9]*$ && "$elapsed" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+      if [[ "$http_code" = "206" && "$bytes" = "$github_proxy_probe_bytes" && "$elapsed" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
         throughput="$(awk -v bytes="$bytes" -v elapsed="$elapsed" 'BEGIN { if (elapsed > 0) printf "%.0f", bytes / elapsed }')"
         if [[ -n "$throughput" ]] && { [[ -z "$best_throughput" ]] || awk -v current="$throughput" -v best="$best_throughput" 'BEGIN { exit !(current > best) }'; }; then
           best_throughput="$throughput"

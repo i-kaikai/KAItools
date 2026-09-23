@@ -140,7 +140,7 @@ KAITOOLS_GITHUB_ARTIFACT_PARALLELISM=10
 KAITOOLS_GITHUB_PROXIES=http://127.0.0.1:<primary-proxy-port>,http://127.0.0.1:<secondary-proxy-port>
 ```
 
-桌面发布会通过每个候选下载 1 MiB 的 GitHub Artifact Range，以实测吞吐选择本次发布的代理。
+桌面发布会通过每个候选完成 256 KiB 的 GitHub Artifact Range（连接超时 10 秒、总时限 45 秒），以实测吞吐选择本次发布的代理。
 
 目录权限必须为 `700`，其中所有文件权限必须为 `600`；它们不能进入 Git 仓库、发布目录或 GitHub
 Actions Secrets。
