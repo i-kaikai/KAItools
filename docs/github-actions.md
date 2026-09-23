@@ -134,5 +134,13 @@ KAITOOLS_GITHUB_TOKEN_FILE=/srv/kaitools/deploy-secrets/github-artifact-token
 KAITOOLS_GITHUB_ARTIFACT_PARALLELISM=10
 ```
 
-目录权限必须为 `700`，两个文件权限必须为 `600`；它们不能进入 Git 仓库、发布目录或 GitHub
+可选的 `github-artifact-proxies.env` 仅保存多个本机回环 HTTP 代理端点，不包含 GitHub 令牌：
+
+```bash
+KAITOOLS_GITHUB_PROXIES=http://127.0.0.1:<primary-proxy-port>,http://127.0.0.1:<secondary-proxy-port>
+```
+
+桌面发布会通过每个候选下载 1 MiB 的 GitHub Artifact Range，以实测吞吐选择本次发布的代理。
+
+目录权限必须为 `700`，其中所有文件权限必须为 `600`；它们不能进入 Git 仓库、发布目录或 GitHub
 Actions Secrets。
