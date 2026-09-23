@@ -27,7 +27,9 @@ from devtoolkit.update_security import (  # noqa: E402
 )
 
 
-REMOTE_VERIFY_WORKERS = 16
+# Release runners can exhaust their transient socket resources when every changed
+# update object is verified at once. Four HTTP/2 streams retain useful parallelism.
+REMOTE_VERIFY_WORKERS = 4
 REMOTE_VERIFY_TIMEOUT_SECONDS = 30.0
 REMOTE_VERIFY_CHUNK_BYTES = 1024 * 1024
 REMOTE_METADATA_MAX_BYTES = 4 * 1024 * 1024
