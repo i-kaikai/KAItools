@@ -2837,28 +2837,39 @@ test('expanded sidebar version opens release notes without a footer duplicate', 
 test('desktop version dialog checks signed update metadata and starts the managed update', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name === 'web', 'The browser build must not expose a program updater.')
   await page.setViewportSize({ width: 1280, height: 800 })
+  const targetVersion = appVersion.split('.').map((part, index, parts) => index === parts.length - 1 ? String(Number(part) + 1) : part).join('.')
   await page.goto('/')
-  await page.evaluate(() => {
+  await page.evaluate(({ currentVersion, latestVersion }) => {
+    let started = false
     window.pywebview = {
       api: {
+        check_for_latest_version: async () => ({
+          ok: true,
+          data: { currentVersion, latestVersion, available: true, releaseNotes: ['应用内更新'], publishedAt: '2026-09-23' },
+        }),
         check_for_updates: async () => ({
           ok: true,
           data: {
-            currentVersion: '1.4.12', latestVersion: '1.4.13', status: 'update-available', available: true,
-            filesToDownload: 3, bytesToDownload: 1536, releaseNotes: ['应用内更新'], publishedAt: '2026-09-21', lastInstallError: null,
+            currentVersion, latestVersion, status: 'update-available', available: true,
+            filesToDownload: 3, bytesToDownload: 1536, releaseNotes: ['应用内更新'], publishedAt: '2026-09-23', lastInstallError: null,
           },
         }),
-        install_update: async () => ({ ok: true, data: { version: '1.4.13', restarting: true, filesToDownload: 3 } }),
+        install_update: async () => { started = true; return { ok: true, data: { version: latestVersion, restarting: false, filesToDownload: 3, state: 'checking' } } },
+        get_update_progress: async () => ({
+          ok: true,
+          data: { state: started ? 'downloading' : 'idle', currentVersion, targetVersion: started ? latestVersion : null, currentFile: started ? 'KAITools.exe' : null, completedFiles: started ? 1 : 0, totalFiles: started ? 3 : 0, downloadedBytes: started ? 512 : 0, totalBytes: started ? 1536 : 0, error: null },
+        }),
       },
     }
-  })
+  }, { currentVersion: appVersion, latestVersion: targetVersion })
   await page.getByRole('button', { name: '展开侧栏' }).click()
   await page.locator('.runtime-version').click()
   const dialog = page.getByRole('dialog', { name: 'KAITools 版本说明' })
-  await expect(dialog.getByText('发现 v1.4.13')).toBeVisible()
+  await expect(dialog.getByText(`发现新版本 v${targetVersion}`)).toBeVisible()
+  await dialog.getByRole('button', { name: '查看更新' }).click()
   await expect(dialog.getByText('将下载 3 个文件，共 1.5 KB。用户数据不会被修改。')).toBeVisible()
   await dialog.getByRole('button', { name: '立即更新' }).click()
-  await expect(dialog.getByText('正在准备更新，应用即将重新启动…')).toBeVisible()
+  await expect(dialog.getByText('正在下载更新')).toBeVisible()
 })
 
 test('developer mode unlocks from the version and exposes local service tools', async ({ page }, testInfo) => {

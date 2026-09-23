@@ -7,6 +7,7 @@ import { t } from '@/i18n'
 import { releaseNotes } from '@/releaseNotes'
 import { isWebRuntime } from '@/runtime'
 import type { UpdateCheckResult } from '@/types'
+import { checkLatestVersion as checkLatestMetadata, latestUpdate, refreshUpdateProgress, startUpdateProgressPolling, updateProgress } from '@/updateState'
 
 const props = defineProps<{ open: boolean; version: string }>()
 const emit = defineEmits<{ close: [] }>()
@@ -15,12 +16,15 @@ const closeButton = ref<HTMLButtonElement | null>(null)
 const update = ref<UpdateCheckResult | null>(null)
 const updateError = ref<string | null>(null)
 const checkingUpdate = ref(false)
-const installingUpdate = ref(false)
 let previouslyFocused: HTMLElement | null = null
 
 const visibleNotes = computed(() => releaseNotes.filter((note) => !note.draft || note.version === props.version))
+const progressActive = computed(() => updateProgress.value?.state === 'checking' || updateProgress.value?.state === 'downloading' || updateProgress.value?.state === 'restarting')
 const updatePanelState = computed(() => {
-  if (installingUpdate.value) return 'installing'
+  if (updateProgress.value?.state === 'restarting') return 'installing'
+  if (updateProgress.value?.state === 'downloading' || updateProgress.value?.state === 'checking') return 'installing'
+  if (updateProgress.value?.state === 'ready-to-restart') return 'ready'
+  if (updateProgress.value?.state === 'failed') return 'error'
   if (checkingUpdate.value) return 'checking'
   if (updateError.value) return 'error'
   if (isWebRuntime) return 'web'
@@ -30,8 +34,8 @@ const updatePanelState = computed(() => {
   return 'current'
 })
 const updatePanelIcon = computed(() => {
-  if (checkingUpdate.value || installingUpdate.value) return LoaderCircle
-  if (updateError.value) return AlertTriangle
+  if (checkingUpdate.value || progressActive.value) return LoaderCircle
+  if (updateError.value || updateProgress.value?.state === 'failed') return AlertTriangle
   if (update.value?.available) return Download
   return CircleCheck
 })
@@ -67,15 +71,37 @@ async function checkForUpdates(): Promise<void> {
   }
 }
 
+const progressPercent = computed(() => {
+  const progress = updateProgress.value
+  if (!progress || progress.totalBytes <= 0) return 0
+  return Math.min(100, Math.round(progress.downloadedBytes / progress.totalBytes * 100))
+})
+
+async function inspectUpdate(): Promise<void> {
+  await checkForUpdates()
+}
+
 async function installUpdate(): Promise<void> {
-  if (!update.value?.available || installingUpdate.value) return
-  installingUpdate.value = true
+  if (!update.value?.available || progressActive.value) return
   updateError.value = null
   const result = await desktopApi.installUpdate()
   if (!result.ok) {
-    installingUpdate.value = false
     updateError.value = result.error.message
+    return
   }
+  startUpdateProgressPolling()
+  await refreshUpdateProgress()
+}
+
+async function restartUpdate(): Promise<void> {
+  updateError.value = null
+  const result = await desktopApi.restartUpdate()
+  if (!result.ok) {
+    updateError.value = result.error.message
+    return
+  }
+  startUpdateProgressPolling()
+  await refreshUpdateProgress()
 }
 
 function onKeydown(event: KeyboardEvent): void {
@@ -105,12 +131,13 @@ watch(() => props.open, async (open) => {
     previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
     await nextTick()
     closeButton.value?.focus()
-    void checkForUpdates()
+    if (!isWebRuntime && !latestUpdate.value) void checkLatestMetadata()
     return
   }
   previouslyFocused?.focus()
   previouslyFocused = null
 })
+
 </script>
 
 <template>
@@ -137,25 +164,41 @@ watch(() => props.open, async (open) => {
         </div>
 
         <section v-if="!isWebRuntime" class="release-update-panel" :class="`state-${updatePanelState}`" aria-live="polite">
-          <div class="release-update-mark" aria-hidden="true"><component :is="updatePanelIcon" :class="{ 'release-update-spinner': checkingUpdate || installingUpdate }" :size="17" :stroke-width="2" /></div>
+          <div class="release-update-mark" aria-hidden="true"><component :is="updatePanelIcon" :class="{ 'release-update-spinner': checkingUpdate || progressActive }" :size="17" :stroke-width="2" /></div>
           <div class="release-update-copy">
             <div class="release-update-label"><span>{{ t('releaseNotes.updateTitle') }}</span><b v-if="update?.available">v{{ update.latestVersion }}</b></div>
-            <strong v-if="installingUpdate">{{ t('releaseNotes.installing') }}</strong>
-            <strong v-else-if="checkingUpdate"><LoaderCircle class="release-update-spinner" :size="16" />{{ t('releaseNotes.checking') }}</strong>
+            <strong v-if="updateProgress?.state === 'downloading'"><LoaderCircle class="release-update-spinner" :size="16" />{{ t('releaseNotes.downloading') }}</strong>
+            <strong v-else-if="updateProgress?.state === 'ready-to-restart'"><CircleCheck :size="16" />{{ t('releaseNotes.readyToRestart') }}</strong>
+            <strong v-else-if="updateProgress?.state === 'restarting'"><LoaderCircle class="release-update-spinner" :size="16" />{{ t('releaseNotes.restarting') }}</strong>
+            <strong v-else-if="updateProgress?.state === 'failed'">{{ t('releaseNotes.updateFailed') }}</strong>
+            <strong v-else-if="updateProgress?.state === 'checking'"><LoaderCircle class="release-update-spinner" :size="16" />{{ t('releaseNotes.checkingDetails') }}</strong>
+            <strong v-else-if="checkingUpdate"><LoaderCircle class="release-update-spinner" :size="16" />{{ t('releaseNotes.checkingDetails') }}</strong>
             <strong v-else-if="isWebRuntime">{{ t('releaseNotes.webUpdateUnavailable') }}</strong>
+            <strong v-else-if="latestUpdate?.available && !update">{{ t('releaseNotes.newVersionFound', { version: latestUpdate.latestVersion }) }}</strong>
             <strong v-else-if="updateError">{{ t('releaseNotes.updateFailed') }}</strong>
             <strong v-else-if="update?.status === 'up-to-date'">{{ t('releaseNotes.upToDate') }}</strong>
             <strong v-else-if="update?.status === 'newer-local-version'">{{ t('releaseNotes.newerLocal') }}</strong>
             <strong v-else-if="update?.status === 'repair-available'">{{ t('releaseNotes.repairAvailable') }}</strong>
             <strong v-else-if="update">{{ t('releaseNotes.updateAvailable', { version: update.latestVersion }) }}</strong>
             <small v-if="updateError">{{ updateError }}</small>
+            <small v-else-if="updateProgress?.state === 'failed'">{{ updateProgress.error }}</small>
             <small v-else-if="update?.lastInstallError">{{ t('releaseNotes.lastUpdateFailed', { message: update.lastInstallError }) }}</small>
+            <small v-else-if="updateProgress?.state === 'downloading' && updateProgress.totalBytes > 0">{{ updateProgress.currentFile }} · {{ updateProgress.completedFiles }}/{{ updateProgress.totalFiles }} {{ t('releaseNotes.files') }} · {{ formatBytes(updateProgress.downloadedBytes) }} / {{ formatBytes(updateProgress.totalBytes) }}</small>
+            <small v-else-if="updateProgress?.state === 'ready-to-restart'">{{ t('releaseNotes.restartDetail', { version: updateProgress.targetVersion ?? '' }) }}</small>
+            <small v-else-if="latestUpdate?.available && !update">{{ t('releaseNotes.inspectUpdateDetail') }}</small>
             <small v-else-if="update?.available">{{ t('releaseNotes.updateDetail', { files: update.filesToDownload, size: formatBytes(update.bytesToDownload) }) }}</small>
+            <div v-if="updateProgress?.state === 'downloading' && updateProgress.totalBytes > 0" class="release-update-progress" role="progressbar" :aria-valuenow="progressPercent" aria-valuemin="0" aria-valuemax="100"><span :style="{ width: `${progressPercent}%` }" /></div>
+            <div v-if="update?.releaseNotes.length" class="release-update-release-notes">
+              <small>{{ t('releaseNotes.releaseSummary') }}</small>
+              <ul><li v-for="note in update.releaseNotes" :key="note">{{ note }}</li></ul>
+            </div>
           </div>
-          <button v-if="!isWebRuntime && !installingUpdate" class="release-update-action" type="button" :disabled="checkingUpdate" @click="update?.available ? installUpdate() : checkForUpdates()">
+          <button v-if="!isWebRuntime && updateProgress?.state === 'ready-to-restart'" class="release-update-action" type="button" @click="restartUpdate"><RefreshCw :size="15" />{{ t('releaseNotes.restartNow') }}</button>
+          <button v-else-if="!isWebRuntime && updateProgress?.state === 'downloading'" class="release-update-action" type="button" @click="close">{{ t('releaseNotes.background') }}</button>
+          <button v-else-if="!isWebRuntime && !progressActive && updateProgress?.state !== 'ready-to-restart' && updateProgress?.state !== 'restarting'" class="release-update-action" type="button" :disabled="checkingUpdate" @click="update?.available ? installUpdate() : latestUpdate?.available ? inspectUpdate() : checkLatestMetadata()">
             <Download v-if="update?.available" :size="15" />
             <RefreshCw v-else :size="15" />
-            {{ update?.available ? t('releaseNotes.updateNow') : t('releaseNotes.recheck') }}
+            {{ update?.available ? t('releaseNotes.updateNow') : latestUpdate?.available ? t('releaseNotes.viewUpdate') : t('releaseNotes.recheck') }}
           </button>
         </section>
 

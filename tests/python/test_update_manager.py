@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import io
 import json
+import time
 from pathlib import Path
 
 import pytest
@@ -101,6 +102,22 @@ def test_check_syncs_only_changed_latest_files_and_excludes_data(tmp_path: Path)
     assert (paths.application_root / "data" / "notes.json").read_bytes() == b"private user content"
 
 
+def test_check_latest_reads_metadata_without_scanning_local_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    paths = fixture_paths(tmp_path)
+    monkeypatch.setattr("devtoolkit.update_manager.APP_VERSION", "1.0.0")
+    entries = signed_feed(paths, [("KAITools.exe", b"new")])
+
+    result = UpdateManager(paths, urlopen=fake_urlopen(entries)).check_latest()
+
+    assert result == {
+        "currentVersion": "1.0.0",
+        "latestVersion": "9.9.9",
+        "available": True,
+        "releaseNotes": ["测试更新"],
+        "publishedAt": "2026-09-21",
+    }
+
+
 def test_check_reports_repair_when_latest_version_files_are_damaged(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     paths = fixture_paths(tmp_path)
     monkeypatch.setattr("devtoolkit.update_manager.APP_VERSION", "9.9.9")
@@ -176,9 +193,16 @@ def test_start_install_stages_only_changed_files_and_never_stages_data(tmp_path:
     def launch(command: list[str], **_kwargs: object) -> None:
         launched.append(command)
 
-    result = UpdateManager(paths, urlopen=fake_urlopen(entries), process_launcher=launch).start_install()
+    manager = UpdateManager(paths, urlopen=fake_urlopen(entries), process_launcher=launch)
+    result = manager.start_install()
 
-    assert result["restarting"] is True
+    assert result["restarting"] is False
+    deadline = time.monotonic() + 5
+    while manager.progress()["state"] not in {"ready-to-restart", "failed"} and time.monotonic() < deadline:
+        time.sleep(0.02)
+    assert manager.progress()["state"] == "ready-to-restart"
+    restarted = manager.restart_install()
+    assert restarted["restarting"] is True
     assert len(launched) == 1
     staged = list((paths.pending_dir / "updates").glob("*/staging/KAITools.exe"))
     assert len(staged) == 1 and staged[0].read_bytes() == b"new"

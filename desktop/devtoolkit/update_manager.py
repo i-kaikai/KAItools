@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -107,6 +108,32 @@ class UpdateManager:
         self._paths = paths
         self._urlopen = urlopen
         self._process_launcher = process_launcher
+        self._progress_lock = threading.RLock()
+        self._progress: dict[str, Any] = self._empty_progress()
+        self._install_thread: threading.Thread | None = None
+        self._pending_install: dict[str, Any] | None = None
+
+    @staticmethod
+    def _empty_progress() -> dict[str, Any]:
+        return {
+            "state": "idle",
+            "currentVersion": APP_VERSION,
+            "targetVersion": None,
+            "currentFile": None,
+            "completedFiles": 0,
+            "totalFiles": 0,
+            "downloadedBytes": 0,
+            "totalBytes": 0,
+            "error": None,
+        }
+
+    def progress(self) -> dict[str, Any]:
+        with self._progress_lock:
+            return dict(self._progress)
+
+    def _set_progress(self, **values: Any) -> None:
+        with self._progress_lock:
+            self._progress.update(values)
 
     def check(self) -> dict[str, Any]:
         try:
@@ -129,7 +156,68 @@ class UpdateManager:
         except (OSError, urllib.error.URLError, TimeoutError) as exc:
             raise UpdateError("UPDATE_CHECK_FAILED", "无法检查更新，请检查网络后重试", str(exc)) from exc
 
+    def check_latest(self) -> dict[str, Any]:
+        """Check only signed version metadata; local files are intentionally untouched."""
+
+        try:
+            policy = self._load_policy()
+            latest_url = policy["latestUrl"]
+            latest = _read_json(self._fetch(latest_url, 128 * 1024), "最新版本清单")
+            self._verify_signed(latest, latest_url + ".sig")
+            self._validate_latest(latest)
+            available = _version_parts(latest["version"]) > _version_parts(APP_VERSION)
+            return {
+                "currentVersion": APP_VERSION,
+                "latestVersion": latest["version"],
+                "available": available,
+                "releaseNotes": list(latest["releaseNotes"]),
+                "publishedAt": latest["publishedAt"],
+            }
+        except UpdateError:
+            raise
+        except UpdateSecurityError as exc:
+            raise UpdateError("UPDATE_METADATA_INVALID", str(exc)) from exc
+        except (OSError, urllib.error.URLError, TimeoutError) as exc:
+            raise UpdateError("UPDATE_CHECK_FAILED", "无法检查更新，请检查网络后重试", str(exc)) from exc
+
     def start_install(self) -> dict[str, Any]:
+        with self._progress_lock:
+            state = self._progress["state"]
+            if state in {"checking", "downloading", "ready-to-restart", "restarting"}:
+                return {
+                    "version": self._progress["targetVersion"] or "",
+                    "restarting": state == "restarting",
+                    "filesToDownload": self._progress["totalFiles"],
+                    "state": state,
+                }
+            self._progress = self._empty_progress()
+            self._progress["state"] = "checking"
+            self._install_thread = threading.Thread(target=self._prepare_install, name="kaitools-update", daemon=True)
+            self._install_thread.start()
+        return {"version": "", "restarting": False, "filesToDownload": 0, "state": "checking"}
+
+    def restart_install(self) -> dict[str, Any]:
+        with self._progress_lock:
+            pending = self._pending_install
+            if self._progress["state"] != "ready-to-restart" or pending is None:
+                raise UpdateError("UPDATE_NOT_READY", "更新文件尚未准备完成")
+            self._process_launcher(
+                [str(pending["updater"]), "--request", str(pending["request"]), "--request-sha256", pending["requestSha256"]],
+                cwd=str(pending["root"]),
+                close_fds=True,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            self._progress["state"] = "restarting"
+            self._progress["currentFile"] = None
+            return {
+                "version": self._progress["targetVersion"],
+                "restarting": True,
+                "filesToDownload": self._progress["totalFiles"],
+                "state": "restarting",
+            }
+
+    def _prepare_install(self) -> None:
+        pending: Path | None = None
         try:
             plan = self._build_plan()
             if plan.status not in {"update-available", "repair-available"}:
@@ -140,19 +228,34 @@ class UpdateManager:
             required = plan.download_bytes + sum(self._existing_size(item.path) for item in plan.changed_files)
             if shutil.disk_usage(self._paths.data_root).free < required + 32 * 1024 * 1024:
                 raise UpdateError("UPDATE_DISK_SPACE", "磁盘可用空间不足，无法准备更新")
+            self._set_progress(
+                state="downloading",
+                targetVersion=plan.version,
+                currentFile=None,
+                completedFiles=0,
+                totalFiles=len(plan.changed_files),
+                downloadedBytes=0,
+                totalBytes=plan.download_bytes,
+                error=None,
+            )
             pending = self._paths.pending_dir / "updates" / uuid.uuid4().hex
             staging = pending / "staging"
             staging.mkdir(parents=True, exist_ok=False)
-            for item in plan.changed_files:
-                self._download_object(item, staging)
+            downloaded_before = 0
+            for index, item in enumerate(plan.changed_files):
+                self._download_object(
+                    item,
+                    staging,
+                    lambda received, file=item.path, base=downloaded_before: self._set_progress(
+                        currentFile=file,
+                        downloadedBytes=base + received,
+                    ),
+                )
+                downloaded_before += item.size
+                self._set_progress(completedFiles=index + 1, downloadedBytes=downloaded_before, currentFile=item.path)
             manifest_path = staging / "app-manifest.json"
             self._atomic_write(manifest_path, plan.manifest_bytes)
-            manifest_file = UpdateFile(
-                "app-manifest.json",
-                sha256_bytes(plan.manifest_bytes),
-                len(plan.manifest_bytes),
-                "",
-            )
+            manifest_file = UpdateFile("app-manifest.json", sha256_bytes(plan.manifest_bytes), len(plan.manifest_bytes), "")
             request = {
                 "schemaVersion": UPDATE_SCHEMA_VERSION,
                 "applicationRoot": str(self._paths.application_root.resolve()),
@@ -171,20 +274,18 @@ class UpdateManager:
             self._atomic_write(request_path, request_bytes)
             updater_copy = pending / "KAIToolsUpdater.exe"
             shutil.copy2(updater, updater_copy)
-            self._process_launcher(
-                [str(updater_copy), "--request", str(request_path), "--request-sha256", sha256_bytes(request_bytes)],
-                cwd=str(pending),
-                close_fds=True,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
-            LOGGER.info("update_installer_started target_version=%s files=%d", plan.version, len(plan.changed_files))
-            return {"version": plan.version, "restarting": True, "filesToDownload": len(plan.changed_files)}
-        except UpdateError:
-            raise
-        except UpdateSecurityError as exc:
-            raise UpdateError("UPDATE_METADATA_INVALID", str(exc)) from exc
-        except (OSError, urllib.error.URLError, TimeoutError) as exc:
-            raise UpdateError("UPDATE_DOWNLOAD_FAILED", "下载更新文件失败，当前版本未被修改", str(exc)) from exc
+            with self._progress_lock:
+                self._pending_install = {"root": pending, "request": request_path, "requestSha256": sha256_bytes(request_bytes), "updater": updater_copy}
+            self._set_progress(state="ready-to-restart", currentFile=None, downloadedBytes=plan.download_bytes)
+            LOGGER.info("update_ready_for_restart target_version=%s files=%d", plan.version, len(plan.changed_files))
+        except Exception as exc:
+            if pending is not None:
+                shutil.rmtree(pending, ignore_errors=True)
+            message = str(exc)
+            if isinstance(exc, UpdateSecurityError):
+                message = str(exc)
+            self._set_progress(state="failed", currentFile=None, error=message)
+            LOGGER.exception("update_prepare_failed")
 
     def _build_plan(self) -> UpdatePlan:
         policy = self._load_policy()
@@ -333,7 +434,7 @@ class UpdateManager:
             return ()
         return tuple(item.path for item in files if item.path not in target_paths and safe_target(self._paths.application_root, item.path).exists())
 
-    def _download_object(self, item: UpdateFile, staging: Path) -> None:
+    def _download_object(self, item: UpdateFile, staging: Path, progress: Callable[[int], None] | None = None) -> None:
         destination = safe_target(staging, item.path)
         destination.parent.mkdir(parents=True, exist_ok=True)
         temporary = destination.with_suffix(destination.suffix + ".part")
@@ -348,6 +449,8 @@ class UpdateManager:
                         raise UpdateSecurityError(f"更新文件大小超出清单: {item.path}")
                     digest.update(chunk)
                     output.write(chunk)
+                    if progress is not None:
+                        progress(received)
             if received != item.size or digest.hexdigest() != item.sha256:
                 raise UpdateSecurityError(f"更新文件摘要不匹配: {item.path}")
             os.replace(temporary, destination)

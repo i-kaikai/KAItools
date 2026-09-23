@@ -18,6 +18,15 @@ class FakeUpdateManager:
     def start_install(self) -> dict[str, object]:
         return {"version": "1.4.13", "restarting": True, "filesToDownload": 1}
 
+    def check_latest(self) -> dict[str, object]:
+        return {"currentVersion": "1.4.12", "latestVersion": "1.4.13", "available": True}
+
+    def progress(self) -> dict[str, object]:
+        return {"state": "downloading", "completedFiles": 1, "totalFiles": 2}
+
+    def restart_install(self) -> dict[str, object]:
+        return {"version": "1.4.13", "restarting": True, "filesToDownload": 1, "state": "restarting"}
+
 
 def app_paths(tmp_path: Path) -> AppPaths:
     return AppPaths(tmp_path, tmp_path / "resources", tmp_path / "data")
@@ -139,6 +148,16 @@ def test_api_checks_updates_through_the_fixed_update_manager(tmp_path: Path) -> 
     result = DesktopApi(paths, storage, update_manager=FakeUpdateManager()).check_for_updates()
 
     assert result == {"ok": True, "data": {"status": "up-to-date", "currentVersion": "1.4.12", "latestVersion": "1.4.12"}}
+
+
+def test_api_exposes_latest_version_progress_and_restart_controls(tmp_path: Path) -> None:
+    paths = app_paths(tmp_path)
+    storage = AppStorage(paths)
+    storage.ensure_directories()
+    api = DesktopApi(paths, storage, update_manager=FakeUpdateManager())
+
+    assert api.check_for_latest_version() == {"ok": True, "data": {"currentVersion": "1.4.12", "latestVersion": "1.4.13", "available": True}}
+    assert api.get_update_progress() == {"ok": True, "data": {"state": "downloading", "completedFiles": 1, "totalFiles": 2}}
 
 
 def test_api_opens_devtools_only_after_developer_mode_is_enabled(tmp_path: Path, monkeypatch) -> None:

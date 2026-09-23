@@ -2,6 +2,7 @@
 import {
   Check,
   ChevronDown,
+  CircleCheck,
   CircleUserRound,
   FolderArchive,
   Globe2,
@@ -42,6 +43,7 @@ import { useToastStore } from '@/stores/toast'
 import type { AppLocale, ThemeMode, ToolTab } from '@/types'
 import { homeTool, toolsById, workspaceTools } from '@/tools/registry'
 import { APP_VERSION } from '@/version'
+import { checkLatestVersion, startUpdateProgressPolling, stopUpdateProgressPolling, updateProgress } from '@/updateState'
 
 const app = useAppStore()
 const toast = useToastStore()
@@ -73,6 +75,23 @@ const accountSubtitle = computed(() => app.account ? (app.usingLocalDeveloperSer
 const activeLocaleOption = computed(() => localeOptions.find((option) => option.value === app.settings.locale) ?? localeOptions[0]!)
 const activeLocaleLabel = computed(() => activeLocaleOption.value.nativeLabel)
 const developerModeActive = computed(() => import.meta.env.DEV || app.settings.developerModeEnabled)
+const backgroundUpdateVisible = computed(() => Boolean(!isWebRuntime && updateProgress.value && updateProgress.value.state !== 'idle'))
+const backgroundUpdatePercent = computed(() => {
+  const progress = updateProgress.value
+  if (!progress || progress.totalBytes <= 0) return 0
+  return Math.min(100, Math.round(progress.downloadedBytes / progress.totalBytes * 100))
+})
+const backgroundUpdateBytes = computed(() => {
+  const value = updateProgress.value?.downloadedBytes ?? 0
+  if (value < 1024) return `${value} B`
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`
+})
+
+async function restartBackgroundUpdate(): Promise<void> {
+  const result = await desktopApi.restartUpdate()
+  if (!result.ok) toast.show(result.error.message, 'error')
+}
 
 async function signOut(): Promise<void> {
   if (app.account) await logoutLocalAccount(app.apiOrigin)
@@ -90,7 +109,7 @@ function handleVersionClick(event: MouseEvent): void {
 async function checkStartupUpdate(): Promise<void> {
   if (isWebRuntime) return
   try {
-    const result = await desktopApi.checkForUpdates()
+    const result = await checkLatestVersion()
     if (result.ok) updateAvailable.value = result.data.available
   } catch {
     // Update checks are advisory and must never block local desktop startup.
@@ -295,6 +314,7 @@ function preserveWorkspaceForRefresh(): void {
 onMounted(() => {
   void app.bootstrap(homeTool.initialState())
   void checkStartupUpdate()
+  startUpdateProgressPolling()
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('pointerdown', closeTabMenu)
   window.addEventListener('blur', closeTabMenu)
@@ -307,6 +327,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('pointerdown', closeTabMenu)
   window.removeEventListener('blur', closeTabMenu)
   window.removeEventListener('pagehide', preserveWorkspaceForRefresh)
+  stopUpdateProgressPolling()
 })
 </script>
 
@@ -514,6 +535,16 @@ onBeforeUnmount(() => {
       @retry-shortcut-sync="app.retryShortcutSync"
     />
     <DeveloperPanelDialog :open="developerPanelOpen && developerModeActive" @close="developerPanelOpen = false" />
+    <Teleport to="body">
+      <aside v-if="backgroundUpdateVisible && !releaseNotesOpen" class="background-update-status" aria-live="polite">
+        <div class="background-update-header"><strong>{{ updateProgress?.state === 'ready-to-restart' ? t('releaseNotes.readyToRestart') : updateProgress?.state === 'restarting' ? t('releaseNotes.restarting') : updateProgress?.state === 'failed' ? t('releaseNotes.updateFailed') : t('releaseNotes.backgroundDownloading') }}</strong><button type="button" :aria-label="t('releaseNotes.viewProgress')" @click="releaseNotesOpen = true">{{ t('releaseNotes.viewProgress') }}</button></div>
+        <p v-if="updateProgress?.state === 'failed'">{{ updateProgress.error }}</p>
+        <p v-else-if="updateProgress?.state === 'ready-to-restart'">{{ t('releaseNotes.restartDetail', { version: updateProgress.targetVersion ?? '' }) }}</p>
+        <p v-else>{{ updateProgress?.currentFile }} · {{ updateProgress?.completedFiles }}/{{ updateProgress?.totalFiles }} {{ t('releaseNotes.files') }} · {{ backgroundUpdateBytes }} / {{ updateProgress?.totalBytes ? `${(updateProgress.totalBytes / (1024 * 1024)).toFixed(1)} MB` : '--' }}</p>
+        <div v-if="updateProgress?.state === 'downloading'" class="background-update-progress" role="progressbar" :aria-valuenow="backgroundUpdatePercent" aria-valuemin="0" aria-valuemax="100"><span :style="{ width: `${backgroundUpdatePercent}%` }" /></div>
+        <button v-if="updateProgress?.state === 'ready-to-restart'" class="background-update-restart" type="button" @click="restartBackgroundUpdate"><CircleCheck :size="15" />{{ t('releaseNotes.restartNow') }}</button>
+      </aside>
+    </Teleport>
     <Teleport to="body"><ReleaseNotesDialog :open="releaseNotesOpen" :version="app.runtime?.version ?? APP_VERSION" @close="releaseNotesOpen = false" /></Teleport>
     <Teleport to="body"><ApplicationSettingsDialog :open="applicationSettingsOpen" @close="applicationSettingsOpen = false" /></Teleport>
     <ConfirmDialog />

@@ -21,6 +21,8 @@ import type {
   ToolTab,
   UpdateCheckResult,
   UpdateInstallResult,
+  UpdateLatestResult,
+  UpdateProgress,
 } from '@/types'
 import { isWebRuntime } from '@/runtime'
 import { loadBrowserNotes, saveBrowserNotes } from '@/api/notesStorage'
@@ -50,7 +52,7 @@ const DESKTOP_ONLY_METHODS = new Set([
   'convert_docx_to_pdf',
   'convert_pdf_to_docx',
 ])
-const NATIVE_UPDATE_METHODS = new Set(['check_for_updates', 'install_update'])
+const NATIVE_UPDATE_METHODS = new Set(['check_for_latest_version', 'check_for_updates', 'install_update', 'get_update_progress', 'restart_update'])
 const SYSTEM_STATUS_REFRESH_MIGRATION_VERSION = 1
 const BROWSER_DIAGNOSTICS_CACHE_MS = 30_000
 
@@ -459,7 +461,10 @@ export const desktopApi = {
   openGithubRepository: () => invoke<void>('open_github_repository'),
   openDesktopDownload: () => invoke<void>('open_desktop_download'),
   checkForUpdates: () => invoke<UpdateCheckResult>('check_for_updates'),
+  checkForLatestVersion: () => invoke<UpdateLatestResult>('check_for_latest_version'),
   installUpdate: () => invoke<UpdateInstallResult>('install_update'),
+  getUpdateProgress: () => invoke<UpdateProgress>('get_update_progress'),
+  restartUpdate: () => invoke<UpdateInstallResult>('restart_update'),
   openDeveloperTools: () => invoke<void>('open_developer_tools'),
   setActivationHotkey: (hotkey: string) => invoke<{ activationHotkey: string }>('set_activation_hotkey', hotkey),
   hideToTray: () => invoke<void>('hide_to_tray'),

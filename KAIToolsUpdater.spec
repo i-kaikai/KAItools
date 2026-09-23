@@ -3,6 +3,7 @@ from pathlib import Path
 
 ROOT = Path(SPECPATH)
 APP_ICON = ROOT / "frontend" / "public" / "brand" / "kaitools-app-icon.ico"
+VERSION_FILE = ROOT / "VERSION"
 
 if not APP_ICON.is_file():
     raise SystemExit(f"Application icon is missing: {APP_ICON}")
@@ -11,7 +12,7 @@ a = Analysis(
     [str(ROOT / "desktop" / "updater_main.py")],
     pathex=[str(ROOT / "desktop")],
     binaries=[],
-    datas=[],
+    datas=[(str(VERSION_FILE), ".")],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

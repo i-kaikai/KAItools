@@ -178,6 +178,29 @@ export interface UpdateInstallResult {
   version: string
   restarting: boolean
   filesToDownload: number
+  state?: UpdateProgressState
+}
+
+export interface UpdateLatestResult {
+  currentVersion: string
+  latestVersion: string
+  available: boolean
+  releaseNotes: string[]
+  publishedAt: string | null
+}
+
+export type UpdateProgressState = 'idle' | 'checking' | 'downloading' | 'ready-to-restart' | 'restarting' | 'failed'
+
+export interface UpdateProgress {
+  state: UpdateProgressState
+  currentVersion: string
+  targetVersion: string | null
+  currentFile: string | null
+  completedFiles: number
+  totalFiles: number
+  downloadedBytes: number
+  totalBytes: number
+  error: string | null
 }
 
 export interface ClipboardHistoryItem {

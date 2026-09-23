@@ -457,16 +457,33 @@ class DesktopApi:
             LOGGER.info("update_check_failed code=%s reason=%s", exc.code, exc)
             return _failure(exc.code, str(exc), exc.details)
 
+    def check_for_latest_version(self) -> dict[str, Any]:
+        try:
+            return _success(self._update_manager.check_latest())
+        except UpdateError as exc:
+            LOGGER.info("latest_version_check_failed code=%s reason=%s", exc.code, exc)
+            return _failure(exc.code, str(exc), exc.details)
+
     def install_update(self) -> dict[str, Any]:
-        """Stage a verified update, then let the separate updater replace unlocked files."""
+        """Start a background update preparation task; the UI polls its progress."""
 
         try:
+            return _success(self._update_manager.start_install())
+        except UpdateError as exc:
+            LOGGER.info("update_install_failed code=%s reason=%s", exc.code, exc)
+            return _failure(exc.code, str(exc), exc.details)
+
+    def get_update_progress(self) -> dict[str, Any]:
+        return _success(self._update_manager.progress())
+
+    def restart_update(self) -> dict[str, Any]:
+        try:
+            result = self._update_manager.restart_install()
             if self._window is None:
                 return _failure("UPDATER_UNAVAILABLE", "应用窗口尚未就绪")
             destroy = getattr(self._window, "destroy", None)
             if not callable(destroy):
                 return _failure("UPDATER_UNAVAILABLE", "应用窗口不支持重启更新")
-            result = self._update_manager.start_install()
 
             def close_for_update() -> None:
                 try:
@@ -477,7 +494,7 @@ class DesktopApi:
             threading.Timer(0.5, close_for_update).start()
             return _success(result)
         except UpdateError as exc:
-            LOGGER.info("update_install_failed code=%s reason=%s", exc.code, exc)
+            LOGGER.info("update_restart_failed code=%s reason=%s", exc.code, exc)
             return _failure(exc.code, str(exc), exc.details)
 
     def open_developer_tools(self) -> dict[str, Any]:
