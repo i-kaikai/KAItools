@@ -13,8 +13,9 @@ import scripts.verify_update_release as verifier
 from devtoolkit.update_security import sha256_bytes
 
 
-def test_verify_remote_objects_checks_every_object_with_bounded_workers(monkeypatch) -> None:
+def test_verify_remote_objects_checks_every_object_with_bounded_workers_and_recycled_clients(monkeypatch) -> None:
     workers = 2
+    batch_size = 3
     files = [
         {"path": f"file-{index}", "object": f"objects/{index}", "size": 1, "sha256": sha256_bytes(bytes([index]))}
         for index in range(8)
@@ -23,8 +24,21 @@ def test_verify_remote_objects_checks_every_object_with_bounded_workers(monkeypa
     peak_active = 0
     verified: list[str] = []
     lock = threading.Lock()
+    clients: list[object] = []
 
-    def fake_verify(_: Any, __: str, item: dict[str, Any]) -> None:
+    class FakeClient:
+        def __enter__(self) -> "FakeClient":
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+    def create_client() -> FakeClient:
+        client = FakeClient()
+        clients.append(client)
+        return client
+
+    def fake_verify(_: FakeClient, __: str, item: dict[str, Any]) -> None:
         nonlocal active, peak_active
         with lock:
             active += 1
@@ -35,12 +49,14 @@ def test_verify_remote_objects_checks_every_object_with_bounded_workers(monkeypa
             active -= 1
 
     monkeypatch.setattr(verifier, "REMOTE_VERIFY_WORKERS", workers)
+    monkeypatch.setattr(verifier, "REMOTE_VERIFY_BATCH_SIZE", batch_size)
     monkeypatch.setattr(verifier, "verify_remote_object", fake_verify)
 
-    verifier.verify_remote_objects(object(), "https://updates.example/downloads/kaitools/latest.json", files)
+    verifier.verify_remote_objects(create_client, "https://updates.example/downloads/kaitools/latest.json", files)
 
     assert sorted(verified) == [f"file-{index}" for index in range(8)]
     assert peak_active == workers
+    assert len(clients) == 3
 
 
 def test_changed_files_only_returns_manifest_entries_that_differ() -> None:
@@ -78,7 +94,7 @@ def test_retry_remote_request_retries_transient_transport_failures(monkeypatch) 
 
     assert verifier.retry_remote_request(operation, "https://updates.example/object") == "ok"
     assert attempts == 3
-    assert delays == [0.5, 1.0]
+    assert delays == [1.0, 2.0]
 
 
 def test_verify_remote_rejects_only_one_previous_metadata_path(tmp_path: Path) -> None:

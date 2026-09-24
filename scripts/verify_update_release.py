@@ -27,14 +27,16 @@ from devtoolkit.update_security import (  # noqa: E402
 )
 
 
-# Release runners can exhaust their transient socket resources when every changed
-# update object is verified at once. Four HTTP/2 streams retain useful parallelism.
-REMOTE_VERIFY_WORKERS = 4
+# A release can contain hundreds of objects. Keep the public verification
+# deliberately conservative and recycle clients between batches so transient
+# runner socket exhaustion does not abort a valid release.
+REMOTE_VERIFY_WORKERS = 2
+REMOTE_VERIFY_BATCH_SIZE = 16
 REMOTE_VERIFY_TIMEOUT_SECONDS = 30.0
 REMOTE_VERIFY_CHUNK_BYTES = 1024 * 1024
 REMOTE_METADATA_MAX_BYTES = 4 * 1024 * 1024
-REMOTE_VERIFY_RETRY_ATTEMPTS = 4
-REMOTE_VERIFY_RETRY_DELAY_SECONDS = 0.5
+REMOTE_VERIFY_RETRY_ATTEMPTS = 6
+REMOTE_VERIFY_RETRY_DELAY_SECONDS = 1.0
 RETRYABLE_HTTP_STATUS_CODES = {408, 429, 500, 502, 503, 504}
 
 T = TypeVar("T")
@@ -190,11 +192,18 @@ def changed_files(files: list[dict[str, Any]], previous: dict[str, Any] | None) 
     return [item for item in files if previous_by_path.get(item["path"]) != item]
 
 
-def verify_remote_objects(client: Any, latest_url: str, files: list[dict[str, Any]]) -> None:
+def verify_remote_object_batch(client: Any, latest_url: str, files: list[dict[str, Any]]) -> None:
     with ThreadPoolExecutor(max_workers=REMOTE_VERIFY_WORKERS) as executor:
         futures = [executor.submit(verify_remote_object, client, latest_url, item) for item in files]
         for future in as_completed(futures):
             future.result()
+
+
+def verify_remote_objects(client_factory: Callable[[], Any], latest_url: str, files: list[dict[str, Any]]) -> None:
+    for offset in range(0, len(files), REMOTE_VERIFY_BATCH_SIZE):
+        batch = files[offset : offset + REMOTE_VERIFY_BATCH_SIZE]
+        with client_factory() as client:
+            verify_remote_object_batch(client, latest_url, batch)
 
 
 def verify_previous_release(
@@ -258,7 +267,7 @@ def verify_remote(
                 except (OSError, httpx.HTTPError, UpdateSecurityError) as exc:
                     print(f"UPDATE_VERIFY_PREVIOUS_UNAVAILABLE: {exc}; falling back to full verification", file=sys.stderr)
             files = changed_files(manifest["files"], previous)
-            verify_remote_objects(client, latest_url, files)
+        verify_remote_objects(lambda: create_remote_client(httpx), latest_url, files)
     except httpx.HTTPError as exc:
         raise UpdateSecurityError(f"公网更新请求失败: {exc}") from exc
     skipped = len(manifest["files"]) - len(files)
