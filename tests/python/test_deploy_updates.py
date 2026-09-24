@@ -5,9 +5,13 @@ import os
 from pathlib import Path
 import subprocess
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "deploy-updates.sh"
+
+pytestmark = pytest.mark.skipif(os.name == "nt", reason="桌面更新部署脚本只在 Linux 服务器执行")
 
 
 def write_release(root: Path, release_id: str, objects: list[str]) -> Path:
