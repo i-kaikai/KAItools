@@ -11,7 +11,22 @@ import { APP_VERSION } from '@/version'
 import type { DashboardCards, ToolTab } from '@/types'
 
 describe('browser API storage', () => {
-  beforeEach(() => localStorage.clear())
+  beforeEach(() => {
+    localStorage.clear()
+    delete window.pywebview
+  })
+
+  it('waits for PyWebView to populate a native method after creating an empty API object', async () => {
+    const loadState = vi.fn(async () => ({ ok: true, data: { ready: true } }))
+    window.pywebview = { api: {} }
+
+    const resultPromise = desktopApi.loadState()
+    window.pywebview.api.load_state = loadState
+    window.dispatchEvent(new Event('pywebviewready'))
+
+    await expect(resultPromise).resolves.toEqual({ ok: true, data: { ready: true } })
+    expect(loadState).toHaveBeenCalledOnce()
+  })
 
   it('loads defaults and persists settings and pinned tabs', async () => {
     const initial = await desktopApi.loadState()

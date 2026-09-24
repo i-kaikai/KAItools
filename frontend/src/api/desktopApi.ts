@@ -214,26 +214,44 @@ function saveBrowserState(state: BootstrapState): void {
   localStorage.setItem(BROWSER_KEY, JSON.stringify(state))
 }
 
-async function bridge(): Promise<Record<string, (...args: unknown[]) => Promise<unknown>> | null> {
+type DesktopBridge = Record<string, (...args: unknown[]) => Promise<unknown>>
+
+function readyBridge(method: string): DesktopBridge | null {
+  const api = window.pywebview?.api
+  return api && typeof api[method] === 'function' ? api : null
+}
+
+async function bridge(method: string): Promise<DesktopBridge | null> {
   if (isWebRuntime) return null
-  if (window.pywebview?.api) return window.pywebview.api
-  if (import.meta.env.DEV || import.meta.env.MODE === 'test') return null
-  await new Promise<void>((resolve) => {
-    const timeout = window.setTimeout(resolve, 3000)
-    window.addEventListener(
-      'pywebviewready',
-      () => {
-        window.clearTimeout(timeout)
-        resolve()
-      },
-      { once: true },
-    )
+
+  const initialBridge = readyBridge(method)
+  if (initialBridge) return initialBridge
+
+  // Browser development and unit tests do not inject the native bridge at all.
+  if (!window.pywebview && (import.meta.env.DEV || import.meta.env.MODE === 'test')) return null
+
+  return new Promise<DesktopBridge | null>((resolve) => {
+    let settled = false
+    const finish = (value: DesktopBridge | null) => {
+      if (settled) return
+      settled = true
+      window.clearTimeout(timeout)
+      window.removeEventListener('pywebviewready', onReady)
+      resolve(value)
+    }
+    const onReady = () => finish(readyBridge(method))
+    const timeout = window.setTimeout(() => finish(null), 3000)
+
+    window.addEventListener('pywebviewready', onReady, { once: true })
+
+    // PyWebView can finish creating the method between the first lookup and listener setup.
+    const bridgeAfterListener = readyBridge(method)
+    if (bridgeAfterListener) finish(bridgeAfterListener)
   })
-  return window.pywebview?.api ?? null
 }
 
 async function invoke<T>(method: string, ...args: unknown[]): Promise<ApiResult<T>> {
-  const api = await bridge()
+  const api = await bridge(method)
   if (!api) {
     if (!isWebRuntime && !import.meta.env.DEV && import.meta.env.MODE !== 'test') {
       return { ok: false, error: { code: 'BRIDGE_UNAVAILABLE', message: '桌面桥接尚未就绪' } }
