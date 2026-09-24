@@ -517,7 +517,7 @@ html.is-resizing-rows, html.is-resizing-rows * { cursor: row-resize !important; 
 .notes-content { display: grid; flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .notes-content.mode-edit { grid-template-columns: minmax(0, 1fr) 0; }
 .notes-content.mode-preview { grid-template-columns: 0 minmax(0, 1fr); }
-.notes-code { min-width: 0; min-height: 0; border-right: 1px solid var(--border-subtle); }
+.notes-code { display: flex; min-width: 0; min-height: 0; flex-direction: column; border-right: 1px solid var(--border-subtle); }
 .notes-preview { min-width: 0; min-height: 0; padding: 20px 24px 34px; color: var(--text-primary); overflow: auto; }
 .markdown-preview h1, .markdown-preview h2, .markdown-preview h3 { margin: 0 0 14px; line-height: 1.25; }
 .markdown-preview h1 { font-size: 24px; }.markdown-preview h2 { margin-top: 22px; font-size: 18px; }.markdown-preview h3 { margin-top: 18px; font-size: 14px; }

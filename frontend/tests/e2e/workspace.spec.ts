@@ -485,6 +485,23 @@ test('notes use one collapsible tree and leave the editor available by default',
   await expect(page.getByRole('button', { name: '编辑', exact: true })).toHaveClass(/active/)
   await expect(page.getByText('关于 KAITools', { exact: true })).toBeVisible()
 
+  const editorLayout = await page.evaluate(() => {
+    const workspace = document.querySelector<HTMLElement>('.notes-workspace')?.getBoundingClientRect()
+    const content = document.querySelector<HTMLElement>('.notes-content')?.getBoundingClientRect()
+    const code = document.querySelector<HTMLElement>('.notes-code')?.getBoundingClientRect()
+    const editor = document.querySelector<HTMLElement>('.notes-code .cm-editor')?.getBoundingClientRect()
+    return {
+      workspaceHeight: workspace?.height ?? 0,
+      contentHeight: content?.height ?? 0,
+      codeHeight: code?.height ?? 0,
+      editorHeight: editor?.height ?? 0,
+    }
+  })
+  expect(editorLayout.contentHeight).toBeGreaterThan(400)
+  expect(editorLayout.codeHeight).toBeGreaterThan(400)
+  expect(Math.abs(editorLayout.codeHeight - editorLayout.editorHeight)).toBeLessThanOrEqual(1)
+  expect(editorLayout.codeHeight).toBeLessThanOrEqual(editorLayout.workspaceHeight)
+
   await page.getByRole('button', { name: '文件夹', exact: true }).click()
   const dialog = page.locator('.notes-dialog')
   await dialog.locator('input').fill('接口设计')
