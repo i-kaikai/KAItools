@@ -35,13 +35,13 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version-file: .node-version
 
       # Python 测试覆盖桌面宿主的可移植逻辑；真正的 EXE 打包在 Windows 发布链完成。
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version-file: .python-version
           cache: pip
           cache-dependency-path: requirements-dev.txt
 
@@ -50,7 +50,11 @@ jobs:
         working-directory: frontend
         run: |
           corepack enable
-          pnpm install --frozen-lockfile --config.confirmModulesPurge=false
+          corepack pnpm install --frozen-lockfile --config.confirmModulesPurge=false
+
+      - name: Validate build tool versions
+        shell: pwsh
+        run: ./scripts/check_build_tools.ps1
 
       # VERSION 是客户端版本唯一来源，避免发布元数据漂移。
       - name: Validate version metadata

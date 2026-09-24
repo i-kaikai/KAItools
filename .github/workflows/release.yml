@@ -38,17 +38,17 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version-file: .node-version
 
       # 发布前重新验证当前 master；不能直接复用过期 CI 制品。
       - name: Install and verify frontend
         working-directory: frontend
         run: |
           corepack enable
-          pnpm install --frozen-lockfile --config.confirmModulesPurge=false
-          pnpm typecheck
-          pnpm test
-          pnpm build:web
+          corepack pnpm install --frozen-lockfile --config.confirmModulesPurge=false
+          corepack pnpm typecheck
+          corepack pnpm test
+          corepack pnpm build:web
 
       # release_id 同时写入 Job output、制品名和服务器目录，便于回滚定位。
       - name: Package browser artifact
@@ -159,20 +159,23 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version-file: .python-version
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version-file: .node-version
 
       - name: Install dependencies
         run: |
           corepack enable
-          pnpm install --dir frontend --frozen-lockfile --config.confirmModulesPurge=false
-          py -3.13 -m venv .venv
+          Push-Location frontend
+          corepack pnpm install --frozen-lockfile --config.confirmModulesPurge=false
+          Pop-Location
+          python -m venv .venv
           .\.venv\Scripts\python.exe -m pip install --upgrade pip
           .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+          .\scripts\check_build_tools.ps1 -PythonPath .\.venv\Scripts\python.exe
 
       - name: Validate release metadata
         run: |
@@ -291,7 +294,7 @@ jobs:
       - name: Set up Python for public update verification
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version-file: .python-version
 
       - name: Verify published desktop update from the public URL
         env:

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { AlertTriangle, CalendarDays, Check, ChevronRight, CircleCheck, CircleDot, Download, LoaderCircle, RefreshCw, Rocket, ScrollText, Sparkles, Wrench, X } from '@lucide/vue'
+import { AlertTriangle, CalendarDays, Check, ChevronDown, ChevronRight, CircleCheck, CircleDot, Download, LoaderCircle, RefreshCw, ScrollText, Sparkles, Wrench, X } from '@lucide/vue'
 import { computed, nextTick, ref, watch } from 'vue'
 
 import { desktopApi } from '@/api/desktopApi'
@@ -16,6 +16,7 @@ const closeButton = ref<HTMLButtonElement | null>(null)
 const update = ref<UpdateCheckResult | null>(null)
 const updateError = ref<string | null>(null)
 const checkingUpdate = ref(false)
+const expandedVersions = ref<string[]>([props.version])
 let previouslyFocused: HTMLElement | null = null
 
 const visibleNotes = computed(() => releaseNotes.filter((note) => !note.draft || note.version === props.version))
@@ -46,6 +47,16 @@ function publishedChanges(changes: string[]): string[] {
 
 function close(): void {
   emit('close')
+}
+
+function isExpanded(version: string): boolean {
+  return expandedVersions.value.includes(version)
+}
+
+function toggleRelease(version: string): void {
+  expandedVersions.value = isExpanded(version)
+    ? expandedVersions.value.filter((item) => item !== version)
+    : [...expandedVersions.value, version]
 }
 
 function formatBytes(value: number): string {
@@ -128,6 +139,7 @@ function onKeydown(event: KeyboardEvent): void {
 
 watch(() => props.open, async (open) => {
   if (open) {
+    if (!isExpanded(props.version)) expandedVersions.value = [props.version]
     previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
     await nextTick()
     closeButton.value?.focus()
@@ -145,12 +157,8 @@ watch(() => props.open, async (open) => {
     <div v-if="open" class="release-notes-backdrop" @pointerdown.self="close" @keydown="onKeydown">
       <section ref="dialog" class="release-notes-dialog" role="dialog" aria-modal="true" aria-labelledby="release-notes-title" aria-describedby="release-notes-description">
         <header class="release-notes-header">
-          <div class="release-notes-signal" aria-hidden="true">
-            <span><Rocket :size="22" :stroke-width="1.7" /></span>
-            <i /><i /><i />
-          </div>
           <div class="release-notes-heading">
-            <span><Sparkles :size="14" />RELEASE LOG</span>
+            <span class="release-notes-kicker">KAITools</span>
             <h2 id="release-notes-title">{{ t('releaseNotes.title') }}</h2>
             <p id="release-notes-description">{{ t('releaseNotes.description') }}</p>
           </div>
@@ -193,45 +201,42 @@ watch(() => props.open, async (open) => {
               <ul><li v-for="note in update.releaseNotes" :key="note">{{ note }}</li></ul>
             </div>
           </div>
-          <button v-if="!isWebRuntime && updateProgress?.state === 'ready-to-restart'" class="release-update-action" type="button" @click="restartUpdate"><RefreshCw :size="15" />{{ t('releaseNotes.restartNow') }}</button>
-          <button v-else-if="!isWebRuntime && updateProgress?.state === 'downloading'" class="release-update-action" type="button" @click="close">{{ t('releaseNotes.background') }}</button>
-          <button v-else-if="!isWebRuntime && !progressActive && updateProgress?.state !== 'ready-to-restart' && updateProgress?.state !== 'restarting'" class="release-update-action" type="button" :disabled="checkingUpdate" @click="update?.available ? installUpdate() : latestUpdate?.available ? inspectUpdate() : checkLatestMetadata()">
-            <Download v-if="update?.available" :size="15" />
-            <RefreshCw v-else :size="15" />
-            {{ update?.available ? t('releaseNotes.updateNow') : latestUpdate?.available ? t('releaseNotes.viewUpdate') : t('releaseNotes.recheck') }}
-          </button>
+          <button v-if="updateProgress?.state === 'ready-to-restart'" class="release-update-action" type="button" @click="restartUpdate"><RefreshCw :size="15" />{{ t('releaseNotes.restartNow') }}</button>
+          <button v-else-if="updateProgress?.state === 'downloading'" class="release-update-action secondary" type="button" @click="close">{{ t('releaseNotes.background') }}</button>
+          <button v-else-if="!progressActive && update?.available" class="release-update-action" type="button" :disabled="checkingUpdate" @click="installUpdate"><Download :size="15" />{{ t('releaseNotes.updateNow') }}</button>
+          <button v-else-if="!progressActive && latestUpdate?.available" class="release-update-action secondary" type="button" :disabled="checkingUpdate" @click="inspectUpdate">{{ t('releaseNotes.viewUpdate') }}</button>
+          <button v-else-if="!progressActive" class="release-update-refresh tooltip-anchor" type="button" :aria-label="t('releaseNotes.recheck')" :data-tooltip="t('releaseNotes.recheck')" :disabled="checkingUpdate" @click="checkLatestMetadata"><RefreshCw :size="16" /></button>
         </section>
 
         <div class="release-notes-scroll">
-          <ol class="release-notes-timeline">
-            <li v-for="(note, index) in visibleNotes" :key="note.version" :class="{ current: note.version === version }" :style="{ '--release-index': index }">
-              <span class="release-notes-node" aria-hidden="true"><Rocket v-if="note.version === version" :size="14" /><span v-else /></span>
+          <ol class="release-notes-list release-notes-timeline">
+            <li v-for="note in visibleNotes" :key="note.version" :class="{ current: note.version === version, expanded: isExpanded(note.version) }">
               <article>
-                <header class="release-note-meta">
-                  <div><strong>v{{ note.version }}</strong><span v-if="note.version === version">{{ t('releaseNotes.latest') }}</span><span v-else-if="note.draft" class="draft">{{ t('releaseNotes.draft') }}</span></div>
-                  <time v-if="note.releaseDate && note.releaseDate !== 'TBD'" :datetime="note.releaseDate"><CalendarDays :size="14" />{{ note.releaseDate }}</time>
-                  <small v-else><CircleDot :size="13" />{{ t('releaseNotes.draft') }}</small>
-                </header>
+                <button class="release-note-meta" type="button" :aria-expanded="isExpanded(note.version)" @click="toggleRelease(note.version)">
+                  <span class="release-note-version"><strong>v{{ note.version }}</strong><span v-if="note.version === version">{{ t('releaseNotes.latest') }}</span><span v-else-if="note.draft" class="draft">{{ t('releaseNotes.draft') }}</span></span>
+                  <span class="release-note-date"><time v-if="note.releaseDate && note.releaseDate !== 'TBD'" :datetime="note.releaseDate"><CalendarDays :size="14" />{{ note.releaseDate }}</time><small v-else><CircleDot :size="13" />{{ t('releaseNotes.draft') }}</small><ChevronDown :size="16" :class="{ open: isExpanded(note.version) }" /></span>
+                </button>
 
-                <section class="release-note-section">
-                  <h3><Sparkles :size="15" />{{ t('releaseNotes.changes') }}</h3>
-                  <ul v-if="publishedChanges(note.changes).length">
-                    <li v-for="change in publishedChanges(note.changes)" :key="change"><ChevronRight :size="14" />{{ change }}</li>
-                  </ul>
-                  <p v-else>{{ t('releaseNotes.pending') }}</p>
-                </section>
+                <div v-show="isExpanded(note.version)" class="release-note-detail">
+                  <section class="release-note-section">
+                    <h3><Sparkles :size="15" />{{ t('releaseNotes.changes') }}</h3>
+                    <ul v-if="publishedChanges(note.changes).length">
+                      <li v-for="change in publishedChanges(note.changes)" :key="change"><ChevronRight :size="14" />{{ change }}</li>
+                    </ul>
+                    <p v-else>{{ t('releaseNotes.pending') }}</p>
+                  </section>
 
-                <section v-if="publishedChanges(note.upgradeNotes).length" class="release-note-section release-note-upgrade">
-                  <h3><Wrench :size="15" />{{ t('releaseNotes.upgrade') }}</h3>
-                  <ul><li v-for="item in publishedChanges(note.upgradeNotes)" :key="item"><ChevronRight :size="14" />{{ item }}</li></ul>
-                </section>
+                  <section v-if="publishedChanges(note.upgradeNotes).length" class="release-note-section release-note-upgrade">
+                    <h3><Wrench :size="15" />{{ t('releaseNotes.upgrade') }}</h3>
+                    <ul><li v-for="item in publishedChanges(note.upgradeNotes)" :key="item"><ChevronRight :size="14" />{{ item }}</li></ul>
+                  </section>
+                </div>
               </article>
             </li>
           </ol>
         </div>
 
         <footer class="release-notes-footer">
-          <span><Sparkles :size="14" />KAI · Keep Approaching Ideal</span>
           <button class="command-button" type="button" @click="close"><Check :size="15" />{{ t('releaseNotes.done') }}</button>
         </footer>
       </section>

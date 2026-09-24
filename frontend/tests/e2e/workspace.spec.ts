@@ -2838,6 +2838,13 @@ test('expanded sidebar version opens release notes without a footer duplicate', 
   await expect(dialog.getByRole('heading', { name: '更新内容' }).first()).toBeVisible()
   await expect(dialog.locator('.release-notes-timeline li.current .release-note-section ul li').first()).toBeVisible()
   if (testInfo.project.name === 'web') await expect(dialog.locator('.release-update-panel')).toHaveCount(0)
+  const historyEntries = dialog.locator('.release-notes-list > li')
+  if (await historyEntries.count() > 1) {
+    const previousRelease = historyEntries.nth(1)
+    await expect(previousRelease.locator('.release-note-detail')).toBeHidden()
+    await previousRelease.locator('.release-note-meta').click()
+    await expect(previousRelease.locator('.release-note-detail')).toBeVisible()
+  }
 
   const bounds = await dialog.evaluate((element) => element.getBoundingClientRect())
   expect(bounds.left).toBeGreaterThanOrEqual(0)

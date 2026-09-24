@@ -5,7 +5,7 @@ Windows Runner，不在 Linux Web 发布任务中生成或覆盖用户数据。
 
 ## 工作流
 
-- `Web CI` 在推送和 Pull Request 时运行 Node 24、Python 3.13、前端类型检查、单元测试、
+- `Web CI` 在推送和 Pull Request 时运行 `.node-version`、`.python-version` 声明的 Node.js 与 Python、前端类型检查、单元测试、
   两套 Playwright 测试、浏览器构建和 Python 测试。成功后保留 7 天 `build/web` 制品。
 - `Release Web` 在 `master` 分支收到推送后自动执行。流水线重新验证并构建当前提交，再将
   同一制品交给部署任务。每个发布目录使用 `web-v版本号-提交SHA` 命名，避免同一版本重复

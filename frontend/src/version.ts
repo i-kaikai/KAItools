@@ -1,1 +1,5 @@
-export const APP_VERSION = __KAITOOLS_VERSION__
+export let APP_VERSION = ''
+
+export function setAppVersion(value: string): void {
+  APP_VERSION = value
+}

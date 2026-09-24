@@ -11,31 +11,34 @@ $Frontend = Join-Path $RepoRoot 'frontend'
 & (Join-Path $PSScriptRoot 'check_version.ps1')
 
 if (-not (Test-Path -LiteralPath $Python)) {
-    throw 'Missing .venv. Create it with Python 3.13 and install requirements-dev.txt.'
+    throw 'Missing .venv. Create it with the Python version declared in .python-version and install requirements-dev.txt.'
 }
+
+& (Join-Path $PSScriptRoot 'check_build_tools.ps1') -PythonPath $Python
+if ($LASTEXITCODE -ne 0) { throw 'Build tool version check failed' }
 
 Push-Location $Frontend
 try {
-    & pnpm install --frozen-lockfile --config.confirmModulesPurge=false
+    & corepack pnpm install --frozen-lockfile --config.confirmModulesPurge=false
     if ($LASTEXITCODE -ne 0) { throw 'pnpm install failed' }
-    & pnpm typecheck
+    & corepack pnpm typecheck
     if ($LASTEXITCODE -ne 0) { throw 'frontend typecheck failed' }
-    & pnpm test
+    & corepack pnpm test
     if ($LASTEXITCODE -ne 0) { throw 'frontend unit tests failed' }
-    & pnpm build
+    & corepack pnpm build
     if ($LASTEXITCODE -ne 0) { throw 'frontend build failed' }
     if (-not $SkipE2E) {
-        & pnpm test:e2e
+        & corepack pnpm test:e2e
         if ($LASTEXITCODE -ne 0) { throw 'Playwright tests failed' }
     }
-    & pnpm build:web
+    & corepack pnpm build:web
     if ($LASTEXITCODE -ne 0) { throw 'web frontend build failed' }
     if (-not $SkipE2E) {
-        & pnpm test:e2e:web
+        & corepack pnpm test:e2e:web
         if ($LASTEXITCODE -ne 0) { throw 'Web Playwright tests failed' }
     }
     # PyInstaller consumes build/web, so leave desktop-mode assets there.
-    & pnpm build
+    & corepack pnpm build
     if ($LASTEXITCODE -ne 0) { throw 'desktop frontend rebuild failed' }
 }
 finally {
