@@ -2,6 +2,7 @@
 set -euo pipefail
 
 updates_root="${KAITOOLS_UPDATE_ROOT:-}"
+action="${1:-deploy}"
 release_id="${KAITOOLS_UPDATE_RELEASE_ID:-}"
 archive="${KAITOOLS_UPDATE_ARCHIVE:-}"
 artifact_id="${KAITOOLS_GITHUB_ARTIFACT_ID:-}"
@@ -10,7 +11,7 @@ archive_sha256="${KAITOOLS_GITHUB_ARTIFACT_SHA256:-}"
 artifact_settings_file="${KAITOOLS_GITHUB_ARTIFACT_SETTINGS_FILE:-/srv/kaitools/deploy-secrets/github-artifact.env}"
 artifact_proxy_settings_file="${KAITOOLS_GITHUB_PROXY_SETTINGS_FILE:-/srv/kaitools/deploy-secrets/github-artifact-proxies.env}"
 [[ "$updates_root" = /* ]] || { echo "KAITOOLS_UPDATE_ROOT must be an absolute path" >&2; exit 1; }
-[[ "$release_id" =~ ^desktop-v[0-9]+\.[0-9]+\.[0-9]+-[0-9a-f]{12}$ ]] || { echo "invalid desktop release identifier" >&2; exit 1; }
+[[ "$action" = deploy || "$action" = cleanup ]] || { echo "unsupported action: $action" >&2; exit 1; }
 
 incoming_root="${updates_root}/.incoming"
 incoming="${incoming_root}/${release_id}"
@@ -46,6 +47,124 @@ cleanup() {
 }
 
 trap cleanup EXIT
+
+purge_historical_update_data() {
+  command -v python3 >/dev/null || fail "python3 is required to clean historical update data"
+  python3 - "$updates_root" <<'PY'
+import json
+from pathlib import Path
+import re
+import shutil
+import sys
+
+
+release_pattern = re.compile(r"desktop-v[0-9]+\.[0-9]+\.[0-9]+-[0-9a-f]{12}")
+manifest_pattern = re.compile(r"KAITools-v[0-9]+\.[0-9]+\.[0-9]+\.json(?:\.sig)?")
+object_pattern = re.compile(r"[0-9a-f]{64}")
+incoming_pattern = re.compile(r"\.desktop-v[0-9]+\.[0-9]+\.[0-9]+-[0-9a-f]{12}\..+|desktop-v[0-9]+\.[0-9]+\.[0-9]+-[0-9a-f]{12}\.tar\.gz")
+
+
+def fail(message: str) -> None:
+    raise SystemExit(f"UPDATE_CLEANUP_FAILED: {message}")
+
+
+root = Path(sys.argv[1]).resolve()
+releases = root / "releases"
+current = root / "current"
+if not root.is_dir() or not releases.is_dir() or not current.is_symlink():
+    fail("update root is incomplete")
+for managed_path in (releases, root / "manifests", root / "objects", root / ".incoming"):
+    if managed_path.exists() and managed_path.is_symlink():
+        fail(f"managed update path must not be a symbolic link: {managed_path.name}")
+
+try:
+    active_release = current.resolve(strict=True)
+except OSError as exc:
+    fail(f"current release is unavailable: {exc}")
+if active_release.parent != releases.resolve() or not active_release.is_dir() or not release_pattern.fullmatch(active_release.name):
+    fail("current release is outside the managed releases directory")
+
+latest_path = active_release / "latest.json"
+try:
+    latest = json.loads(latest_path.read_text(encoding="utf-8"))
+except (OSError, json.JSONDecodeError) as exc:
+    fail(f"current latest metadata is unreadable: {exc}")
+manifest_relative = latest.get("manifest") if isinstance(latest, dict) else None
+if not isinstance(manifest_relative, str) or not re.fullmatch(r"manifests/KAITools-v[0-9]+\.[0-9]+\.[0-9]+\.json", manifest_relative):
+    fail("current manifest path is invalid")
+manifest_path = (active_release / manifest_relative).resolve()
+if manifest_path.parent != (active_release / "manifests").resolve() or not manifest_path.is_file():
+    fail("current manifest is unavailable")
+
+try:
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+except (OSError, json.JSONDecodeError) as exc:
+    fail(f"current manifest is unreadable: {exc}")
+files = manifest.get("files") if isinstance(manifest, dict) else None
+if not isinstance(files, list) or not files:
+    fail("current manifest has no files")
+
+referenced_objects = set()
+for item in files:
+    object_relative = item.get("object") if isinstance(item, dict) else None
+    if not isinstance(object_relative, str) or not re.fullmatch(r"objects/[0-9a-f]{64}", object_relative):
+        fail("current manifest has an invalid object path")
+    referenced_objects.add(Path(object_relative).name)
+
+removed_releases = 0
+for entry in releases.iterdir():
+    if entry.resolve() == active_release:
+        continue
+    if entry.is_dir() and not entry.is_symlink() and release_pattern.fullmatch(entry.name):
+        shutil.rmtree(entry)
+        removed_releases += 1
+
+removed_manifests = 0
+manifests = root / "manifests"
+if manifests.is_dir():
+    keep_manifest_names = {Path(manifest_relative).name, f"{Path(manifest_relative).name}.sig"}
+    for entry in manifests.iterdir():
+        if entry.is_file() and manifest_pattern.fullmatch(entry.name) and entry.name not in keep_manifest_names:
+            entry.unlink()
+            removed_manifests += 1
+
+removed_objects = 0
+objects = root / "objects"
+if objects.is_dir():
+    for entry in objects.iterdir():
+        if entry.is_file() and object_pattern.fullmatch(entry.name) and entry.name not in referenced_objects:
+            entry.unlink()
+            removed_objects += 1
+
+removed_incoming = 0
+incoming = root / ".incoming"
+if incoming.is_dir():
+    for entry in incoming.iterdir():
+        if not incoming_pattern.fullmatch(entry.name):
+            continue
+        if entry.is_dir() and not entry.is_symlink():
+            shutil.rmtree(entry)
+        elif entry.is_file():
+            entry.unlink()
+        else:
+            continue
+        removed_incoming += 1
+
+print(
+    "UPDATE_CLEANUP_OK "
+    f"releases={removed_releases} manifests={removed_manifests} "
+    f"objects={removed_objects} incoming={removed_incoming}"
+)
+PY
+}
+
+if [[ "$action" = cleanup ]]; then
+  purge_historical_update_data
+  exit 0
+fi
+
+[[ "$release_id" =~ ^desktop-v[0-9]+\.[0-9]+\.[0-9]+-[0-9a-f]{12}$ ]] || { echo "invalid desktop release identifier" >&2; exit 1; }
+command -v python3 >/dev/null || fail "python3 is required to clean historical update data"
 
 start_artifact_download_heartbeat() {
   (
@@ -252,6 +371,7 @@ download_artifact_archive() {
 if [[ -e "$release_dir" || -L "$release_dir" ]]; then
   [[ -L "${updates_root}/current" && "$(readlink -f -- "${updates_root}/current")" = "$release_dir" ]] || fail "release directory already exists but is not current"
   echo "Desktop update release ${release_id} is already active"
+  purge_historical_update_data
   exit 0
 fi
 
@@ -289,3 +409,4 @@ if [[ -n "$archive" ]]; then
   rm -f -- "$archive"
 fi
 echo "Activated desktop update release $release_id"
+purge_historical_update_data
