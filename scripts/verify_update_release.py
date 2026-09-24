@@ -27,10 +27,12 @@ from devtoolkit.update_security import (  # noqa: E402
 )
 
 
-# A release can contain hundreds of objects. Keep the public verification
-# deliberately conservative and recycle clients between batches so transient
-# runner socket exhaustion does not abort a valid release.
-REMOTE_VERIFY_WORKERS = 2
+# A release can contain hundreds of objects. Verify at the normal production
+# concurrency first, then retry only objects affected by transient runner
+# transport/resource errors with a smaller connection pool. Clients are still
+# recycled between batches so a long verification does not retain stale sockets.
+REMOTE_VERIFY_INITIAL_WORKERS = 16
+REMOTE_VERIFY_FALLBACK_WORKERS = 2
 REMOTE_VERIFY_BATCH_SIZE = 16
 REMOTE_VERIFY_TIMEOUT_SECONDS = 30.0
 REMOTE_VERIFY_CHUNK_BYTES = 1024 * 1024
@@ -113,15 +115,15 @@ def require_httpx() -> Any:
     return httpx
 
 
-def create_remote_client(httpx: Any) -> Any:
+def create_remote_client(httpx: Any, workers: int = REMOTE_VERIFY_INITIAL_WORKERS) -> Any:
     return httpx.Client(
         http2=True,
         follow_redirects=True,
         headers={"User-Agent": "KAITools-Release-Verifier/1"},
         timeout=httpx.Timeout(REMOTE_VERIFY_TIMEOUT_SECONDS),
         limits=httpx.Limits(
-            max_connections=REMOTE_VERIFY_WORKERS,
-            max_keepalive_connections=REMOTE_VERIFY_WORKERS,
+            max_connections=workers,
+            max_keepalive_connections=workers,
             keepalive_expiry=REMOTE_VERIFY_TIMEOUT_SECONDS,
         ),
     )
@@ -192,18 +194,53 @@ def changed_files(files: list[dict[str, Any]], previous: dict[str, Any] | None) 
     return [item for item in files if previous_by_path.get(item["path"]) != item]
 
 
-def verify_remote_object_batch(client: Any, latest_url: str, files: list[dict[str, Any]]) -> None:
-    with ThreadPoolExecutor(max_workers=REMOTE_VERIFY_WORKERS) as executor:
-        futures = [executor.submit(verify_remote_object, client, latest_url, item) for item in files]
+def is_retryable_worker_error(exc: Exception) -> bool:
+    if isinstance(exc, OSError):
+        return True
+    try:
+        return isinstance(exc, require_httpx().TransportError)
+    except UpdateSecurityError:
+        return False
+
+
+def verify_remote_object_batch(
+    client: Any,
+    latest_url: str,
+    files: list[dict[str, Any]],
+    workers: int,
+) -> list[tuple[dict[str, Any], Exception]]:
+    retryable_failures: list[tuple[dict[str, Any], Exception]] = []
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = {executor.submit(verify_remote_object, client, latest_url, item): item for item in files}
         for future in as_completed(futures):
-            future.result()
+            try:
+                future.result()
+            except Exception as exc:
+                if not is_retryable_worker_error(exc):
+                    raise
+                retryable_failures.append((futures[future], exc))
+    return retryable_failures
 
 
-def verify_remote_objects(client_factory: Callable[[], Any], latest_url: str, files: list[dict[str, Any]]) -> None:
-    for offset in range(0, len(files), REMOTE_VERIFY_BATCH_SIZE):
-        batch = files[offset : offset + REMOTE_VERIFY_BATCH_SIZE]
-        with client_factory() as client:
-            verify_remote_object_batch(client, latest_url, batch)
+def verify_remote_objects(client_factory: Callable[[int], Any], latest_url: str, files: list[dict[str, Any]]) -> None:
+    pending = files
+    worker_levels = (REMOTE_VERIFY_INITIAL_WORKERS, REMOTE_VERIFY_FALLBACK_WORKERS)
+    last_failures: list[tuple[dict[str, Any], Exception]] = []
+    for level, workers in enumerate(worker_levels):
+        if not pending:
+            return
+        if level:
+            print(f"UPDATE_VERIFY_FALLBACK workers={workers} objects={len(pending)}", file=sys.stderr)
+        failures: list[tuple[dict[str, Any], Exception]] = []
+        for offset in range(0, len(pending), REMOTE_VERIFY_BATCH_SIZE):
+            batch = pending[offset : offset + REMOTE_VERIFY_BATCH_SIZE]
+            with client_factory(workers) as client:
+                failures.extend(verify_remote_object_batch(client, latest_url, batch, workers))
+        if not failures:
+            return
+        last_failures = failures
+        pending = [item for item, _ in failures]
+    raise last_failures[0][1]
 
 
 def verify_previous_release(
@@ -267,7 +304,7 @@ def verify_remote(
                 except (OSError, httpx.HTTPError, UpdateSecurityError) as exc:
                     print(f"UPDATE_VERIFY_PREVIOUS_UNAVAILABLE: {exc}; falling back to full verification", file=sys.stderr)
             files = changed_files(manifest["files"], previous)
-        verify_remote_objects(lambda: create_remote_client(httpx), latest_url, files)
+        verify_remote_objects(lambda workers: create_remote_client(httpx, workers), latest_url, files)
     except httpx.HTTPError as exc:
         raise UpdateSecurityError(f"公网更新请求失败: {exc}") from exc
     skipped = len(manifest["files"]) - len(files)

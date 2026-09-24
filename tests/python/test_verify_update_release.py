@@ -13,8 +13,9 @@ import scripts.verify_update_release as verifier
 from devtoolkit.update_security import sha256_bytes
 
 
-def test_verify_remote_objects_checks_every_object_with_bounded_workers_and_recycled_clients(monkeypatch) -> None:
-    workers = 2
+def test_verify_remote_objects_checks_every_object_at_initial_concurrency_without_fallback(monkeypatch) -> None:
+    initial_workers = 16
+    fallback_workers = 2
     batch_size = 3
     files = [
         {"path": f"file-{index}", "object": f"objects/{index}", "size": 1, "sha256": sha256_bytes(bytes([index]))}
@@ -33,8 +34,9 @@ def test_verify_remote_objects_checks_every_object_with_bounded_workers_and_recy
         def __exit__(self, *_: object) -> None:
             return None
 
-    def create_client() -> FakeClient:
+    def create_client(workers: int) -> FakeClient:
         client = FakeClient()
+        client.workers = workers
         clients.append(client)
         return client
 
@@ -48,15 +50,84 @@ def test_verify_remote_objects_checks_every_object_with_bounded_workers_and_recy
         with lock:
             active -= 1
 
-    monkeypatch.setattr(verifier, "REMOTE_VERIFY_WORKERS", workers)
+    monkeypatch.setattr(verifier, "REMOTE_VERIFY_INITIAL_WORKERS", initial_workers)
+    monkeypatch.setattr(verifier, "REMOTE_VERIFY_FALLBACK_WORKERS", fallback_workers)
     monkeypatch.setattr(verifier, "REMOTE_VERIFY_BATCH_SIZE", batch_size)
     monkeypatch.setattr(verifier, "verify_remote_object", fake_verify)
 
     verifier.verify_remote_objects(create_client, "https://updates.example/downloads/kaitools/latest.json", files)
 
     assert sorted(verified) == [f"file-{index}" for index in range(8)]
-    assert peak_active == workers
+    assert peak_active == batch_size
     assert len(clients) == 3
+    assert [client.workers for client in clients] == [initial_workers] * 3
+
+
+def test_verify_remote_objects_retries_only_transient_failures_at_fallback_concurrency(monkeypatch) -> None:
+    files = [
+        {"path": f"file-{index}", "object": f"objects/{index}", "size": 1, "sha256": sha256_bytes(bytes([index]))}
+        for index in range(4)
+    ]
+    clients: list[object] = []
+    verified: list[tuple[int, str]] = []
+
+    class FakeClient:
+        def __init__(self, workers: int) -> None:
+            self.workers = workers
+
+        def __enter__(self) -> "FakeClient":
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+    def create_client(workers: int) -> FakeClient:
+        client = FakeClient(workers)
+        clients.append(client)
+        return client
+
+    def fake_verify(client: FakeClient, _: str, item: dict[str, Any]) -> None:
+        verified.append((client.workers, item["path"]))
+        if client.workers == 16 and item["path"] == "file-1":
+            raise OSError(11, "Resource temporarily unavailable")
+
+    monkeypatch.setattr(verifier, "REMOTE_VERIFY_INITIAL_WORKERS", 16)
+    monkeypatch.setattr(verifier, "REMOTE_VERIFY_FALLBACK_WORKERS", 2)
+    monkeypatch.setattr(verifier, "REMOTE_VERIFY_BATCH_SIZE", 4)
+    monkeypatch.setattr(verifier, "verify_remote_object", fake_verify)
+
+    verifier.verify_remote_objects(create_client, "https://updates.example/downloads/kaitools/latest.json", files)
+
+    assert [client.workers for client in clients] == [16, 2]
+    assert sorted(verified) == [(2, "file-1"), (16, "file-0"), (16, "file-1"), (16, "file-2"), (16, "file-3")]
+
+
+def test_verify_remote_objects_does_not_fallback_for_integrity_error(monkeypatch) -> None:
+    files = [{"path": "bad", "object": "objects/bad", "size": 1, "sha256": "a" * 64}]
+    client_workers: list[int] = []
+
+    class FakeClient:
+        def __enter__(self) -> "FakeClient":
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+    def create_client(workers: int) -> FakeClient:
+        client_workers.append(workers)
+        return FakeClient()
+
+    def fake_verify(_: FakeClient, __: str, ___: dict[str, Any]) -> None:
+        raise verifier.UpdateSecurityError("公网更新对象校验失败: bad")
+
+    monkeypatch.setattr(verifier, "REMOTE_VERIFY_INITIAL_WORKERS", 16)
+    monkeypatch.setattr(verifier, "REMOTE_VERIFY_FALLBACK_WORKERS", 2)
+    monkeypatch.setattr(verifier, "verify_remote_object", fake_verify)
+
+    with pytest.raises(verifier.UpdateSecurityError, match="对象校验失败"):
+        verifier.verify_remote_objects(create_client, "https://updates.example/downloads/kaitools/latest.json", files)
+
+    assert client_workers == [16]
 
 
 def test_changed_files_only_returns_manifest_entries_that_differ() -> None:
