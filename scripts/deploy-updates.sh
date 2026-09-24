@@ -11,13 +11,21 @@ archive_sha256="${KAITOOLS_GITHUB_ARTIFACT_SHA256:-}"
 artifact_settings_file="${KAITOOLS_GITHUB_ARTIFACT_SETTINGS_FILE:-/srv/kaitools/deploy-secrets/github-artifact.env}"
 artifact_proxy_settings_file="${KAITOOLS_GITHUB_PROXY_SETTINGS_FILE:-/srv/kaitools/deploy-secrets/github-artifact-proxies.env}"
 [[ "$updates_root" = /* ]] || { echo "KAITOOLS_UPDATE_ROOT must be an absolute path" >&2; exit 1; }
-[[ "$action" = deploy || "$action" = cleanup ]] || { echo "unsupported action: $action" >&2; exit 1; }
+[[ "$action" = deploy || "$action" = cleanup || "$action" = rollback ]] || { echo "unsupported action: $action" >&2; exit 1; }
+if [[ "$action" = deploy ]]; then
+  [[ "$release_id" =~ ^desktop-v[0-9]+\.[0-9]+\.[0-9]+-[0-9a-f]{12}$ ]] || { echo "invalid desktop release identifier" >&2; exit 1; }
+fi
 
 incoming_root="${updates_root}/.incoming"
 incoming="${incoming_root}/${release_id}"
-release_dir="${updates_root}/releases/${release_id}"
+current_link="${updates_root}/current"
+previous_link="${updates_root}/.previous"
+active_dir="${updates_root}/.active-${release_id}"
 artifact_work_dir=""
 artifact_heartbeat_pid=""
+transient_staging=""
+downloaded_archive_path=""
+candidate_active_dir=""
 github_artifact_part_attempts=5
 github_proxy_probe_bytes=262144
 selected_github_proxy=""
@@ -25,6 +33,56 @@ selected_github_proxy=""
 fail() {
   echo "$*" >&2
   exit 1
+}
+
+resolve_managed_target() {
+  local link="$1"
+  local target
+  [[ -L "$link" ]] || fail "managed link is missing: $link"
+  target="$(readlink -f -- "$link")" || fail "cannot resolve managed link: $link"
+  [[ "$target" != "$updates_root" && "$target" == "$updates_root"/* ]] || fail "managed link escapes update root: $link"
+  printf '%s\n' "$target"
+}
+
+replace_managed_link() {
+  local link="$1"
+  local target="$2"
+  local candidate="${link}.next.$$"
+  [[ "$target" != "$updates_root" && "$target" == "$updates_root"/* ]] || fail "replacement target escapes update root: $target"
+  [[ -d "$target" && ! -L "$target" ]] || fail "replacement target is not a directory: $target"
+  [[ ! -e "$candidate" && ! -L "$candidate" ]] || fail "stale temporary link exists: $candidate"
+  ln -s -- "$target" "$candidate"
+  mv -Tf -- "$candidate" "$link"
+}
+
+remove_managed_directory() {
+  local target="$1"
+  [[ "$target" != "$updates_root" && "$target" == "$updates_root"/* ]] || fail "refusing to remove path outside update root: $target"
+  [[ "$target" != "$incoming_root" && "$target" != "$incoming_root"/* ]] || fail "refusing to remove incoming path as an active directory: $target"
+  [[ -d "$target" && ! -L "$target" ]] || return 0
+  rm -rf -- "$target"
+}
+
+remove_transient_directory() {
+  local target="$1"
+  [[ -n "$target" && "$target" != "$updates_root" && "$target" == "$updates_root"/* ]] || fail "refusing to remove invalid transient path: $target"
+  [[ "$target" == "$incoming_root"/* ]] || fail "refusing to remove non-incoming transient path: $target"
+  [[ -d "$target" && ! -L "$target" ]] || return 0
+  rm -rf -- "$target"
+}
+
+remove_legacy_layout() {
+  local current_target="$1"
+  local legacy resolved
+  for legacy in "$updates_root/releases" "$updates_root/manifests" "$updates_root/objects"; do
+    [[ -e "$legacy" || -L "$legacy" ]] || continue
+    resolved="$(readlink -f -- "$legacy")" || fail "cannot resolve legacy path: $legacy"
+    [[ "$resolved" != "$updates_root" && "$resolved" == "$updates_root"/* ]] || fail "legacy path escapes update root: $legacy"
+    case "$current_target" in
+      "$resolved"|"$resolved"/*) fail "current deployment still uses legacy path: $legacy" ;;
+    esac
+    rm -rf -- "$legacy"
+  done
 }
 
 cleanup_artifact_download() {
@@ -44,127 +102,27 @@ stop_artifact_download_heartbeat() {
 cleanup() {
   stop_artifact_download_heartbeat
   cleanup_artifact_download
+  if [[ -n "$transient_staging" && -d "$transient_staging" ]]; then
+    remove_transient_directory "$transient_staging"
+  fi
+  if [[ -n "$downloaded_archive_path" && -f "$downloaded_archive_path" ]]; then
+    rm -f -- "$downloaded_archive_path"
+  fi
+  if [[ -n "$candidate_active_dir" && -d "$candidate_active_dir" ]]; then
+    local current_target=""
+    if [[ -L "$current_link" ]]; then
+      current_target="$(readlink -f -- "$current_link" 2>/dev/null || true)"
+    fi
+    if [[ "$current_target" != "$candidate_active_dir" ]]; then
+      remove_managed_directory "$candidate_active_dir"
+      if [[ -L "$previous_link" ]]; then
+        rm -f -- "$previous_link"
+      fi
+    fi
+  fi
 }
 
 trap cleanup EXIT
-
-purge_historical_update_data() {
-  command -v python3 >/dev/null || fail "python3 is required to clean historical update data"
-  python3 - "$updates_root" <<'PY'
-import json
-from pathlib import Path
-import re
-import shutil
-import sys
-
-
-release_pattern = re.compile(r"desktop-v[0-9]+\.[0-9]+\.[0-9]+-[0-9a-f]{12}")
-manifest_pattern = re.compile(r"KAITools-v[0-9]+\.[0-9]+\.[0-9]+\.json(?:\.sig)?")
-object_pattern = re.compile(r"[0-9a-f]{64}")
-incoming_pattern = re.compile(r"\.desktop-v[0-9]+\.[0-9]+\.[0-9]+-[0-9a-f]{12}\..+|desktop-v[0-9]+\.[0-9]+\.[0-9]+-[0-9a-f]{12}\.tar\.gz")
-
-
-def fail(message: str) -> None:
-    raise SystemExit(f"UPDATE_CLEANUP_FAILED: {message}")
-
-
-root = Path(sys.argv[1]).resolve()
-releases = root / "releases"
-current = root / "current"
-if not root.is_dir() or not releases.is_dir() or not current.is_symlink():
-    fail("update root is incomplete")
-for managed_path in (releases, root / "manifests", root / "objects", root / ".incoming"):
-    if managed_path.exists() and managed_path.is_symlink():
-        fail(f"managed update path must not be a symbolic link: {managed_path.name}")
-
-try:
-    active_release = current.resolve(strict=True)
-except OSError as exc:
-    fail(f"current release is unavailable: {exc}")
-if active_release.parent != releases.resolve() or not active_release.is_dir() or not release_pattern.fullmatch(active_release.name):
-    fail("current release is outside the managed releases directory")
-
-latest_path = active_release / "latest.json"
-try:
-    latest = json.loads(latest_path.read_text(encoding="utf-8"))
-except (OSError, json.JSONDecodeError) as exc:
-    fail(f"current latest metadata is unreadable: {exc}")
-manifest_relative = latest.get("manifest") if isinstance(latest, dict) else None
-if not isinstance(manifest_relative, str) or not re.fullmatch(r"manifests/KAITools-v[0-9]+\.[0-9]+\.[0-9]+\.json", manifest_relative):
-    fail("current manifest path is invalid")
-manifest_path = (active_release / manifest_relative).resolve()
-if manifest_path.parent != (active_release / "manifests").resolve() or not manifest_path.is_file():
-    fail("current manifest is unavailable")
-
-try:
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-except (OSError, json.JSONDecodeError) as exc:
-    fail(f"current manifest is unreadable: {exc}")
-files = manifest.get("files") if isinstance(manifest, dict) else None
-if not isinstance(files, list) or not files:
-    fail("current manifest has no files")
-
-referenced_objects = set()
-for item in files:
-    object_relative = item.get("object") if isinstance(item, dict) else None
-    if not isinstance(object_relative, str) or not re.fullmatch(r"objects/[0-9a-f]{64}", object_relative):
-        fail("current manifest has an invalid object path")
-    referenced_objects.add(Path(object_relative).name)
-
-removed_releases = 0
-for entry in releases.iterdir():
-    if entry.resolve() == active_release:
-        continue
-    if entry.is_dir() and not entry.is_symlink() and release_pattern.fullmatch(entry.name):
-        shutil.rmtree(entry)
-        removed_releases += 1
-
-removed_manifests = 0
-manifests = root / "manifests"
-if manifests.is_dir():
-    keep_manifest_names = {Path(manifest_relative).name, f"{Path(manifest_relative).name}.sig"}
-    for entry in manifests.iterdir():
-        if entry.is_file() and manifest_pattern.fullmatch(entry.name) and entry.name not in keep_manifest_names:
-            entry.unlink()
-            removed_manifests += 1
-
-removed_objects = 0
-objects = root / "objects"
-if objects.is_dir():
-    for entry in objects.iterdir():
-        if entry.is_file() and object_pattern.fullmatch(entry.name) and entry.name not in referenced_objects:
-            entry.unlink()
-            removed_objects += 1
-
-removed_incoming = 0
-incoming = root / ".incoming"
-if incoming.is_dir():
-    for entry in incoming.iterdir():
-        if not incoming_pattern.fullmatch(entry.name):
-            continue
-        if entry.is_dir() and not entry.is_symlink():
-            shutil.rmtree(entry)
-        elif entry.is_file():
-            entry.unlink()
-        else:
-            continue
-        removed_incoming += 1
-
-print(
-    "UPDATE_CLEANUP_OK "
-    f"releases={removed_releases} manifests={removed_manifests} "
-    f"objects={removed_objects} incoming={removed_incoming}"
-)
-PY
-}
-
-if [[ "$action" = cleanup ]]; then
-  purge_historical_update_data
-  exit 0
-fi
-
-[[ "$release_id" =~ ^desktop-v[0-9]+\.[0-9]+\.[0-9]+-[0-9a-f]{12}$ ]] || { echo "invalid desktop release identifier" >&2; exit 1; }
-command -v python3 >/dev/null || fail "python3 is required to clean historical update data"
 
 start_artifact_download_heartbeat() {
   (
@@ -365,48 +323,93 @@ download_artifact_archive() {
   computed="$(sha256sum "$archive_part" | awk '{print $1}')"
   [[ "$computed" = "$archive_sha256" ]] || fail "GitHub artifact archive checksum mismatch"
   archive="${incoming_root}/${release_id}.tar.gz"
+  downloaded_archive_path="$archive"
   mv -f -- "$archive_part" "$archive"
 }
 
-if [[ -e "$release_dir" || -L "$release_dir" ]]; then
-  [[ -L "${updates_root}/current" && "$(readlink -f -- "${updates_root}/current")" = "$release_dir" ]] || fail "release directory already exists but is not current"
-  echo "Desktop update release ${release_id} is already active"
-  purge_historical_update_data
-  exit 0
-fi
+deploy() {
+  local previous_target=""
+  local staging
 
-if [[ -n "$artifact_id" ]]; then
   install -d -m 0755 "$incoming_root"
-  download_artifact_archive
-fi
+  if [[ -L "$current_link" && -d "$active_dir" && "$(readlink -f -- "$current_link")" = "$(readlink -f -- "$active_dir")" && ! -e "$previous_link" && ! -L "$previous_link" ]]; then
+    echo "Desktop update release $release_id is already active"
+    return 0
+  fi
+  [[ ! -e "$previous_link" && ! -L "$previous_link" ]] || fail "previous deployment cleanup is pending"
+  [[ ! -e "$active_dir" && ! -L "$active_dir" ]] || fail "active directory already exists: $active_dir"
 
-# The release contents are served by Nginx after activation. Keep only the download work area private.
-umask 022
+  if [[ -n "$artifact_id" ]]; then
+    download_artifact_archive
+  fi
 
-if [[ -n "$archive" ]]; then
-  [[ -f "$archive" ]] || { echo "missing uploaded update archive: $archive" >&2; exit 1; }
-  staging="${incoming_root}/.${release_id}.staging.$$"
-  [[ ! -e "$staging" && ! -L "$staging" ]] || { echo "stale update staging directory: $staging" >&2; exit 1; }
-  install -d -m 0755 "$staging"
-  tar -xzf "$archive" -C "$staging" --no-same-owner --no-same-permissions
-  incoming="$staging"
-fi
-[[ -d "$incoming" ]] || { echo "missing incoming update directory: $incoming" >&2; exit 1; }
-[[ -f "$incoming/latest.json" && -f "$incoming/latest.json.sig" ]] || { echo "latest update files are incomplete" >&2; exit 1; }
-[[ -d "$incoming/manifests" && -d "$incoming/objects" ]] || { echo "update artifact directories are incomplete" >&2; exit 1; }
-[[ ! -e "$release_dir" && ! -L "$release_dir" ]] || { echo "release already exists: $release_dir" >&2; exit 1; }
+  umask 022
+  if [[ -n "$archive" ]]; then
+    [[ -f "$archive" ]] || fail "missing uploaded update archive: $archive"
+    staging="${incoming_root}/.${release_id}.staging.$$"
+    [[ ! -e "$staging" && ! -L "$staging" ]] || fail "stale update staging directory: $staging"
+    install -d -m 0755 "$staging"
+    transient_staging="$staging"
+    tar -xzf "$archive" -C "$staging" --no-same-owner --no-same-permissions
+    incoming="$staging"
+  fi
+  [[ -d "$incoming" ]] || fail "missing incoming update directory: $incoming"
+  [[ -f "$incoming/latest.json" && -f "$incoming/latest.json.sig" ]] || fail "latest update files are incomplete"
+  [[ -d "$incoming/manifests" && -d "$incoming/objects" ]] || fail "update artifact directories are incomplete"
 
-install -d -m 0755 "$updates_root/releases" "$updates_root/manifests" "$updates_root/objects"
-mv -- "$incoming" "$release_dir"
-cp -R -- "$release_dir/manifests/." "$updates_root/manifests/"
-cp -R -- "$release_dir/objects/." "$updates_root/objects/"
+  candidate_active_dir="$active_dir"
+  mv -- "$incoming" "$active_dir"
+  transient_staging=""
+  if [[ -L "$current_link" ]]; then
+    previous_target="$(resolve_managed_target "$current_link")"
+    replace_managed_link "$previous_link" "$previous_target"
+  elif [[ -e "$current_link" ]]; then
+    fail "current path exists but is not a symlink: $current_link"
+  fi
+  replace_managed_link "$current_link" "$active_dir"
+  candidate_active_dir=""
+  if [[ -n "$archive" && -f "$archive" ]]; then
+    rm -f -- "$archive"
+  fi
+  echo "Activated desktop update release $release_id; run cleanup after public verification"
+}
 
-candidate="${updates_root}/current.next.$$"
-[[ ! -e "$candidate" && ! -L "$candidate" ]] || { echo "stale current link candidate exists" >&2; exit 1; }
-ln -s -- "$release_dir" "$candidate"
-mv -Tf -- "$candidate" "${updates_root}/current"
-if [[ -n "$archive" ]]; then
-  rm -f -- "$archive"
-fi
-echo "Activated desktop update release $release_id"
-purge_historical_update_data
+cleanup_deployment() {
+  local current_target previous_target
+  current_target="$(resolve_managed_target "$current_link")"
+  if [[ -L "$previous_link" ]]; then
+    previous_target="$(resolve_managed_target "$previous_link")"
+    [[ "$previous_target" != "$current_target" ]] || fail "previous deployment points to current deployment"
+    remove_managed_directory "$previous_target"
+    rm -f -- "$previous_link"
+  elif [[ -e "$previous_link" ]]; then
+    fail "previous deployment marker is not a symlink: $previous_link"
+  fi
+  remove_legacy_layout "$current_target"
+  echo "Cleaned previous desktop update data"
+}
+
+rollback_deployment() {
+  local current_target previous_target
+  current_target="$(resolve_managed_target "$current_link")"
+  if [[ -L "$previous_link" ]]; then
+    previous_target="$(resolve_managed_target "$previous_link")"
+    [[ "$previous_target" != "$current_target" ]] || fail "previous deployment points to current deployment"
+    replace_managed_link "$current_link" "$previous_target"
+    remove_managed_directory "$current_target"
+    rm -f -- "$previous_link"
+  elif [[ ! -e "$previous_link" ]]; then
+    rm -f -- "$current_link"
+    remove_managed_directory "$current_target"
+  else
+    fail "previous deployment marker is not a symlink: $previous_link"
+  fi
+  echo "Rolled back desktop update deployment"
+}
+
+case "${1:-deploy}" in
+  deploy) deploy ;;
+  cleanup) cleanup_deployment ;;
+  rollback) rollback_deployment ;;
+  *) fail "usage: $0 {deploy|cleanup|rollback}" ;;
+esac

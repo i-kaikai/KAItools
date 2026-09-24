@@ -40,12 +40,14 @@ latest.json + latest.json.sig
 
 ```text
 /srv/kaitools-downloads/
-├─ current -> /srv/kaitools-downloads/releases/desktop-vX.Y.Z-<sha>
-├─ releases/
-├─ latest.json                 # 可选兼容副本
-├─ latest.json.sig             # 可选兼容副本
-├─ manifests/
-└─ objects/
+├─ current -> /srv/kaitools-downloads/.active-desktop-vX.Y.Z-<sha>
+├─ .active-desktop-vX.Y.Z-<sha>/
+│  ├─ latest.json
+│  ├─ latest.json.sig
+│  ├─ manifests/
+│  └─ objects/
+├─ .previous -> 旧活动目录       # 仅公网校验期间存在
+└─ .incoming/
 ```
 
 在 SPA 的 `try_files ... /index.html` 回退规则之前配置 Nginx：
@@ -66,14 +68,14 @@ location = /downloads/kaitools/latest.json.sig {
 }
 
 location ^~ /downloads/kaitools/ {
-    alias /srv/kaitools-downloads/;
+    alias /srv/kaitools-downloads/current/;
     autoindex off;
     add_header Cache-Control "public, max-age=31536000, immutable" always;
     add_header X-Content-Type-Options "nosniff" always;
 }
 ```
 
-确保 `https://tools.imkai.top/downloads/kaitools/latest.json` 与 [update-policy.json](../packaging/update-policy.json) 一致。Nginx 配置完成后只需校验并 reload 一次；以后每次发版上传静态文件并切换 `current` 软链接，无需重启 Nginx、Java、Redis 或数据库。
+确保 `https://tools.imkai.top/downloads/kaitools/latest.json` 与 [update-policy.json](../packaging/update-policy.json) 一致。Nginx 配置完成后只需校验并 reload 一次；以后每次发版只切换固定的 `current` 软链接，无需重启 Nginx、Java、Redis 或数据库。
 
 ## 每次发版
 
@@ -104,21 +106,20 @@ release/updates/
 └─ objects/<sha256>
 ```
 
-每个 `objects/<sha256>` 是一个受管程序文件。名称由内容摘要决定，相同内容跨版本只保留一份。传统完整 ZIP 仍会生成，作为首装或紧急手动恢复包，不是正常应用内更新路径。
+每个 `objects/<sha256>` 是一个受管程序文件。名称由内容摘要决定，同一活动目录内的对象仍按内容摘要组织。传统完整 ZIP 仍会生成，作为首装或紧急手动恢复包，不是正常应用内更新路径。服务器不会长期保存历史版本目录或共享对象目录。
 
 `build_portable.ps1` 默认会重建 `dist/KAITools`。不得对含有真实 `dist/KAITools/data` 的用户运行目录直接执行；应使用隔离构建工作区，或先按仓库规范备份并恢复数据。
 
 ### 3. 上传与生效顺序
 
-GitHub Actions 会在每次推送 `master` 时自动完成构建和发布，发布账号只上传静态文件，严格按以下顺序操作：
+GitHub Actions 会在每次推送 `master` 时自动完成构建和发布：
 
-1. 上传 `objects/` 中的新摘要对象；已有同名摘要对象无需覆盖。
-2. 校验已上传对象的大小和 SHA-256。
-3. 上传 `manifests/KAITools-vX.Y.Z.json` 与对应 `.sig`。
-4. 从公网 HTTPS 读取版本清单及签名，确认均可访问。
-5. 上传 `latest.json` 和 `latest.json.sig` 到临时远程文件名。
-6. 将完整发布目录移动到 `releases/`，再在服务器同一文件系统内原子替换 `current` 软链接。
-7. 从公网再次读取 `latest.json`，确认版本号、摘要和签名为本次发布内容。
+1. 服务器将归档解压到 `.incoming/` 临时目录，并校验入口文件、清单和对象目录。
+2. 将完整候选目录移动为新的活动目录。
+3. 创建 `current.next`，再原子替换固定的 `current` 软链接。
+4. 从公网 HTTPS 读取版本清单、签名和对象，确认本次发布内容可用。
+5. 公网校验成功后删除 `.previous` 指向的旧目录及历史兼容目录。
+6. 校验失败时恢复 `current` 到 `.previous`，并删除失败的新目录。
 
 若使用 CDN，只刷新 `latest.json` 与 `latest.json.sig`。版本化清单和哈希对象应长期缓存，不需要刷新。
 
@@ -126,7 +127,7 @@ GitHub Actions 会在每次推送 `master` 时自动完成构建和发布，发�
 
 ## 回滚与故障处理
 
-发布错误时，不要删除历史对象或版本清单。使用同一私钥重新签名并原子回退 `latest.json` 和 `latest.json.sig` 到上一稳定版本，客户端下次检查将只看到回退后的版本。
+发布错误时，工作流会在公网校验失败后调用 `rollback`，原子恢复 `current` 并删除失败的新目录。公网校验成功后调用 `cleanup`，旧目录和历史兼容目录不再保留。
 
 客户端更新过程会先下载到 `data/pending/updates/`，校验对象摘要后才启动独立 Updater。Updater 备份将变化或删除的受管文件；新版本无法完成窗口启动健康检查时，会恢复旧程序并重新启动旧版。上次失败信息记录在受控 pending 目录，并在下次打开版本说明时展示。
 

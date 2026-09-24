@@ -299,6 +299,11 @@ jobs:
       - name: Verify published desktop update from the public URL
         env:
           PREVIOUS_UPDATE_AVAILABLE: ${{ steps.previous_update.outputs.available }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          KAITOOLS_UPDATE_ROOT: ${{ secrets.KAITOOLS_UPDATE_ROOT }}
+          RELEASE_ID: ${{ needs.desktop.outputs.release_id }}
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check -r requirements-release.txt
@@ -306,4 +311,13 @@ jobs:
           if [[ "$PREVIOUS_UPDATE_AVAILABLE" = true ]]; then
             args+=(--previous-latest "$RUNNER_TEMP/kaitools-previous-update/latest.json" --previous-latest-signature "$RUNNER_TEMP/kaitools-previous-update/latest.json.sig")
           fi
-          python scripts/verify_update_release.py "${args[@]}"
+          if ! python scripts/verify_update_release.py "${args[@]}"; then
+            echo "Public desktop update verification failed; rolling back active directory." >&2
+            target="$DEPLOY_USER@$DEPLOY_HOST"
+            releases_b64="$(printf '%s' "$KAITOOLS_UPDATE_ROOT" | base64 -w 0)"
+            ssh -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 -o ServerAliveCountMax=120 -p "$DEPLOY_PORT" -i "$HOME/.ssh/id_ed25519" "$target" "export KAITOOLS_UPDATE_ROOT=\$(printf '%s' '$releases_b64' | base64 --decode); export KAITOOLS_UPDATE_RELEASE_ID='$RELEASE_ID'; bash -s rollback" < scripts/deploy-updates.sh
+            exit 1
+          fi
+          target="$DEPLOY_USER@$DEPLOY_HOST"
+          releases_b64="$(printf '%s' "$KAITOOLS_UPDATE_ROOT" | base64 -w 0)"
+          ssh -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 -o ServerAliveCountMax=120 -p "$DEPLOY_PORT" -i "$HOME/.ssh/id_ed25519" "$target" "export KAITOOLS_UPDATE_ROOT=\$(printf '%s' '$releases_b64' | base64 --decode); export KAITOOLS_UPDATE_RELEASE_ID='$RELEASE_ID'; bash -s cleanup" < scripts/deploy-updates.sh

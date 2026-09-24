@@ -12,7 +12,7 @@ Windows Runner，不在 Linux Web 发布任务中生成或覆盖用户数据。
   推送互相覆盖。
 - `Release Web / desktop` 与 Web 发布并行运行，同样由每次 `master` 推送触发。Windows `desktop`
   Job 只构建、签名、校验并上传更新压缩包；Ubuntu `desktop-deploy` Job 仅通过 SSH 触发服务器
-  从 GitHub Actions Artifact 拉取归档，再切换桌面更新目录的 `current` 软链接。发布失败不会影响
+  从 GitHub Actions Artifact 拉取归档，再切换固定桌面更新目录的 `current` 软链接。公网校验成功后清理旧目录；发布失败不会影响
   Web Job 的独立回滚。
 
 生产发布任务使用 GitHub `production` Environment 读取 Secrets。若要求推送 `master` 后
@@ -42,8 +42,9 @@ Gitee master
   -> desktop update artifact
   -> Release Web / desktop-deploy (Ubuntu)
   -> SSH 触发 Linux 服务器经本机 GitHub 代理拉取 artifact
-  -> deploy-updates.sh 解压并切换 current
+  -> deploy-updates.sh 解压、切换 current
   -> 公网 latest.json 与更新对象校验
+  -> 校验成功后 cleanup，失败后 rollback
 ```
 ```
 
@@ -52,7 +53,7 @@ Gitee master
 - `build` Job 的 `release_id` 和 `artifact_name` 通过 Job outputs 传给 `deploy` Job；部署 Job
   不重新构建，也不在服务器执行 pnpm。
 - `release_id` 格式为 `web-v<全局 VERSION>-<提交 SHA 前 12 位>`，所以每个 master 提交都有
-  独立目录，可以通过 `previous` 回退。
+  可追踪的发布标识；桌面更新目录只保留当前活动目录，`.previous` 仅在公网校验期间用于回退。
 - `environment: production` 决定部署 Job 读取哪组 Secrets。配置 required reviewers 时，Job
   会在读取生产 Secrets 前暂停；要求推送后立即部署时不要配置审批人。
 - Web 脚本先把压缩包解到新目录，再原子切换 `current`。公网健康检查失败时会执行 rollback，
@@ -79,8 +80,8 @@ Gitee master
 - 桌面 Linux 发布失败：检查 `KAITOOLS_UPDATE_ROOT`、服务器的 GitHub Artifact 凭据、本机 GitHub
   代理、artifact 校验摘要和 `deploy-updates.sh`；该阶段使用与 Web 发布相同的 Linux SSH 参数和
   `known_hosts`，但不再通过 SCP 传输桌面归档。
-- 健康检查失败：检查 Nginx、静态目录 `current` 和 `WEB_HEALTH_URL`；失败后应自动恢复
-  `previous`，不要直接删除旧版本。
+- 健康检查失败：检查 Nginx、静态目录 `current` 和公网更新清单；失败后工作流会自动执行
+  `rollback`，成功后执行 `cleanup` 删除旧目录。
 
 ## GitHub Secrets
 
@@ -105,25 +106,24 @@ Gitee master
 
 ## 服务器准备
 
-首次接入自动发布前，发布目录必须已有一个已验证的历史版本并存在
-`current` 软链接。部署脚本会把它记录为 `previous`，随后才切换到新版本；这样健康检查
-失败时才能自动回退。目录结构如下：
+首次接入自动发布前，发布目录需要配置好固定的 `current` 软链接入口。部署期间会暂时创建
+`.previous`，公网校验完成后立即删除旧活动目录。目录结构如下：
 
 ```text
-WEB_RELEASES_DIR/
-  current -> /srv/kaitools/web/web-v1.4.13
-  previous -> /srv/kaitools/web/web-v1.4.12
-  web-v1.4.13/
+KAITOOLS_UPDATE_ROOT/
+  current -> /srv/kaitools-downloads/.active-desktop-vX.Y.Z-<sha>
+  .active-desktop-vX.Y.Z-<sha>/
+  .previous -> 旧活动目录（仅校验期间）
   .incoming/
 ```
 
 Nginx 静态根目录应指向 `WEB_RELEASES_DIR/current`，并保持 `/api/` 使用独立的反向代理。
-部署用户不需要、也不应拥有修改 Nginx、DNS 或证书的权限。脚本不会删除旧版本；清理策略
-应在确认回滚窗口后由运维人员单独执行。
+部署用户不需要、也不应拥有修改 Nginx、DNS 或证书的权限。桌面发布成功后脚本自动删除旧活动目录，
+不保留历史版本和共享对象目录。
 
-桌面更新目录的 Nginx 路由应将 `/downloads/kaitools/latest.json` 和签名文件指向
-`KAITOOLS_UPDATE_ROOT/current/`，并将 `manifests/`、`objects/` 指向更新根目录。桌面发布
-Job 与 Web 发布 Job 都由 `master` 推送触发，但分别使用独立的发布目录和校验流程。
+桌面更新目录的 Nginx 路由应将 `/downloads/kaitools/latest.json`、签名文件以及其余
+`manifests/`、`objects/` 路径统一指向 `KAITOOLS_UPDATE_ROOT/current/`。桌面发布 Job 与 Web 发布
+Job 都由 `master` 推送触发，但分别使用独立的发布目录和校验流程。
 
 服务器还需为部署账号准备一个不被 Web 服务映射、且与 `web` 目录同级的私有目录：
 `/srv/kaitools/deploy-secrets`。其中的 `github-artifact.env` 仅包含本机 GitHub 代理地址和
