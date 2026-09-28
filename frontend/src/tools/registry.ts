@@ -256,6 +256,17 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     initialState: () => ({ mode: 'timestamp', timestamp: '', unit: 'auto', zone: Intl.DateTimeFormat().resolvedOptions().timeZone, dateTime: '' }),
   },
   {
+    id: 'date-calculator',
+    name: '日期计算器',
+    description: '日期加减、工作日计算、间隔、倒计时与年龄信息',
+    keywords: ['date calculator', 'date difference', 'countdown', 'workday', 'business day', 'age', '日期计算', '工作日', '倒计时', '日期间隔', '年龄', '星期'],
+    category: 'productivity',
+    icon: CalendarClock,
+    ...lazyTool(() => import('./dateCalculator/DateCalculatorTool.vue')),
+    initialState: () => ({}),
+    singleton: true,
+  },
+  {
     id: 'base64-text',
     name: 'Base64 文本',
     description: 'UTF-8 文本编码与解码',

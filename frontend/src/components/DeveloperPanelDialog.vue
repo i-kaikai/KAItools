@@ -7,6 +7,7 @@ import { checkLocalService, DEFAULT_LOCAL_API_ORIGIN, resolveLocalServiceOrigin 
 import { isWebRuntime } from '@/runtime'
 import { useAppStore } from '@/stores/app'
 import { useToastStore } from '@/stores/toast'
+import { destroyErudaConsole, openErudaConsole } from '@/utils/erudaConsole'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
@@ -16,6 +17,7 @@ const origin = ref(DEFAULT_LOCAL_API_ORIGIN)
 const useLocalApi = ref(false)
 const connectionState = ref<'idle' | 'checking' | 'ready' | 'error'>('idle')
 const connectionMessage = ref('尚未检测本地服务')
+const erudaState = ref<'idle' | 'loading' | 'ready'>('idle')
 const validOrigin = computed(() => resolveLocalServiceOrigin(origin.value))
 
 watch(() => props.open, (open) => {
@@ -67,8 +69,33 @@ async function openDevtools(): Promise<void> {
   if (!result.ok) toast.show(result.error.message, 'error')
 }
 
+async function startEruda(): Promise<void> {
+  if (erudaState.value === 'loading') return
+  erudaState.value = 'loading'
+  try {
+    const opened = await openErudaConsole()
+    if (!opened) {
+      erudaState.value = 'idle'
+      return
+    }
+    erudaState.value = 'ready'
+    emit('close')
+  } catch (error) {
+    erudaState.value = 'idle'
+    const message = error instanceof Error ? error.message : String(error)
+    toast.show('Eruda 控制台启动失败：' + message, 'error')
+  }
+}
+
 async function disableDeveloperMode(): Promise<void> {
   const saved = await app.setDeveloperModeEnabled(false)
+  try {
+    await destroyErudaConsole()
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    toast.show('Eruda 控制台关闭失败：' + message, 'error')
+  }
+  erudaState.value = 'idle'
   if (!saved) return
   toast.show('开发者模式已关闭')
   emit('close')
@@ -89,7 +116,14 @@ async function disableDeveloperMode(): Promise<void> {
       <section class="developer-runtime-section">
         <div class="developer-section-heading"><TerminalSquare :size="17" /><span><strong>运行时工具</strong><small>{{ isWebRuntime ? 'Browser' : 'WebView2' }}</small></span></div>
         <dl><div><dt>当前 API</dt><dd>{{ app.apiOrigin }}/api</dd></div><div><dt>默认服务器</dt><dd>https://tools.imkai.top/api</dd></div><div><dt>WebView2</dt><dd>{{ isWebRuntime ? '浏览器环境' : app.runtime?.webview2 ?? '检测中' }}</dd></div><div><dt>数据目录</dt><dd :title="app.runtime?.dataDirectory">{{ app.runtime?.dataDirectory ?? '加载中' }}</dd></div></dl>
-        <button class="command-button secondary" type="button" @click="openDevtools"><TerminalSquare :size="15" />{{ isWebRuntime ? '浏览器请使用 F12' : '打开 WebView2 DevTools' }}</button>
+        <div class="developer-runtime-actions">
+          <button class="command-button" type="button" :disabled="erudaState === 'loading'" @click="startEruda">
+            <LoaderCircle v-if="erudaState === 'loading'" :size="15" />
+            <Code2 v-else :size="15" />
+            {{ erudaState === 'loading' ? '正在启动 Eruda…' : erudaState === 'ready' ? '显示 Eruda 控制台' : '打开 Eruda 控制台' }}
+          </button>
+          <button class="command-button secondary" type="button" @click="openDevtools"><TerminalSquare :size="15" />{{ isWebRuntime ? '浏览器请使用 F12' : '打开 WebView2 DevTools' }}</button>
+        </div>
       </section>
       <footer><button class="developer-disable-button" type="button" @click="disableDeveloperMode">退出开发者模式</button><button class="command-button" type="button" @click="emit('close')">完成</button></footer>
     </section>

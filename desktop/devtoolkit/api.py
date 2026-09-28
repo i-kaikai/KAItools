@@ -457,9 +457,9 @@ class DesktopApi:
             LOGGER.info("update_check_failed code=%s reason=%s", exc.code, exc)
             return _failure(exc.code, str(exc), exc.details)
 
-    def check_for_latest_version(self) -> dict[str, Any]:
+    def check_for_latest_version(self, force_refresh: bool = False) -> dict[str, Any]:
         try:
-            return _success(self._update_manager.check_latest())
+            return _success(self._update_manager.check_latest(force_refresh))
         except UpdateError as exc:
             LOGGER.info("latest_version_check_failed code=%s reason=%s", exc.code, exc)
             return _failure(exc.code, str(exc), exc.details)

@@ -4,6 +4,7 @@ import {
   ChevronDown,
   CircleCheck,
   CircleUserRound,
+  Code2,
   FolderArchive,
   Globe2,
   Monitor,
@@ -43,7 +44,8 @@ import { useToastStore } from '@/stores/toast'
 import type { AppLocale, ThemeMode, ToolTab } from '@/types'
 import { homeTool, toolsById, workspaceTools } from '@/tools/registry'
 import { APP_VERSION } from '@/version'
-import { checkLatestVersion, startUpdateProgressPolling, stopUpdateProgressPolling, updateProgress } from '@/updateState'
+import { checkLatestVersion, latestUpdate, startUpdateProgressPolling, stopUpdateProgressPolling, updateProgress } from '@/updateState'
+import { destroyErudaConsole, erudaConsoleActive, erudaConsoleVisible, toggleErudaConsole } from '@/utils/erudaConsole'
 
 const app = useAppStore()
 const toast = useToastStore()
@@ -55,7 +57,7 @@ const languageMenuOpen = ref(false)
 const developerPanelOpen = ref(false)
 const applicationSettingsOpen = ref(false)
 const releaseNotesOpen = ref(false)
-const updateAvailable = ref(false)
+const updateAvailable = computed(() => !isWebRuntime && latestUpdate.value?.available === true)
 let developerUnlockClicks = 0
 let developerUnlockTimer: number | undefined
 const tabMenu = ref({ visible: false, x: 0, y: 0, tabId: '' })
@@ -93,6 +95,15 @@ async function restartBackgroundUpdate(): Promise<void> {
   if (!result.ok) toast.show(result.error.message, 'error')
 }
 
+async function toggleErudaVisibility(): Promise<void> {
+  try {
+    await toggleErudaConsole()
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    toast.show('Eruda 控制台操作失败：' + message, 'error')
+  }
+}
+
 async function signOut(): Promise<void> {
   if (app.account) await logoutLocalAccount(app.apiOrigin)
   app.clearSession()
@@ -109,8 +120,7 @@ function handleVersionClick(event: MouseEvent): void {
 async function checkStartupUpdate(): Promise<void> {
   if (isWebRuntime) return
   try {
-    const result = await checkLatestVersion()
-    if (result.ok) updateAvailable.value = result.data.available
+    await checkLatestVersion()
   } catch {
     // Update checks are advisory and must never block local desktop startup.
   }
@@ -322,6 +332,7 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   app.flushSessionWorkspace()
+  void destroyErudaConsole().catch(() => undefined)
   window.clearTimeout(developerUnlockTimer)
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('pointerdown', closeTabMenu)
@@ -535,6 +546,15 @@ onBeforeUnmount(() => {
       @retry-shortcut-sync="app.retryShortcutSync"
     />
     <DeveloperPanelDialog :open="developerPanelOpen && developerModeActive" @close="developerPanelOpen = false" />
+    <Teleport to="body">
+      <IconButton
+        v-if="erudaConsoleActive"
+        class="eruda-console-toggle"
+        :icon="erudaConsoleVisible ? X : Code2"
+        :label="erudaConsoleVisible ? '隐藏 Eruda 控制台' : '显示 Eruda 控制台'"
+        @click="toggleErudaVisibility"
+      />
+    </Teleport>
     <Teleport to="body">
       <aside v-if="backgroundUpdateVisible && !releaseNotesOpen" class="background-update-status" aria-live="polite">
         <div class="background-update-header"><strong>{{ updateProgress?.state === 'ready-to-restart' ? t('releaseNotes.readyToRestart') : updateProgress?.state === 'restarting' ? t('releaseNotes.restarting') : updateProgress?.state === 'failed' ? t('releaseNotes.updateFailed') : t('releaseNotes.backgroundDownloading') }}</strong><button type="button" :aria-label="t('releaseNotes.viewProgress')" @click="releaseNotesOpen = true">{{ t('releaseNotes.viewProgress') }}</button></div>

@@ -91,6 +91,7 @@ describe('new local developer tools', () => {
     const json = workspaceTools.find((tool) => tool.id === 'json')
     const sql = workspaceTools.find((tool) => tool.id === 'sql')
     const calculator = workspaceTools.find((tool) => tool.id === 'calculator')
+    const dateCalculator = workspaceTools.find((tool) => tool.id === 'date-calculator')
     const clipboardHistory = workspaceTools.find((tool) => tool.id === 'clipboard-history')
     const imageFormat = workspaceTools.find((tool) => tool.id === 'image-format')
     expect(regex?.chainInput?.('alpha')).toEqual({ input: 'alpha' })
@@ -99,6 +100,7 @@ describe('new local developer tools', () => {
     expect(sql?.description).toBe('多数据库 SQL 格式化与方言转换')
     expect(sql?.keywords).toEqual(expect.arrayContaining(['oracle', '转换']))
     expect(calculator?.chainInput?.('2 + 2')).toEqual({ section: 'scientific', expression: '2 + 2' })
+    expect(dateCalculator).toMatchObject({ id: 'date-calculator', name: '日期计算器', category: 'productivity', singleton: true })
     expect(clipboardHistory?.desktopOnly).toBe(true)
     expect(imageFormat).toMatchObject({ name: '图片格式转换', category: 'media' })
     expect(toolCategories.map((category) => category.id)).toEqual(['data', 'encoding', 'media', 'document', 'debugging', 'code', 'workflow', 'productivity', 'text'])
@@ -107,7 +109,7 @@ describe('new local developer tools', () => {
     expect(workspaceTools.find((tool) => tool.id === 'file-manager')?.category).toBe('document')
     expect(workspaceTools.find((tool) => tool.id === 'clipboard-history')?.category).toBe('text')
     expect(Object.fromEntries(toolCategories.map((category) => [category.id, workspaceTools.filter((tool) => tool.category === category.id).length]))).toEqual({
-      data: 4, encoding: 5, media: 4, document: 4, debugging: 3, code: 4, workflow: 4, productivity: 4, text: 4,
+      data: 4, encoding: 5, media: 4, document: 4, debugging: 3, code: 4, workflow: 4, productivity: 5, text: 4,
     })
     expect(workspaceTools.filter((tool) => tool.chainInput).length).toBeGreaterThanOrEqual(10)
   })

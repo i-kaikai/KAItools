@@ -101,6 +101,7 @@
 .release-update-label > b { padding: 1px 5px; border-radius: 4px; color: var(--accent); background: var(--accent-soft); font-size: 10px; }
 .release-update-copy > strong { display: inline-flex; min-width: 0; align-items: center; gap: 6px; color: var(--text-primary); font-size: 12px; font-weight: 600; line-height: 1.3; }
 .release-update-copy > small { color: var(--text-secondary); font-size: 11px; line-height: 1.35; overflow-wrap: anywhere; }
+.release-update-spinner { display: inline-block; flex: 0 0 auto; transform-origin: center; animation: spin 700ms linear infinite; }
 .release-update-release-notes { display: grid; gap: 2px; margin-top: 4px; }
 .release-update-release-notes > small { color: var(--text-faint); font-size: 10px; font-weight: 600; }
 .release-update-release-notes ul { display: grid; gap: 1px; margin: 0; padding: 0; color: var(--text-secondary); font-size: 11px; list-style: none; }
@@ -110,6 +111,7 @@
 .release-update-action.secondary { color: var(--text-primary); background: var(--surface-hover); }
 .release-update-action:active { transform: scale(.97); }
 .release-update-action:disabled { cursor: wait; opacity: .55; }
+.release-update-actions { display: flex; align-items: center; justify-self: end; gap: 4px; }
 .release-update-refresh { position: relative; display: grid; width: 30px; height: 30px; place-items: center; padding: 0; border: 0; border-radius: 7px; color: var(--text-faint); background: transparent; cursor: pointer; }
 .release-update-refresh:disabled { cursor: wait; opacity: .45; }
 .release-update-progress { display: block; width: 100%; height: 4px; margin-top: 5px; overflow: hidden; border-radius: 99px; background: var(--border-subtle); }
@@ -172,8 +174,8 @@
   .release-notes-summary { flex-wrap: wrap; gap: 5px 14px; padding: 7px 18px; }
   .release-notes-summary code { width: 100%; margin-left: 0; }
   .release-update-panel { grid-template-columns: 28px minmax(0, 1fr); align-items: start; margin: 8px 12px; }
-  .release-update-action { grid-column: 2; justify-self: start; }
-  .release-update-refresh { grid-column: 2; justify-self: start; }
+  .release-update-actions { grid-column: 2; justify-self: start; }
+  .release-update-action { justify-self: start; }
   .release-notes-scroll { padding: 4px 12px 16px; }
   .release-note-meta { min-height: 46px; }
   .release-note-date time { font-size: 10px; }
@@ -192,6 +194,8 @@
   .release-note-date > svg { transition: none; }
   .release-update-spinner { animation: none; }
 }
+
+:root[data-motion='reduced'] .release-update-spinner { animation: none; }
 
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
   .release-notes-backdrop { backdrop-filter: none; }

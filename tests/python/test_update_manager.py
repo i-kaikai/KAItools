@@ -4,6 +4,7 @@ import base64
 import io
 import json
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -43,7 +44,13 @@ def fixture_paths(tmp_path: Path) -> AppPaths:
     return AppPaths(application, resources, application / "data")
 
 
-def signed_feed(paths: AppPaths, files: list[tuple[str, bytes]], *, signature_valid: bool = True) -> dict[str, bytes]:
+def signed_feed(
+    paths: AppPaths,
+    files: list[tuple[str, bytes]],
+    *,
+    signature_valid: bool = True,
+    version: str = "9.9.9",
+) -> dict[str, bytes]:
     private = Ed25519PrivateKey.generate()
     paths.update_public_key_file.write_bytes(
         private.public_key().public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)
@@ -52,13 +59,13 @@ def signed_feed(paths: AppPaths, files: list[tuple[str, bytes]], *, signature_va
         {"path": path, "sha256": sha256_bytes(content), "size": len(content), "object": f"objects/{sha256_bytes(content)}"}
         for path, content in files
     ]
-    manifest = {"schemaVersion": 1, "product": "KAITools", "version": "9.9.9", "files": manifest_files}
+    manifest = {"schemaVersion": 1, "product": "KAITools", "version": version, "files": manifest_files}
     latest = {
         "schemaVersion": 1,
         "product": "KAITools",
         "channel": "stable",
-        "version": "9.9.9",
-        "manifest": "manifests/KAITools-v9.9.9.json",
+        "version": version,
+        "manifest": f"manifests/KAITools-v{version}.json",
         "manifestSha256": sha256_bytes(canonical_json(manifest)),
         "publishedAt": "2026-09-21",
         "releaseNotes": ["测试更新"],
@@ -68,8 +75,8 @@ def signed_feed(paths: AppPaths, files: list[tuple[str, bytes]], *, signature_va
     entries = {
         base + "latest.json": canonical_json(latest),
         base + "latest.json.sig": (sign_json(latest, private) + "\n").encode("ascii"),
-        base + "manifests/KAITools-v9.9.9.json": canonical_json(manifest),
-        base + "manifests/KAITools-v9.9.9.json.sig": (sign_json(manifest, private) + "\n").encode("ascii"),
+        base + f"manifests/KAITools-v{version}.json": canonical_json(manifest),
+        base + f"manifests/KAITools-v{version}.json.sig": (sign_json(manifest, private) + "\n").encode("ascii"),
     }
     for path, content in files:
         entries[base + f"objects/{sha256_bytes(content)}"] = content
@@ -116,6 +123,135 @@ def test_check_latest_reads_metadata_without_scanning_local_files(tmp_path: Path
         "releaseNotes": ["测试更新"],
         "publishedAt": "2026-09-21",
     }
+
+
+def test_positive_latest_cache_survives_restart_and_is_kept_on_manual_check_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths = fixture_paths(tmp_path)
+    monkeypatch.setattr("devtoolkit.update_manager.APP_VERSION", "1.0.0")
+    entries = signed_feed(paths, [("KAITools.exe", b"new")])
+    calls: list[str] = []
+
+    def counting_urlopen(request: object, **kwargs: object) -> Response:
+        calls.append(str(getattr(request, "full_url", request)))
+        return fake_urlopen(entries)(request, **kwargs)
+
+    first = UpdateManager(paths, urlopen=counting_urlopen).check_latest()
+    cached_bytes = paths.latest_update_state_file.read_bytes()
+
+    def offline_urlopen(*_args: object, **_kwargs: object) -> Response:
+        raise OSError("offline")
+
+    restarted_manager = UpdateManager(paths, urlopen=offline_urlopen)
+    assert restarted_manager.check_latest() == first
+    assert calls == [
+        "https://updates.example.test/kaitools/latest.json",
+        "https://updates.example.test/kaitools/latest.json.sig",
+    ]
+
+    with pytest.raises(UpdateError, match="无法检查更新") as error:
+        restarted_manager.check_latest(force_refresh=True)
+
+    assert error.value.code == "UPDATE_CHECK_FAILED"
+    assert paths.latest_update_state_file.read_bytes() == cached_bytes
+
+
+def test_invalid_manual_feed_signature_does_not_clear_a_verified_positive_cache(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths = fixture_paths(tmp_path)
+    monkeypatch.setattr("devtoolkit.update_manager.APP_VERSION", "1.0.0")
+    entries = signed_feed(paths, [("KAITools.exe", b"new")])
+    manager = UpdateManager(paths, urlopen=fake_urlopen(entries))
+    manager.check_latest()
+    cached_bytes = paths.latest_update_state_file.read_bytes()
+
+    bad_entries = dict(entries)
+    bad_entries["https://updates.example.test/kaitools/latest.json.sig"] = base64.b64encode(b"x" * 64)
+    with pytest.raises(UpdateError, match="签名") as error:
+        UpdateManager(paths, urlopen=fake_urlopen(bad_entries)).check_latest(force_refresh=True)
+
+    assert error.value.code == "UPDATE_METADATA_INVALID"
+    assert paths.latest_update_state_file.read_bytes() == cached_bytes
+
+
+def test_tampered_cache_signature_is_rejected_and_replaced_from_signed_feed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths = fixture_paths(tmp_path)
+    monkeypatch.setattr("devtoolkit.update_manager.APP_VERSION", "1.0.0")
+    entries = signed_feed(paths, [("KAITools.exe", b"new")])
+    UpdateManager(paths, urlopen=fake_urlopen(entries)).check_latest()
+
+    cached = json.loads(paths.latest_update_state_file.read_text(encoding="utf-8"))
+    cached["signature"] = base64.b64encode(b"x" * 64).decode("ascii")
+    paths.latest_update_state_file.write_text(json.dumps(cached), encoding="utf-8")
+
+    result = UpdateManager(paths, urlopen=fake_urlopen(entries)).check_latest()
+
+    assert result["available"] is True
+    repaired = json.loads(paths.latest_update_state_file.read_text(encoding="utf-8"))
+    assert repaired["signature"] != cached["signature"]
+
+
+def test_negative_latest_cache_expires_after_24_hours_and_force_refresh_bypasses_it(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths = fixture_paths(tmp_path)
+    monkeypatch.setattr("devtoolkit.update_manager.APP_VERSION", "9.9.9")
+    entries = signed_feed(paths, [("KAITools.exe", b"same")], version="9.9.9")
+    calls: list[str] = []
+
+    def counting_urlopen(request: object, **kwargs: object) -> Response:
+        calls.append(str(getattr(request, "full_url", request)))
+        return fake_urlopen(entries)(request, **kwargs)
+
+    manager = UpdateManager(paths, urlopen=counting_urlopen)
+    initial = manager.check_latest()
+    assert initial["available"] is False
+    assert len(calls) == 2
+    assert manager.check_latest()["available"] is False
+    assert len(calls) == 2
+
+    cached = json.loads(paths.latest_update_state_file.read_text(encoding="utf-8"))
+    old_time = datetime.now(timezone.utc) - timedelta(hours=24, seconds=1)
+    cached["checkedAt"] = old_time.isoformat(timespec="seconds").replace("+00:00", "Z")
+    paths.latest_update_state_file.write_text(json.dumps(cached), encoding="utf-8")
+    assert manager.check_latest()["available"] is False
+    assert len(calls) == 4
+
+    assert manager.check_latest(force_refresh=True)["available"] is False
+    assert len(calls) == 6
+
+
+def test_reaching_cached_target_clears_old_badge_and_forces_a_fresh_check(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths = fixture_paths(tmp_path)
+    monkeypatch.setattr("devtoolkit.update_manager.APP_VERSION", "1.0.0")
+    entries = signed_feed(paths, [("KAITools.exe", b"new")])
+    UpdateManager(paths, urlopen=fake_urlopen(entries)).check_latest()
+    assert json.loads(paths.latest_update_state_file.read_text(encoding="utf-8"))["currentVersion"] == "1.0.0"
+
+    monkeypatch.setattr("devtoolkit.update_manager.APP_VERSION", "9.9.9")
+    calls: list[str] = []
+
+    def counting_urlopen(request: object, **kwargs: object) -> Response:
+        calls.append(str(getattr(request, "full_url", request)))
+        return fake_urlopen(entries)(request, **kwargs)
+
+    result = UpdateManager(paths, urlopen=counting_urlopen).check_latest()
+
+    assert result["available"] is False
+    assert len(calls) == 2
+    saved = json.loads(paths.latest_update_state_file.read_text(encoding="utf-8"))
+    assert saved["currentVersion"] == "9.9.9"
 
 
 def test_check_reports_repair_when_latest_version_files_are_damaged(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

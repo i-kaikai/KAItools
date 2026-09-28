@@ -52,6 +52,7 @@ export type ToolId =
   | 'notes'
   | 'clipboard-history'
   | 'calculator'
+  | 'date-calculator'
 
 export interface ApiError {
   code: string

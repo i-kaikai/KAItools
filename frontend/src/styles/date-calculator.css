@@ -1,0 +1,82 @@
+.date-calculator-tool { min-height: 0; height: 100%; gap: 0; padding-top: 18px; overflow: auto; }
+.date-calculator-header { display: flex; min-height: 58px; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.date-calculator-title { display: flex; min-width: 0; align-items: center; gap: 10px; }
+.date-calculator-title-icon { display: grid; width: 38px; height: 38px; flex: 0 0 38px; place-items: center; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border)); border-radius: 6px; color: var(--accent); background: var(--accent-soft); }
+.date-calculator-title > div { min-width: 0; }
+.date-calculator-title small { color: var(--accent); font: 700 8px "Cascadia Code", Consolas, monospace; }
+.date-calculator-title h1 { margin: 2px 0 0; color: var(--text-primary); font-size: 20px; line-height: 1.2; }
+.date-calculator-local { display: inline-flex; align-items: center; gap: 6px; color: var(--text-faint); font-size: 10px; }
+.date-calculator-local svg { color: var(--accent); }
+.date-calculator-nav { display: flex; min-height: 42px; flex: 0 0 auto; align-items: center; padding: 5px 0 10px; border-bottom: 1px solid var(--border-subtle); overflow-x: auto; }
+.date-calculator-nav .segmented-control { border-color: var(--border); background: var(--surface); }
+.date-calculator-nav .segmented-control button.active { color: var(--accent); background: var(--accent-soft); box-shadow: none; }
+.date-calculator-workspace { display: grid; min-height: min(510px, calc(100vh - 240px)); grid-template-columns: minmax(0, 1.55fr) minmax(230px, .7fr); border-bottom: 1px solid var(--border-subtle); }
+.date-calculator-main, .date-calculator-side { display: flex; min-width: 0; padding: 18px 20px 20px 0; flex-direction: column; }
+.date-calculator-side { padding: 18px 0 20px 20px; border-left: 1px solid var(--border-subtle); }
+.date-calculator-main > header { display: flex; align-items: center; gap: 8px; color: var(--accent); }
+.date-calculator-main > header > div { display: flex; min-width: 0; flex-direction: column; }
+.date-calculator-main > header strong { color: var(--text-primary); font-size: 13px; }
+.date-calculator-main > header small { margin-top: 3px; color: var(--text-faint); font-size: 10px; }
+.date-calculator-side > header { color: var(--text-faint); font: 700 9px "Cascadia Code", Consolas, monospace; }
+.date-calculator-side > p { margin: 11px 0 0; color: var(--text-secondary); font-size: 11px; line-height: 1.6; }
+.date-calculator-side dl { margin: 14px 0 0; border-top: 1px solid var(--border-subtle); }
+.date-calculator-side dl > div { display: flex; min-height: 34px; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--border-subtle); }
+.date-calculator-side dt { color: var(--text-faint); font-size: 10px; }
+.date-calculator-side dd { margin: 0; color: var(--text-secondary); font: 10px "Cascadia Code", Consolas, monospace; }
+.date-calculator-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 20px; }
+.date-calculator-fields label { display: flex; min-width: 0; gap: 5px; color: var(--text-secondary); flex-direction: column; font-size: 10px; }
+.date-calculator-fields input, .date-calculator-fields select { width: 100%; min-width: 0; height: 36px; padding: 0 9px; border: 1px solid var(--border); border-radius: 5px; outline: 0; color: var(--text-primary); background: var(--surface-subtle); font: 12px "Cascadia Code", Consolas, monospace; }
+.date-calculator-fields input:focus, .date-calculator-fields select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.date-calculator-fields-single { grid-template-columns: minmax(0, 1fr); }
+.date-calculator-result { display: flex; min-height: 64px; align-items: center; justify-content: space-between; gap: 10px; margin-top: 20px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface-subtle); }
+.date-calculator-result > div { display: flex; min-width: 0; gap: 4px; flex-direction: column; }
+.date-calculator-result span { color: var(--text-faint); font-size: 10px; }
+.date-calculator-result code { overflow-wrap: anywhere; color: var(--accent); font: 700 16px "Cascadia Code", Consolas, monospace; }
+.date-calculator-source-status { display: flex; min-height: 32px; align-items: center; gap: 9px; margin: 8px 0 0; color: var(--text-faint); font-size: 10px; }
+.date-calculator-source-status > span { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.date-calculator-source-status a { color: var(--text-secondary); text-decoration: underline; text-underline-offset: 2px; }
+.date-calculator-note { margin: 9px 0 0; color: var(--text-faint); font-size: 10px; }
+.date-calculator-error { margin: 12px 0 0; color: var(--danger); font-size: 11px; line-height: 1.5; }
+.date-calculator-breakdown, .date-information-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 14px 0 0; border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle); }
+.date-calculator-breakdown > div, .date-information-grid > div { display: flex; min-height: 58px; justify-content: center; gap: 3px; flex-direction: column; padding: 8px 10px; }
+.date-calculator-breakdown > div + div, .date-information-grid > div + div { border-left: 1px solid var(--border-subtle); }
+.date-calculator-breakdown dt, .date-information-grid dt { color: var(--text-faint); font-size: 10px; }
+.date-calculator-breakdown dd, .date-information-grid dd { margin: 0; color: var(--text-primary); font: 600 14px "Cascadia Code", Consolas, monospace; }
+.date-countdown-display { display: flex; min-height: 154px; align-items: center; justify-content: center; gap: 10px; margin-top: 16px; padding: 18px 12px; border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle); flex-direction: column; }
+.date-countdown-display > span { color: var(--text-faint); font-size: 11px; }
+.date-countdown-display > div { display: flex; align-items: baseline; justify-content: center; gap: 5px; color: var(--accent); white-space: nowrap; }
+.date-countdown-display strong { font: 600 29px "Cascadia Code", Consolas, monospace; font-variant-numeric: tabular-nums; }
+.date-countdown-display small { color: var(--text-secondary); font-size: 10px; }
+.date-countdown-display.expired strong, .date-countdown-display.expired > span { color: var(--text-faint); }
+.date-calculator-copy-countdown { align-self: flex-end; }
+.date-age-result { display: flex; min-height: 54px; align-items: center; gap: 8px; margin-top: 14px; padding: 8px 10px; border-bottom: 1px solid var(--border-subtle); }
+.date-age-result > span { color: var(--text-faint); font-size: 10px; }
+.date-age-result > strong { min-width: 0; flex: 1; color: var(--accent); font: 600 14px "Cascadia Code", Consolas, monospace; overflow-wrap: anywhere; }
+.date-information-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.date-information-grid > div { min-width: 0; padding: 8px; }
+.date-information-grid dd { font-size: 12px; overflow-wrap: anywhere; }
+.calculator-finance-guide p { margin: 11px 0 0; color: var(--text-secondary); font-size: 11px; line-height: 1.6; }
+.calculator-finance-guide dl { margin: 14px 0 0; border-top: 1px solid var(--border-subtle); }
+.calculator-finance-guide dl > div { display: flex; min-height: 34px; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--border-subtle); }
+.calculator-finance-guide dt { color: var(--text-faint); font-size: 10px; }
+.calculator-finance-guide dd { margin: 0; color: var(--text-secondary); font: 10px "Cascadia Code", Consolas, monospace; }
+
+@media (max-width: 720px) {
+  .date-calculator-tool { padding-top: 12px; }
+  .date-calculator-workspace { min-height: 0; grid-template-columns: minmax(0, 1fr); }
+  .date-calculator-main, .date-calculator-side { padding: 14px 0; }
+  .date-calculator-side { border-top: 1px solid var(--border-subtle); border-left: 0; }
+  .date-countdown-display strong { font-size: 25px; }
+  .date-calculator-source-status { flex-wrap: wrap; }
+}
+
+@media (max-width: 420px) {
+  .date-calculator-fields { grid-template-columns: minmax(0, 1fr); }
+  .date-calculator-fields .date-calculator-info-date { grid-column: 1; }
+  .date-countdown-display > div { gap: 3px; }
+  .date-countdown-display strong { font-size: 20px; }
+  .date-countdown-display small { font-size: 9px; }
+  .date-information-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .date-information-grid > div:nth-child(odd) { border-left: 0; }
+  .date-information-grid > div:nth-child(n+3) { border-top: 1px solid var(--border-subtle); }
+}

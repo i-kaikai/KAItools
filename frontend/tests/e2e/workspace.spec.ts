@@ -970,7 +970,7 @@ test('calculator and system status remain usable in the local workbench', async 
   await page.getByLabel('程序员输入整数').fill('FF')
   await page.getByLabel('程序员输入进制').selectOption('16')
   await expect(page.locator('.calculator-base-grid code').nth(2)).toHaveText('255')
-  await page.getByRole('radio', { name: '金融/日期', exact: true }).click()
+  await page.getByRole('radio', { name: '金融', exact: true }).click()
   await page.getByLabel('本金金额').fill('100')
   await page.getByLabel('年利率').fill('10')
   await page.getByLabel('期数').fill('2')
@@ -2867,10 +2867,13 @@ test('desktop version dialog checks signed update metadata and starts the manage
     let started = false
     window.pywebview = {
       api: {
-        check_for_latest_version: async () => ({
-          ok: true,
-          data: { currentVersion, latestVersion, available: true, releaseNotes: ['应用内更新'], publishedAt: '2026-09-23' },
-        }),
+        check_for_latest_version: async (forceRefresh = false) => {
+          if (forceRefresh) {
+            await new Promise((resolve) => window.setTimeout(resolve, 200))
+            return { ok: false, error: { code: 'UPDATE_CHECK_FAILED', message: '网络暂不可用' } }
+          }
+          return { ok: true, data: { currentVersion, latestVersion, available: true, releaseNotes: ['应用内更新'], publishedAt: '2026-09-23' } }
+        },
         check_for_updates: async () => ({
           ok: true,
           data: {
@@ -2890,10 +2893,45 @@ test('desktop version dialog checks signed update metadata and starts the manage
   await page.locator('.runtime-version').click()
   const dialog = page.getByRole('dialog', { name: 'KAITools 版本说明' })
   await expect(dialog.getByText(`发现新版本 v${targetVersion}`)).toBeVisible()
+  await expect(page.locator('.runtime-update-dot')).toBeVisible()
+  await dialog.getByRole('button', { name: '检查更新' }).click()
+  await expect(dialog.getByText('正在检查更新…')).toBeVisible()
+  await expect(dialog.locator('.release-update-spinner').first()).toHaveCSS('animation-name', 'spin')
+  await expect(dialog.getByText('检查更新失败')).toBeVisible()
+  await expect(dialog.getByText('网络暂不可用')).toBeVisible()
+  await expect(page.locator('.runtime-update-dot')).toBeVisible()
   await dialog.getByRole('button', { name: '查看更新' }).click()
   await expect(dialog.getByText('将下载 3 个文件，共 1.5 KB。用户数据不会被修改。')).toBeVisible()
   await dialog.getByRole('button', { name: '立即更新' }).click()
   await expect(dialog.getByText('正在下载更新')).toBeVisible()
+})
+
+test('desktop version dialog reports a successful check with no available update', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name === 'web', 'The browser build must not expose a program updater.')
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await page.evaluate(({ currentVersion }) => {
+    let checks = 0
+    window.pywebview = {
+      api: {
+        check_for_latest_version: async () => {
+          checks += 1
+          document.documentElement.dataset.latestVersionChecks = String(checks)
+          return { ok: true, data: { currentVersion, latestVersion: currentVersion, available: false, releaseNotes: [], publishedAt: '2026-09-28' } }
+        },
+      },
+    }
+  }, { currentVersion: appVersion })
+  await page.getByRole('button', { name: '展开侧栏' }).click()
+  await page.locator('.runtime-version').click()
+
+  const dialog = page.getByRole('dialog', { name: 'KAITools 版本说明' })
+  await expect(dialog.getByText('已是最新版本')).toBeVisible()
+  await expect(page.locator('.runtime-update-dot')).toHaveCount(0)
+  await dialog.getByRole('button', { name: '检查更新' }).click()
+  await expect(dialog.getByText('已是最新版本')).toBeVisible()
+  await expect.poll(() => page.locator('html').getAttribute('data-latest-version-checks')).toBe('2')
+  await expect(dialog.getByRole('button', { name: '检查更新' })).toBeEnabled()
 })
 
 test('developer mode unlocks from the version and exposes local service tools', async ({ page }, testInfo) => {
@@ -2921,13 +2959,54 @@ test('developer mode unlocks from the version and exposes local service tools', 
   await expect(dialog.getByRole('status')).toContainText('服务已就绪 · ready')
   if (testInfo.project.name === 'web') {
     await expect(dialog).toContainText('浏览器请使用 F12')
-    await dialog.getByRole('button', { name: '完成' }).click()
-    await page.reload()
-    const expandSidebar = page.getByRole('button', { name: '展开侧栏' })
-    if (await expandSidebar.count()) await expandSidebar.click()
-    await expect(page.getByRole('button', { name: '开发者模式' })).toContainText('DEV')
   } else {
     await expect(dialog).toContainText('打开 WebView2 DevTools')
+  }
+
+  const erudaHost = page.locator('#eruda')
+  const erudaEntry = erudaHost.locator('.eruda-entry-btn')
+  const erudaPanel = erudaHost.locator('.eruda-container')
+  const erudaToggle = page.getByRole('button', { name: '隐藏 Eruda 控制台' })
+  await expect(erudaHost).toHaveCount(0)
+  await dialog.getByRole('button', { name: '打开 Eruda 控制台' }).click()
+  await expect(dialog).toHaveCount(0)
+  await expect(erudaEntry).toBeVisible()
+  await expect(erudaPanel).toBeVisible()
+  await page.evaluate(() => console.log('eruda-e2e-log'))
+  await expect(erudaPanel).toContainText('eruda-e2e-log')
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(erudaToggle).toBeVisible()
+  const erudaToggleBounds = await erudaToggle.boundingBox()
+  expect(erudaToggleBounds).not.toBeNull()
+  expect(erudaToggleBounds!.x + erudaToggleBounds!.width).toBeLessThanOrEqual(390)
+  expect(erudaToggleBounds!.y + erudaToggleBounds!.height).toBeLessThanOrEqual(844)
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await erudaToggle.click()
+  await expect(page.getByRole('button', { name: '显示 Eruda 控制台' })).toBeVisible()
+  await expect(erudaToggle).toHaveCount(0)
+  await page.getByRole('button', { name: '显示 Eruda 控制台' }).click()
+  await expect(page.getByRole('button', { name: '隐藏 Eruda 控制台' })).toBeVisible()
+
+  await page.getByRole('button', { name: '隐藏 Eruda 控制台' }).click()
+  await expect(page.getByRole('button', { name: '显示 Eruda 控制台' })).toBeVisible()
+  await page.getByRole('button', { name: '开发者模式' }).click()
+  const reopenedDeveloperDialog = page.getByRole('dialog', { name: '开发者模式' })
+  await expect(reopenedDeveloperDialog.getByRole('button', { name: '显示 Eruda 控制台' })).toBeVisible()
+  await reopenedDeveloperDialog.getByRole('button', { name: '显示 Eruda 控制台' }).click()
+  await expect(reopenedDeveloperDialog).toHaveCount(0)
+  await expect(erudaHost).toHaveCount(1)
+  await expect(erudaEntry).toBeVisible()
+  await expect(erudaPanel).toBeVisible()
+
+  await page.getByRole('button', { name: '隐藏 Eruda 控制台' }).click()
+  await expect(page.getByRole('button', { name: '显示 Eruda 控制台' })).toBeVisible()
+  await page.getByRole('button', { name: '开发者模式' }).click()
+  await page.getByRole('dialog', { name: '开发者模式' }).getByRole('button', { name: '退出开发者模式' }).click()
+  await expect(erudaHost).toHaveCount(0)
+  if (testInfo.project.name === 'web') {
+    await page.reload()
+    await expect(page.getByRole('button', { name: '开发者模式' })).toHaveCount(0)
+    await expect(erudaHost).toHaveCount(0)
   }
 })
 

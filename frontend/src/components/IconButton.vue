@@ -8,9 +8,10 @@ withDefaults(
     active?: boolean
     disabled?: boolean
     danger?: boolean
+    tooltip?: boolean
     size?: 'small' | 'normal'
   }>(),
-  { active: false, disabled: false, danger: false, size: 'normal' },
+  { active: false, disabled: false, danger: false, tooltip: true, size: 'normal' },
 )
 
 defineEmits<{ click: [event: MouseEvent] }>()
@@ -23,11 +24,11 @@ defineEmits<{ click: [event: MouseEvent] }>()
     type="button"
     :aria-label="label"
     :aria-pressed="active || undefined"
-    :data-tooltip="label"
+    :data-tooltip="tooltip ? label : undefined"
+    :title="tooltip ? undefined : label"
     :disabled="disabled"
     @click="$emit('click', $event)"
   >
     <component :is="icon" :size="size === 'small' ? 15 : 17" :stroke-width="1.8" aria-hidden="true" />
   </button>
 </template>
-

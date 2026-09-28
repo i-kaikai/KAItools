@@ -479,7 +479,7 @@ export const desktopApi = {
   openGithubRepository: () => invoke<void>('open_github_repository'),
   openDesktopDownload: () => invoke<void>('open_desktop_download'),
   checkForUpdates: () => invoke<UpdateCheckResult>('check_for_updates'),
-  checkForLatestVersion: () => invoke<UpdateLatestResult>('check_for_latest_version'),
+  checkForLatestVersion: (forceRefresh = false) => invoke<UpdateLatestResult>('check_for_latest_version', forceRefresh),
   installUpdate: () => invoke<UpdateInstallResult>('install_update'),
   getUpdateProgress: () => invoke<UpdateProgress>('get_update_progress'),
   restartUpdate: () => invoke<UpdateInstallResult>('restart_update'),

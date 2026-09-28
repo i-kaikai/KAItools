@@ -31,6 +31,7 @@
     "docx": "9.7.1",
     "docx-preview": "0.4.0",
     "dompurify": "3.4.14",
+    "eruda": "3.4.3",
     "html2canvas": "1.4.1",
     "java-parser": "^3.0.1",
     "jsonc-parser": "3.3.1",

@@ -8,10 +8,29 @@ export const updateProgress = ref<UpdateProgress | null>(null)
 export const latestUpdate = ref<UpdateLatestResult | null>(null)
 
 let progressTimer: number | undefined
+let latestCheckInFlight: Promise<Awaited<ReturnType<typeof desktopApi.checkForLatestVersion>>> | undefined
+let latestCheckInFlightForced = false
 
-export async function checkLatestVersion(): Promise<{ ok: true; data: UpdateLatestResult } | { ok: false; error: { message: string } }> {
+export async function checkLatestVersion(forceRefresh = false): Promise<{ ok: true; data: UpdateLatestResult } | { ok: false; error: { message: string } }> {
   if (isWebRuntime) return { ok: false, error: { message: '浏览器版不支持应用内更新' } }
-  const result = await desktopApi.checkForLatestVersion()
+
+  if (latestCheckInFlight) {
+    if (!forceRefresh || latestCheckInFlightForced) return latestCheckInFlight
+    await latestCheckInFlight.catch(() => undefined)
+    return checkLatestVersion(true)
+  }
+
+  const request = desktopApi.checkForLatestVersion(forceRefresh)
+  const trackedRequest = request.finally(() => {
+    if (latestCheckInFlight === trackedRequest) {
+      latestCheckInFlight = undefined
+      latestCheckInFlightForced = false
+    }
+  })
+  latestCheckInFlight = trackedRequest
+  latestCheckInFlightForced = forceRefresh
+
+  const result = await trackedRequest
   if (result.ok) latestUpdate.value = result.data
   return result
 }

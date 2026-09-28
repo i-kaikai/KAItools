@@ -24,6 +24,10 @@ class AppPaths:
         return self.resource_root / "update" / "update-public-key.pem"
 
     @property
+    def latest_update_state_file(self) -> Path:
+        return self.data_root / "latest-update-state.json"
+
+    @property
     def settings_file(self) -> Path:
         return self.data_root / "settings.json"
 

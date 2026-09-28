@@ -16,6 +16,8 @@ const closeButton = ref<HTMLButtonElement | null>(null)
 const update = ref<UpdateCheckResult | null>(null)
 const updateError = ref<string | null>(null)
 const checkingUpdate = ref(false)
+const latestCheckError = ref<string | null>(null)
+const checkingLatest = ref(false)
 const expandedVersions = ref<string[]>([props.version])
 let previouslyFocused: HTMLElement | null = null
 
@@ -26,8 +28,8 @@ const updatePanelState = computed(() => {
   if (updateProgress.value?.state === 'downloading' || updateProgress.value?.state === 'checking') return 'installing'
   if (updateProgress.value?.state === 'ready-to-restart') return 'ready'
   if (updateProgress.value?.state === 'failed') return 'error'
-  if (checkingUpdate.value) return 'checking'
-  if (updateError.value) return 'error'
+  if (checkingUpdate.value || checkingLatest.value) return 'checking'
+  if (latestCheckError.value || updateError.value) return 'error'
   if (isWebRuntime) return 'web'
   if (update.value?.status === 'update-available') return 'available'
   if (update.value?.status === 'repair-available') return 'repair'
@@ -35,8 +37,8 @@ const updatePanelState = computed(() => {
   return 'current'
 })
 const updatePanelIcon = computed(() => {
-  if (checkingUpdate.value || progressActive.value) return LoaderCircle
-  if (updateError.value || updateProgress.value?.state === 'failed') return AlertTriangle
+  if (checkingUpdate.value || checkingLatest.value || progressActive.value) return LoaderCircle
+  if (latestCheckError.value || updateError.value || updateProgress.value?.state === 'failed') return AlertTriangle
   if (update.value?.available) return Download
   return CircleCheck
 })
@@ -68,6 +70,7 @@ function formatBytes(value: number): string {
 async function checkForUpdates(): Promise<void> {
   if (isWebRuntime) return
   checkingUpdate.value = true
+  latestCheckError.value = null
   updateError.value = null
   try {
     const result = await desktopApi.checkForUpdates()
@@ -79,6 +82,25 @@ async function checkForUpdates(): Promise<void> {
     update.value = result.data
   } finally {
     checkingUpdate.value = false
+  }
+}
+
+async function refreshLatestMetadata(forceRefresh: boolean): Promise<void> {
+  if (isWebRuntime || checkingLatest.value) return
+  checkingLatest.value = true
+  latestCheckError.value = null
+  try {
+    const result = await checkLatestMetadata(forceRefresh)
+    if (!result.ok) {
+      latestCheckError.value = result.error.message
+      return
+    }
+    update.value = null
+    updateError.value = null
+  } catch (error) {
+    latestCheckError.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    checkingLatest.value = false
   }
 }
 
@@ -143,7 +165,7 @@ watch(() => props.open, async (open) => {
     previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
     await nextTick()
     closeButton.value?.focus()
-    if (!isWebRuntime && !latestUpdate.value) void checkLatestMetadata()
+    if (!isWebRuntime && !latestUpdate.value) void refreshLatestMetadata(false)
     return
   }
   previouslyFocused?.focus()
@@ -172,7 +194,7 @@ watch(() => props.open, async (open) => {
         </div>
 
         <section v-if="!isWebRuntime" class="release-update-panel" :class="`state-${updatePanelState}`" aria-live="polite">
-          <div class="release-update-mark" aria-hidden="true"><component :is="updatePanelIcon" :class="{ 'release-update-spinner': checkingUpdate || progressActive }" :size="17" :stroke-width="2" /></div>
+          <div class="release-update-mark" aria-hidden="true"><component :is="updatePanelIcon" :class="{ 'release-update-spinner': checkingUpdate || checkingLatest || progressActive }" :size="17" :stroke-width="2" /></div>
           <div class="release-update-copy">
             <div class="release-update-label"><span>{{ t('releaseNotes.updateTitle') }}</span><b v-if="update?.available">v{{ update.latestVersion }}</b></div>
             <strong v-if="updateProgress?.state === 'downloading'"><LoaderCircle class="release-update-spinner" :size="16" />{{ t('releaseNotes.downloading') }}</strong>
@@ -180,15 +202,19 @@ watch(() => props.open, async (open) => {
             <strong v-else-if="updateProgress?.state === 'restarting'"><LoaderCircle class="release-update-spinner" :size="16" />{{ t('releaseNotes.restarting') }}</strong>
             <strong v-else-if="updateProgress?.state === 'failed'">{{ t('releaseNotes.updateFailed') }}</strong>
             <strong v-else-if="updateProgress?.state === 'checking'"><LoaderCircle class="release-update-spinner" :size="16" />{{ t('releaseNotes.checkingDetails') }}</strong>
+            <strong v-else-if="checkingLatest"><LoaderCircle class="release-update-spinner" :size="16" />{{ t('releaseNotes.checkingLatest') }}</strong>
             <strong v-else-if="checkingUpdate"><LoaderCircle class="release-update-spinner" :size="16" />{{ t('releaseNotes.checkingDetails') }}</strong>
             <strong v-else-if="isWebRuntime">{{ t('releaseNotes.webUpdateUnavailable') }}</strong>
+            <strong v-else-if="latestCheckError">{{ t('releaseNotes.updateFailed') }}</strong>
             <strong v-else-if="latestUpdate?.available && !update">{{ t('releaseNotes.newVersionFound', { version: latestUpdate.latestVersion }) }}</strong>
+            <strong v-else-if="latestUpdate && !latestUpdate.available && !update">{{ t('releaseNotes.upToDate') }}</strong>
             <strong v-else-if="updateError">{{ t('releaseNotes.updateFailed') }}</strong>
             <strong v-else-if="update?.status === 'up-to-date'">{{ t('releaseNotes.upToDate') }}</strong>
             <strong v-else-if="update?.status === 'newer-local-version'">{{ t('releaseNotes.newerLocal') }}</strong>
             <strong v-else-if="update?.status === 'repair-available'">{{ t('releaseNotes.repairAvailable') }}</strong>
             <strong v-else-if="update">{{ t('releaseNotes.updateAvailable', { version: update.latestVersion }) }}</strong>
-            <small v-if="updateError">{{ updateError }}</small>
+            <small v-if="latestCheckError">{{ latestCheckError }}</small>
+            <small v-else-if="updateError">{{ updateError }}</small>
             <small v-else-if="updateProgress?.state === 'failed'">{{ updateProgress.error }}</small>
             <small v-else-if="update?.lastInstallError">{{ t('releaseNotes.lastUpdateFailed', { message: update.lastInstallError }) }}</small>
             <small v-else-if="updateProgress?.state === 'downloading' && updateProgress.totalBytes > 0">{{ updateProgress.currentFile }} · {{ updateProgress.completedFiles }}/{{ updateProgress.totalFiles }} {{ t('releaseNotes.files') }} · {{ formatBytes(updateProgress.downloadedBytes) }} / {{ formatBytes(updateProgress.totalBytes) }}</small>
@@ -203,9 +229,14 @@ watch(() => props.open, async (open) => {
           </div>
           <button v-if="updateProgress?.state === 'ready-to-restart'" class="release-update-action" type="button" @click="restartUpdate"><RefreshCw :size="15" />{{ t('releaseNotes.restartNow') }}</button>
           <button v-else-if="updateProgress?.state === 'downloading'" class="release-update-action secondary" type="button" @click="close">{{ t('releaseNotes.background') }}</button>
-          <button v-else-if="!progressActive && update?.available" class="release-update-action" type="button" :disabled="checkingUpdate" @click="installUpdate"><Download :size="15" />{{ t('releaseNotes.updateNow') }}</button>
-          <button v-else-if="!progressActive && latestUpdate?.available" class="release-update-action secondary" type="button" :disabled="checkingUpdate" @click="inspectUpdate">{{ t('releaseNotes.viewUpdate') }}</button>
-          <button v-else-if="!progressActive" class="release-update-refresh tooltip-anchor" type="button" :aria-label="t('releaseNotes.recheck')" :data-tooltip="t('releaseNotes.recheck')" :disabled="checkingUpdate" @click="checkLatestMetadata"><RefreshCw :size="16" /></button>
+          <div v-else-if="!progressActive" class="release-update-actions">
+            <button v-if="update?.available" class="release-update-action" type="button" :disabled="checkingUpdate || checkingLatest" @click="installUpdate"><Download :size="15" />{{ t('releaseNotes.updateNow') }}</button>
+            <button v-else-if="latestUpdate?.available" class="release-update-action secondary" type="button" :disabled="checkingUpdate || checkingLatest" @click="inspectUpdate">{{ t('releaseNotes.viewUpdate') }}</button>
+            <button class="release-update-refresh tooltip-anchor" type="button" :aria-label="t('releaseNotes.recheck')" :data-tooltip="t('releaseNotes.recheck')" :disabled="checkingLatest || checkingUpdate" @click="refreshLatestMetadata(true)">
+              <LoaderCircle v-if="checkingLatest" class="release-update-spinner" :size="16" />
+              <RefreshCw v-else :size="16" />
+            </button>
+          </div>
         </section>
 
         <div class="release-notes-scroll">

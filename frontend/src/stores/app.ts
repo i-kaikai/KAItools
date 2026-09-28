@@ -30,7 +30,7 @@ let mediaQuery: MediaQueryList | undefined
 let motionQuery: MediaQueryList | undefined
 let themeSwitchFrame: number | undefined
 let themeSwitchTimer: number | undefined
-const knownToolIds = new Set<ToolId>(['file-manager', 'notes', 'json', 'json-diff', 'json-java', 'api-client', 'jwt', 'mermaid', 'flowchart', 'kanban', 'checklist', 'java', 'timestamp', 'base64-text', 'base64-image', 'base64-file', 'qrcode', 'image-studio', 'image-format', 'video-audio', 'html-pdf', 'word-pdf', 'pdf-word', 'cron', 'sql', 'yaml', 'xml', 'text-diff', 'text-stats', 'regex', 'md5', 'naming', 'identifiers', 'hosts', 'clipboard-history', 'calculator'])
+const knownToolIds = new Set<ToolId>(['file-manager', 'notes', 'json', 'json-diff', 'json-java', 'api-client', 'jwt', 'mermaid', 'flowchart', 'kanban', 'checklist', 'java', 'timestamp', 'base64-text', 'base64-image', 'base64-file', 'qrcode', 'image-studio', 'image-format', 'video-audio', 'html-pdf', 'word-pdf', 'pdf-word', 'cron', 'sql', 'yaml', 'xml', 'text-diff', 'text-stats', 'regex', 'md5', 'naming', 'identifiers', 'hosts', 'clipboard-history', 'calculator', 'date-calculator'])
 const RECENT_TOOL_LIMIT = 12
 const SESSION_WORKSPACE_KEY = 'kaitools.workspace.session.v1'
 const SESSION_WORKSPACE_TAB_LIMIT = 50
@@ -216,7 +216,7 @@ export const useAppStore = defineStore('app', {
     settings: defaultAppSettings() as AppSettings,
     systemReducedMotion: false,
     backendConnection: { schemaVersion: 1, localApiOrigin: DEFAULT_LOCAL_API_ORIGIN, useLocalApi: false } as BackendConnection,
-    sidebarShortcuts: { schemaVersion: 1, toolIds: ['file-manager', 'notes', 'json', 'calculator', 'java', 'timestamp', 'base64-text', 'cron', 'hosts', 'clipboard-history', 'md5'] } as SidebarShortcuts,
+    sidebarShortcuts: { schemaVersion: 1, toolIds: ['file-manager', 'notes', 'json', 'calculator', 'date-calculator', 'java', 'timestamp', 'base64-text', 'cron', 'hosts', 'clipboard-history', 'md5'] } as SidebarShortcuts,
     shortcutSync: defaultShortcutSync() as ShortcutSyncState,
     dashboardCards: defaultDashboardCards() as DashboardCards,
     account: null as RemoteAccount | null,
@@ -470,7 +470,7 @@ export const useAppStore = defineStore('app', {
       this.queueShortcutSync()
       this.scheduleSettingsSave()
     },
-    resetSidebarShortcuts() { this.setSidebarShortcuts(['file-manager', 'notes', 'json', 'calculator', 'java', 'timestamp', 'base64-text', 'cron', 'hosts', 'clipboard-history', 'md5']) },
+    resetSidebarShortcuts() { this.setSidebarShortcuts(['file-manager', 'notes', 'json', 'calculator', 'date-calculator', 'java', 'timestamp', 'base64-text', 'cron', 'hosts', 'clipboard-history', 'md5']) },
     setBackendConnection(connection: BackendConnection) {
       this.backendConnection = {
         schemaVersion: 1,

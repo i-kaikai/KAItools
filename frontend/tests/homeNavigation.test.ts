@@ -60,7 +60,8 @@ describe('home navigation', () => {
   })
 
   it('filters invalid and duplicate tool IDs while restoring history', () => {
-    expect(normalizeRecentToolIds(['json', 'json', 'home', 'unknown', 'cron', 1])).toEqual(['json', 'cron'])
+    expect(normalizeRecentToolIds(['json', 'date-calculator', 'json', 'home', 'unknown', 'cron', 1])).toEqual(['json', 'date-calculator', 'cron'])
+    expect(useAppStore().sidebarShortcuts.toolIds).toContain('date-calculator')
   })
 
   it('restores open tools, their state, and the active tab after a page refresh', async () => {
@@ -69,6 +70,7 @@ describe('home navigation', () => {
       { id: 'home-tab', toolId: 'home', title: '首页', pinned: false, state: {} },
       { id: 'json-tab', toolId: 'json', title: 'JSON', pinned: false, state: { input: '{"restored":true}' } },
       { id: 'cron-tab', toolId: 'cron', title: 'Crontab', pinned: true, state: { expression: '0 9 * * 1-5' } },
+      { id: 'date-calculator-tab', toolId: 'date-calculator', title: '日期计算器', pinned: false, state: { mode: 'age', birthDate: '2000-02-29' } },
     ]
     app.activeTabId = 'cron-tab'
     app.flushSessionWorkspace()
@@ -85,8 +87,9 @@ describe('home navigation', () => {
     const restored = useAppStore()
     await restored.bootstrap({})
 
-    expect(restored.tabs.map((tab) => tab.toolId)).toEqual(['home', 'json', 'cron'])
+    expect(restored.tabs.map((tab) => tab.toolId)).toEqual(['home', 'json', 'cron', 'date-calculator'])
     expect(restored.tabs.find((tab) => tab.id === 'json-tab')?.state).toEqual({ input: '{"restored":true}' })
+    expect(restored.tabs.find((tab) => tab.id === 'date-calculator-tab')?.state).toEqual({ mode: 'age', birthDate: '2000-02-29' })
     expect(restored.activeTabId).toBe('cron-tab')
   })
 })

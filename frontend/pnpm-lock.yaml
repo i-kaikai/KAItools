@@ -63,6 +63,9 @@ importers:
       dompurify:
         specifier: 3.4.14
         version: 3.4.14
+      eruda:
+        specifier: 3.4.3
+        version: 3.4.3
       html2canvas:
         specifier: 1.4.1
         version: 1.4.1
@@ -1113,6 +1116,9 @@ packages:
   entities@8.0.0:
     resolution: {integrity: sha512-zwfzJecQ/Uej6tusMqwAqU/6KL2XaB2VZ2Jg54Je6ahNBGNH6Ek6g3jjNCF0fG9EWQKGZNddNjU5F1ZQn/sBnA==}
     engines: {node: '>=20.19.0'}
+
+  eruda@3.4.3:
+    resolution: {integrity: sha512-J2TsF4dXSspOXev5bJ6mljv0dRrxj21wklrDzbvPmYaEmVoC+2psylyRi70nUPFh1mTQfIBsSusUtAMZtUN+/w==}
 
   es-module-lexer@2.3.1:
     resolution: {integrity: sha512-shc1dbU90Yl/xq1QrC7QRtfcwURZuVRfPhZbDoldJ1cn1gzDvBaBWlv0eFolj5+0znnPJz5TXLxsN77X/12KTA==}
@@ -2941,6 +2947,8 @@ snapshots:
   entities@7.0.1: {}
 
   entities@8.0.0: {}
+
+  eruda@3.4.3: {}
 
   es-module-lexer@2.3.1: {}
 

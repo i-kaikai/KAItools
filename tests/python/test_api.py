@@ -12,13 +12,17 @@ from devtoolkit.storage import AppStorage
 
 
 class FakeUpdateManager:
+    def __init__(self) -> None:
+        self.latest_check_force_refresh: list[bool] = []
+
     def check(self) -> dict[str, object]:
         return {"status": "up-to-date", "currentVersion": "1.4.12", "latestVersion": "1.4.12"}
 
     def start_install(self) -> dict[str, object]:
         return {"version": "1.4.13", "restarting": True, "filesToDownload": 1}
 
-    def check_latest(self) -> dict[str, object]:
+    def check_latest(self, force_refresh: bool = False) -> dict[str, object]:
+        self.latest_check_force_refresh.append(force_refresh)
         return {"currentVersion": "1.4.12", "latestVersion": "1.4.13", "available": True}
 
     def progress(self) -> dict[str, object]:
@@ -154,9 +158,13 @@ def test_api_exposes_latest_version_progress_and_restart_controls(tmp_path: Path
     paths = app_paths(tmp_path)
     storage = AppStorage(paths)
     storage.ensure_directories()
-    api = DesktopApi(paths, storage, update_manager=FakeUpdateManager())
+    update_manager = FakeUpdateManager()
+    api = DesktopApi(paths, storage, update_manager=update_manager)
 
     assert api.check_for_latest_version() == {"ok": True, "data": {"currentVersion": "1.4.12", "latestVersion": "1.4.13", "available": True}}
+    assert update_manager.latest_check_force_refresh == [False]
+    assert api.check_for_latest_version(True) == {"ok": True, "data": {"currentVersion": "1.4.12", "latestVersion": "1.4.13", "available": True}}
+    assert update_manager.latest_check_force_refresh == [False, True]
     assert api.get_update_progress() == {"ok": True, "data": {"state": "downloading", "completedFiles": 1, "totalFiles": 2}}
 
 

@@ -227,6 +227,30 @@ export function checklistDefaultSection(): string {
   return defaultSection
 }
 
+export function formatChecklistMarkdown(title: string, items: ChecklistItem[]): string {
+  const sections = new Map<string, ChecklistItem[]>()
+  for (const item of items) {
+    const section = item.section || '无分类'
+    const sectionItems = sections.get(section) ?? []
+    sectionItems.push(item)
+    sections.set(section, sectionItems)
+  }
+
+  const priorityLabels: Record<ChecklistPriority, string> = { high: '高', medium: '中', low: '低' }
+  const lines = [`# ${title.replace(/[\r\n]+/g, ' ').trim()}`, '']
+  for (const [section, sectionItems] of sections) {
+    lines.push(`## ${section.replace(/[\r\n]+/g, ' ').trim()}`, '')
+    for (const item of sectionItems) {
+      lines.push(`- [${item.completed ? 'x' : ' '}] ${item.title.replace(/[\r\n]+/g, ' ').trim()}`)
+      lines.push(`  - 优先级：${priorityLabels[item.priority]}`)
+      if (item.dueDate) lines.push(`  - 截止日期：${item.dueDate}`)
+      if (item.note) lines.push(...item.note.replace(/\r\n?/g, '\n').trim().split('\n').map((line) => `  - 备注：${line}`))
+      lines.push('')
+    }
+  }
+  return lines.join('\n').trimEnd() + '\n'
+}
+
 export function parseChecklistImport(value: string, maxItems = 500): string[] {
   const source = value.trim()
   if (source.startsWith('[')) {

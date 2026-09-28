@@ -14,6 +14,7 @@ import urllib.parse
 import urllib.request
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -36,6 +37,8 @@ LOGGER = logging.getLogger(__name__)
 UPDATE_SCHEMA_VERSION = 1
 MAX_OBJECT_BYTES = 2 * 1024 * 1024 * 1024
 DOWNLOAD_TIMEOUT_SECONDS = 30
+LATEST_CACHE_SCHEMA_VERSION = 1
+NO_UPDATE_CACHE_SECONDS = 24 * 60 * 60
 
 
 class UpdateError(RuntimeError):
@@ -156,29 +159,122 @@ class UpdateManager:
         except (OSError, urllib.error.URLError, TimeoutError) as exc:
             raise UpdateError("UPDATE_CHECK_FAILED", "无法检查更新，请检查网络后重试", str(exc)) from exc
 
-    def check_latest(self) -> dict[str, Any]:
-        """Check only signed version metadata; local files are intentionally untouched."""
+    def check_latest(self, force_refresh: bool = False) -> dict[str, Any]:
+        """Read only signed version metadata and persist it for startup badge decisions."""
 
+        if not isinstance(force_refresh, bool):
+            raise UpdateError("UPDATE_CHECK_ARGUMENT_INVALID", "更新检查参数无效")
+
+        cached = self._read_latest_cache()
+        if cached is not None:
+            cached_latest = cached["latest"]
+            cached_target = _version_parts(cached_latest["version"])
+            current = _version_parts(APP_VERSION)
+            cached_was_available = _version_parts(cached["currentVersion"]) < cached_target
+
+            if cached_was_available and current >= cached_target:
+                self._clear_latest_cache()
+                cached = None
+            elif cached_was_available and current < cached_target:
+                if not force_refresh:
+                    return self._latest_result(cached_latest)
+            elif (
+                not force_refresh
+                and cached["currentVersion"] == APP_VERSION
+                and self._cache_is_fresh(cached["checkedAt"])
+            ):
+                return self._latest_result(cached_latest)
+
+        previous_available = cached is not None and _version_parts(cached["latest"]["version"]) > _version_parts(APP_VERSION)
         try:
             policy = self._load_policy()
             latest_url = policy["latestUrl"]
             latest = _read_json(self._fetch(latest_url, 128 * 1024), "最新版本清单")
-            self._verify_signed(latest, latest_url + ".sig")
+            signature = self._verify_signed(latest, latest_url + ".sig")
             self._validate_latest(latest)
-            available = _version_parts(latest["version"]) > _version_parts(APP_VERSION)
-            return {
-                "currentVersion": APP_VERSION,
-                "latestVersion": latest["version"],
-                "available": available,
-                "releaseNotes": list(latest["releaseNotes"]),
-                "publishedAt": latest["publishedAt"],
-            }
+
+            if previous_available and cached is not None:
+                previous_target = _version_parts(cached["latest"]["version"])
+                if _version_parts(latest["version"]) < previous_target:
+                    return self._latest_result(cached["latest"])
+
+            self._write_latest_cache(latest, signature)
+            return self._latest_result(latest)
         except UpdateError:
             raise
         except UpdateSecurityError as exc:
             raise UpdateError("UPDATE_METADATA_INVALID", str(exc)) from exc
         except (OSError, urllib.error.URLError, TimeoutError) as exc:
             raise UpdateError("UPDATE_CHECK_FAILED", "无法检查更新，请检查网络后重试", str(exc)) from exc
+
+    @staticmethod
+    def _latest_result(latest: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "currentVersion": APP_VERSION,
+            "latestVersion": latest["version"],
+            "available": _version_parts(latest["version"]) > _version_parts(APP_VERSION),
+            "releaseNotes": list(latest["releaseNotes"]),
+            "publishedAt": latest["publishedAt"],
+        }
+
+    @staticmethod
+    def _utc_now() -> datetime:
+        return datetime.now(timezone.utc)
+
+    def _cache_is_fresh(self, checked_at: datetime) -> bool:
+        age_seconds = (self._utc_now() - checked_at).total_seconds()
+        return 0 <= age_seconds < NO_UPDATE_CACHE_SECONDS
+
+    def _read_latest_cache(self) -> dict[str, Any] | None:
+        try:
+            raw = _read_json(self._paths.latest_update_state_file.read_bytes(), "本地更新状态")
+            if set(raw) != {"schemaVersion", "currentVersion", "latest", "signature", "checkedAt"}:
+                raise UpdateSecurityError("本地更新状态字段无效")
+            if raw["schemaVersion"] != LATEST_CACHE_SCHEMA_VERSION:
+                raise UpdateSecurityError("本地更新状态版本不受支持")
+            _version_parts(raw["currentVersion"])
+            latest = raw["latest"]
+            signature_text = raw["signature"]
+            checked_at_text = raw["checkedAt"]
+            if not isinstance(latest, dict) or not isinstance(signature_text, str) or not isinstance(checked_at_text, str):
+                raise UpdateSecurityError("本地更新状态格式无效")
+            self._validate_latest(latest)
+            signature = decode_signature(signature_text.encode("ascii"))
+            verify_json(latest, signature, load_public_key(self._paths.update_public_key_file))
+            checked_at = datetime.fromisoformat(checked_at_text.replace("Z", "+00:00"))
+            if checked_at.tzinfo is None:
+                raise UpdateSecurityError("本地更新状态时间无效")
+            return {
+                "currentVersion": raw["currentVersion"],
+                "latest": latest,
+                "signature": signature_text,
+                "checkedAt": checked_at.astimezone(timezone.utc),
+            }
+        except FileNotFoundError:
+            return None
+        except (OSError, UnicodeError, ValueError, UpdateSecurityError) as exc:
+            LOGGER.warning("latest_version_cache_invalid reason=%s", exc)
+            return None
+
+    def _write_latest_cache(self, latest: dict[str, Any], signature: str) -> None:
+        state = {
+            "schemaVersion": LATEST_CACHE_SCHEMA_VERSION,
+            "currentVersion": APP_VERSION,
+            "latest": latest,
+            "signature": signature,
+            "checkedAt": self._utc_now().isoformat(timespec="seconds").replace("+00:00", "Z"),
+        }
+        payload = json.dumps(state, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        try:
+            self._atomic_write(self._paths.latest_update_state_file, payload)
+        except OSError:
+            LOGGER.warning("latest_version_cache_write_failed", exc_info=True)
+
+    def _clear_latest_cache(self) -> None:
+        try:
+            self._paths.latest_update_state_file.unlink(missing_ok=True)
+        except OSError:
+            LOGGER.warning("latest_version_cache_clear_failed", exc_info=True)
 
     def start_install(self) -> dict[str, Any]:
         with self._progress_lock:
@@ -355,9 +451,11 @@ class UpdateManager:
             raise UpdateSecurityError("更新地址必须是固定 HTTPS 地址")
         return {"latestUrl": latest_url}
 
-    def _verify_signed(self, document: dict[str, Any], signature_url: str) -> None:
-        signature = decode_signature(self._fetch(signature_url, 512))
+    def _verify_signed(self, document: dict[str, Any], signature_url: str) -> str:
+        encoded_signature = self._fetch(signature_url, 512).strip()
+        signature = decode_signature(encoded_signature)
         verify_json(document, signature, load_public_key(self._paths.update_public_key_file))
+        return encoded_signature.decode("ascii")
 
     def _validate_latest(self, latest: dict[str, Any]) -> None:
         expected = {"schemaVersion", "product", "channel", "version", "manifest", "manifestSha256", "publishedAt", "releaseNotes", "mandatory"}

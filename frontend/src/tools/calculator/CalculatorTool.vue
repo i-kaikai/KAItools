@@ -8,7 +8,6 @@ import { useToolState } from '@/composables/useToolState'
 import { useToastStore } from '@/stores/toast'
 import { copyText } from '@/utils/clipboard'
 import {
-  calculateDate,
   calculateEngineering,
   calculateFinance,
   calculateProgrammerOperation,
@@ -37,7 +36,7 @@ const history = ref<CalculatorHistoryEntry[]>(loadCalculatorHistory())
 const calculatorReady = ref(false)
 
 const sectionOptions = [
-  { value: 'scientific', label: '科学' }, { value: 'programmer', label: '程序员' }, { value: 'finance', label: '金融/日期' }, { value: 'engineering', label: '工程' },
+  { value: 'scientific', label: '科学' }, { value: 'programmer', label: '程序员' }, { value: 'finance', label: '金融' }, { value: 'engineering', label: '工程' },
 ]
 const programmerViewOptions = [
   { value: 'convert', label: '进制转换' }, { value: 'bitwise', label: '位运算' },
@@ -67,13 +66,16 @@ const financeResult = computed(() => {
   if (!calculatorReady.value) return '正在加载计算引擎'
   try { return calculateFinance(model.financeKind as 'simple' | 'compound' | 'loan' | 'tax', model.principal, model.annualRate, model.periods, model.taxRate) } catch (cause) { return cause instanceof Error ? cause.message : '计算失败' }
 })
-const dateResult = computed(() => {
-  try { return calculateDate(model.dateStart, model.dateEnd, model.dateOffset, model.dateUnit as 'days' | 'months' | 'years') } catch (cause) { return { difference: cause instanceof Error ? cause.message : '计算失败', shifted: '' } }
-})
 const engineeringResult = computed(() => {
   if (!calculatorReady.value) return '正在加载计算引擎'
   try { return calculateEngineering(model.engineeringKind as 'matrix' | 'complex' | 'statistics', model.engineeringSource, model.engineeringOperation) } catch (cause) { return cause instanceof Error ? cause.message : '计算失败' }
 })
+const financeGuide = computed(() => ({
+  simple: '单利本息按本金与年利率计算，不对收益再次计息。',
+  compound: '复利本息按每期结算后的本金继续计息。',
+  loan: '等额本息根据本金、年利率和贷款月数计算固定月供。',
+  tax: '税后金额按输入税率从原金额中扣除。',
+}[model.financeKind as 'simple' | 'compound' | 'loan' | 'tax']))
 
 watch(() => Number(model.baseFrom), (nextBase, previousBase) => {
   if (!previousBase || nextBase === previousBase) return
@@ -125,7 +127,7 @@ onMounted(() => {
 <template>
   <section class="tool-page calculator-tool" :data-section="model.section" :aria-busy="!calculatorReady">
     <header class="calculator-header">
-      <div class="calculator-brand"><span><Calculator :size="18" /></span><div><small>LOCAL COMPUTE ENGINE</small><h1>超级计算器</h1><p>科学、程序员、金融、日期与工程计算均在本地完成</p></div></div>
+      <div class="calculator-brand"><span><Calculator :size="18" /></span><div><small>LOCAL COMPUTE ENGINE</small><h1>超级计算器</h1><p>科学、程序员、金融与工程计算均在本地完成</p></div></div>
       <div class="calculator-header-actions"><span><Pi :size="14" />BigNumber</span><IconButton :icon="Trash2" label="清空计算历史" :disabled="!history.length" danger @click="clearHistory" /></div>
     </header>
 
@@ -152,7 +154,7 @@ onMounted(() => {
 
     <div v-else-if="model.section === 'finance'" class="calculator-module-layout">
       <section class="calculator-module-main"><header><WalletCards :size="17" /><div><strong>金融计算</strong><small>本地 BigNumber 利率与本息模型</small></div></header><div class="calculator-control-grid"><label>金融计算<select v-model="model.financeKind" aria-label="金融计算类型"><option value="simple">单利本息</option><option value="compound">复利本息</option><option value="loan">等额本息月供</option><option value="tax">税后金额</option></select></label><label>本金/金额<input v-model="model.principal" aria-label="本金金额" /></label><label>年利率 (%)<input v-model="model.annualRate" aria-label="年利率" /></label><label>期数（年；贷款为月）<input v-model="model.periods" aria-label="期数" /></label><label v-if="model.financeKind === 'tax'">税率 (%)<input v-model="model.taxRate" aria-label="税率" /></label></div><div class="calculator-inline-result"><span>{{ model.financeKind === 'loan' ? '月供' : '计算结果' }}</span><code>{{ financeResult }}</code><IconButton :icon="Copy" label="复制金融结果" size="small" @click="copy(financeResult)" /></div></section>
-      <aside class="calculator-module-side"><header><span>DATE LAB</span></header><label>开始日期<input v-model="model.dateStart" type="date" aria-label="开始日期" /></label><label>结束日期<input v-model="model.dateEnd" type="date" aria-label="结束日期" /></label><label>偏移量<input v-model="model.dateOffset" aria-label="日期偏移量" /></label><label>偏移单位<select v-model="model.dateUnit" aria-label="日期偏移单位"><option value="days">天</option><option value="months">月</option><option value="years">年</option></select></label><output><span>间隔 {{ dateResult.difference }}</span><code>{{ dateResult.shifted }}</code></output></aside>
+      <aside class="calculator-module-side calculator-finance-guide"><header><span>计算模型</span></header><p>{{ financeGuide }}</p><dl><div><dt>精度</dt><dd>BigNumber</dd></div><div><dt>运行方式</dt><dd>本地计算</dd></div></dl></aside>
     </div>
 
     <div v-else class="calculator-module-layout">
