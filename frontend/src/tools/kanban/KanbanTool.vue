@@ -26,6 +26,7 @@ const toast = useToastStore()
 const model = reactive(normalizeKanbanState(props.state))
 const formOpen = ref(false)
 const editingTaskId = ref<string | null>(null)
+const selectedTaskId = ref<string | null>(null)
 const draggedTaskId = ref<string | null>(null)
 const draft = reactive<KanbanTaskDraft>(emptyKanbanDraft())
 const formError = ref('')
@@ -166,11 +167,13 @@ function saveTask(): void {
   }
   if (editingTaskId.value) {
     model.tasks = updateKanbanTask(model.tasks, editingTaskId.value, draft)
+    selectedTaskId.value = editingTaskId.value
     toast.show('任务已更新', 'success')
   } else {
     const task = createKanbanTask(draft)
     if (!task) return
     model.tasks = [task, ...model.tasks]
+    selectedTaskId.value = task.id
     toast.show('任务已添加到看板', 'success')
   }
   closeForm()
@@ -178,6 +181,10 @@ function saveTask(): void {
 
 function moveTask(task: KanbanTask, status: KanbanStatus): void {
   model.tasks = moveKanbanTask(model.tasks, task.id, status)
+}
+
+function selectTask(task: KanbanTask): void {
+  selectedTaskId.value = task.id
 }
 
 function moveTaskByOffset(task: KanbanTask, offset: -1 | 1): void {
@@ -193,12 +200,14 @@ function dropTask(status: KanbanStatus): void {
 
 function deleteTask(task: KanbanTask): void {
   model.tasks = removeKanbanTask(model.tasks, task.id)
+  if (selectedTaskId.value === task.id) selectedTaskId.value = null
   if (editingTaskId.value === task.id) closeForm()
   toast.show('任务已删除', 'success')
 }
 
 function clearCompleted(): void {
   if (!completedCount.value) return
+  if (selectedTaskId.value && model.tasks.some((task) => task.id === selectedTaskId.value && task.status === 'done')) selectedTaskId.value = null
   model.tasks = clearCompletedKanbanTasks(model.tasks)
   toast.show('已清除完成任务', 'success')
 }
@@ -248,7 +257,7 @@ function dueState(task: KanbanTask): 'none' | 'overdue' | 'done' | 'active' {
       <section v-for="status in kanbanStatuses" :key="status" class="kanban-column kanban-modern-column" :class="`status-${status}`" @dragover.prevent @drop.prevent="dropTask(status)">
         <header class="kanban-column-header"><div class="kanban-column-heading"><span class="kanban-column-icon"><component :is="statusIcons[status]" :size="17" aria-hidden="true" /></span><div><strong>{{ statusLabels[status] }}</strong><small>{{ statusDescriptions[status] }}</small></div><b>{{ tasksFor(status).length }}</b></div><IconButton :icon="Plus" :label="`在${statusLabels[status]}中添加任务`" size="small" @click="openCreate(status)" /></header>
         <div class="kanban-task-list" role="list" :aria-label="statusLabels[status]">
-          <article v-for="task in tasksFor(status)" :key="task.id" class="kanban-task kanban-modern-task" draggable="true" role="listitem" @dragstart="draggedTaskId = task.id" @dragend="draggedTaskId = null" @dblclick="openEdit(task)">
+          <article v-for="task in tasksFor(status)" :key="task.id" class="kanban-task kanban-modern-task" :class="{ selected: selectedTaskId === task.id }" draggable="true" role="listitem" tabindex="0" :aria-current="selectedTaskId === task.id ? 'true' : undefined" @click="selectTask(task)" @keydown.enter.self="selectTask(task)" @keydown.space.self.prevent="selectTask(task)" @dragstart="draggedTaskId = task.id" @dragend="draggedTaskId = null" @dblclick="openEdit(task)">
             <header class="kanban-task-topline"><span class="kanban-priority" :class="task.priority"><i aria-hidden="true" />{{ priorityLabels[task.priority] }}</span><div class="kanban-task-actions"><GripVertical :size="15" aria-hidden="true" /><IconButton :icon="Pencil" :label="`编辑任务：${task.title}`" size="small" @click="openEdit(task)" /><IconButton :icon="Trash2" :label="`删除任务：${task.title}`" size="small" danger @click="deleteTask(task)" /></div></header>
             <div class="kanban-task-title"><span class="kanban-status-dot" aria-hidden="true" /><strong>{{ task.title }}</strong></div>
             <p v-if="task.note">{{ task.note }}</p>

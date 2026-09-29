@@ -163,7 +163,9 @@ function toggleSidebar(): void {
 
 function selectInspectorItem(item: ChecklistItem, event: MouseEvent): void {
   inspectorItemId.value = item.id
-  inspectorTrigger.value = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
+  const target = event.target instanceof Element ? event.target.closest<HTMLElement>('button, input, select') : null
+  const row = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
+  inspectorTrigger.value = target ?? row?.querySelector<HTMLElement>('.checklist-item-title') ?? row
 }
 
 async function closeInspector(): Promise<void> {
@@ -187,6 +189,7 @@ function openCreate(section = checklistDefaultSection()): void {
 }
 
 function openEdit(item: ChecklistItem): void {
+  inspectorItemId.value = item.id
   Object.assign(draft, {
     title: item.title,
     note: item.note,
@@ -626,13 +629,13 @@ function dueState(item: ChecklistItem): 'today' | 'overdue' | 'normal' | 'done' 
                 <div class="checklist-section-actions"><button class="checklist-section-export" type="button" :disabled="!section.items.length" @click="exportSection(section.key, section.title)"><Download :size="13" />导出分类</button><IconButton :icon="Plus" :label="`在${section.title}中添加条目`" size="small" @click="openCreate(section.key === '__no_category__' ? '' : section.key)" /></div>
               </header>
               <div v-show="!isSectionCollapsed(section.key)" class="checklist-items">
-                <article v-for="item in section.items" :key="item.id" class="checklist-item" :class="{ completed: item.completed, dragging: draggedItemId === item.id, selected: item.id === inspectorItem?.id }" :draggable="canReorder" role="listitem" @dragstart="startDrag(item)" @dragend="endDrag" @dragover.prevent @drop.prevent="dropItem(item)" @dblclick="openEdit(item)">
+                <article v-for="item in section.items" :key="item.id" class="checklist-item" :class="{ completed: item.completed, dragging: draggedItemId === item.id, selected: item.id === inspectorItem?.id }" :draggable="canReorder" role="listitem" @click="selectInspectorItem(item, $event)" @dragstart="startDrag(item)" @dragend="endDrag" @dragover.prevent @drop.prevent="dropItem(item)" @dblclick="openEdit(item)">
                   <label class="checklist-check-control"><input type="checkbox" :checked="item.completed" :aria-label="`${item.completed ? '取消完成' : '完成'}：${item.title}`" @change="toggleItem(item)" /><span class="checklist-check-box"><Check :size="14" aria-hidden="true" /></span></label>
-                  <div class="checklist-item-main"><button class="checklist-item-title" type="button" :data-checklist-inspector-trigger="item.id" :aria-pressed="item.id === inspectorItem?.id" @click="selectInspectorItem(item, $event)">{{ item.title }}</button><p v-if="item.note">{{ item.note }}</p></div>
+                  <div class="checklist-item-main"><button class="checklist-item-title" type="button" :data-checklist-inspector-trigger="item.id" :aria-pressed="item.id === inspectorItem?.id">{{ item.title }}</button><p v-if="item.note">{{ item.note }}</p></div>
                   <select class="checklist-table-select checklist-table-category" :value="item.section" :aria-label="`分类：${item.title}`" @change="updateInlineItem(item, { section: ($event.target as HTMLSelectElement).value })"><option value="">无分类</option><option v-for="category in categoryOptions" :key="category" :value="category">{{ category }}</option></select>
                   <input class="checklist-table-select checklist-table-due" :class="dueState(item)" type="date" :value="item.dueDate" :aria-label="`截止日期：${item.title}`" @change="updateInlineItem(item, { dueDate: ($event.target as HTMLInputElement).value })" />
                   <select class="checklist-table-select checklist-table-priority" :class="item.priority" :value="item.priority" :aria-label="`优先级：${item.title}`" @change="updateInlineItem(item, { priority: ($event.target as HTMLSelectElement).value as ChecklistItemDraft['priority'] })"><option value="high">高</option><option value="medium">普通</option><option value="low">低</option></select>
-                  <div class="checklist-item-actions"><GripVertical v-if="canReorder" :size="14" aria-hidden="true" /><button class="checklist-row-export" type="button" :aria-label="`导出条目：${item.title}`" @click="exportItem(item)"><Download :size="13" />导出</button><IconButton :icon="Pencil" :label="`编辑条目：${item.title}`" :tooltip="false" size="small" @click="openEdit(item)" /><IconButton :icon="Trash2" :label="`删除条目：${item.title}`" :tooltip="false" size="small" danger @click="deleteItem(item)" /></div>
+                  <div class="checklist-item-actions" @click.stop><GripVertical v-if="canReorder" :size="14" aria-hidden="true" /><button class="checklist-row-export" type="button" :aria-label="`导出条目：${item.title}`" @click="exportItem(item)"><Download :size="13" />导出</button><IconButton :icon="Pencil" :label="`编辑条目：${item.title}`" :tooltip="false" size="small" @click="openEdit(item)" /><IconButton :icon="Trash2" :label="`删除条目：${item.title}`" :tooltip="false" size="small" danger @click="deleteItem(item)" /></div>
                 </article>
               </div>
             </section>

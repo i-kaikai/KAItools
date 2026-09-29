@@ -307,6 +307,13 @@ def test_api_uses_only_bound_clipboard_service(tmp_path: Path) -> None:
         def set_enabled(self, enabled: bool) -> None:
             self.enabled = enabled
 
+        def image_data_url(self, item_id: str) -> str | None:
+            return "data:image/png;base64,abc" if item_id == "clip-image" else None
+
+        def copy_item(self, item_id: str) -> bool:
+            self.copied.append(item_id)
+            return item_id == "clip-image"
+
     paths = app_paths(tmp_path)
     storage = AppStorage(paths)
     storage.ensure_directories()
@@ -314,6 +321,14 @@ def test_api_uses_only_bound_clipboard_service(tmp_path: Path) -> None:
     desktop_api = DesktopApi(paths, storage, clipboard=clipboard)  # type: ignore[arg-type]
 
     assert desktop_api.get_clipboard_history()["data"]["enabled"] is True
+    assert desktop_api.get_clipboard_history_image("clip-image") == {
+        "ok": True,
+        "data": {"dataUrl": "data:image/png;base64,abc"},
+    }
+    assert desktop_api.get_clipboard_history_image("bad-id")["error"]["code"] == "CLIPBOARD_ITEM_UNAVAILABLE"
+    assert desktop_api.copy_clipboard_history_item("clip-image") == {"ok": True, "data": None}
+    assert desktop_api.copy_clipboard_history_item("clip-1")["error"]["code"] == "CLIPBOARD_WRITE_FAILED"
+    assert desktop_api.copy_clipboard_history_item("clip-image-too-long" * 8)["error"]["code"] == "CLIPBOARD_ITEM_INVALID"
     assert desktop_api.delete_clipboard_history_item("clip-1") == {"ok": True, "data": {"removed": True}}
     assert desktop_api.clear_clipboard_history() == {"ok": True, "data": None}
     assert clipboard.cleared == 1

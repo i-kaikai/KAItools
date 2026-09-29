@@ -204,12 +204,31 @@ export interface UpdateProgress {
   error: string | null
 }
 
-export interface ClipboardHistoryItem {
+export interface ClipboardHistoryTextItem {
   id: string
+  kind: 'text'
   text: string
   createdAt: string
   truncated: boolean
 }
+
+export interface ClipboardHistoryImageItem {
+  id: string
+  kind: 'image'
+  imageBytes: number
+  imageFormat: 'png' | 'dib' | 'dibv5'
+  createdAt: string
+}
+
+export interface ClipboardHistoryFilesItem {
+  id: string
+  kind: 'files'
+  files: string[]
+  createdAt: string
+  truncated: boolean
+}
+
+export type ClipboardHistoryItem = ClipboardHistoryTextItem | ClipboardHistoryImageItem | ClipboardHistoryFilesItem
 
 export interface ClipboardHistorySnapshot {
   enabled: boolean

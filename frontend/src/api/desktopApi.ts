@@ -43,6 +43,8 @@ const DESKTOP_ONLY_METHODS = new Set([
   'restore_hosts_backup',
   'open_webview2_download',
   'get_clipboard_history',
+  'get_clipboard_history_image',
+  'copy_clipboard_history_item',
   'clear_clipboard_history',
   'delete_clipboard_history_item',
   'set_clipboard_monitoring',
@@ -302,7 +304,7 @@ async function browserInvoke<T>(method: string, args: unknown[]): Promise<ApiRes
         enabled: true,
         maxEntries: 100,
         maxBytes: 16 * 1024,
-        items: [{ id: 'development-clipboard', text: 'KAITools 开发剪切板示例', createdAt: new Date().toISOString(), truncated: false }],
+        items: [{ id: 'development-clipboard', kind: 'text', text: 'KAITools 开发剪切板示例', createdAt: new Date().toISOString(), truncated: false }],
       } as T,
     }
   }
@@ -487,6 +489,8 @@ export const desktopApi = {
   setActivationHotkey: (hotkey: string) => invoke<{ activationHotkey: string }>('set_activation_hotkey', hotkey),
   hideToTray: () => invoke<void>('hide_to_tray'),
   getClipboardHistory: () => invoke<ClipboardHistorySnapshot>('get_clipboard_history'),
+  getClipboardHistoryImage: (id: string) => invoke<{ dataUrl: string }>('get_clipboard_history_image', id),
+  copyClipboardHistoryItem: (id: string) => invoke<void>('copy_clipboard_history_item', id),
   clearClipboardHistory: () => invoke<void>('clear_clipboard_history'),
   deleteClipboardHistoryItem: (id: string) => invoke<{ removed: boolean }>('delete_clipboard_history_item', id),
   setClipboardMonitoring: (enabled: boolean) => invoke<{ enabled: boolean }>('set_clipboard_monitoring', enabled),

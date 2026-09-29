@@ -479,7 +479,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
   {
     id: 'clipboard-history',
     name: '剪切板历史',
-    description: '管理 Windows 纯文本剪切板记录',
+    description: '管理 Windows 文本、图片、文件和文件夹剪切板记录',
     keywords: ['clipboard', 'history', '剪切板', '历史', '复制'],
     category: 'text',
     icon: Clipboard,

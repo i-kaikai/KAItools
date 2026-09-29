@@ -1001,6 +1001,63 @@ test('clipboard history remains discoverable but desktop-only in the web build',
   await popup.close()
 })
 
+test('clipboard history filters item types and renders DIB image previews', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name === 'web', 'Clipboard history requires the desktop runtime.')
+  const bitmap = Buffer.alloc(58)
+  bitmap.write('BM', 0, 'ascii')
+  bitmap.writeUInt32LE(bitmap.length, 2)
+  bitmap.writeUInt32LE(54, 10)
+  bitmap.writeUInt32LE(40, 14)
+  bitmap.writeInt32LE(1, 18)
+  bitmap.writeInt32LE(1, 22)
+  bitmap.writeUInt16LE(1, 26)
+  bitmap.writeUInt16LE(24, 28)
+  bitmap.writeUInt32LE(4, 34)
+  const imageDataUrl = `data:image/bmp;base64,${bitmap.toString('base64')}`
+
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await page.evaluate((imageUrl) => {
+    Object.assign(window, {
+      pywebview: {
+        api: {
+          get_clipboard_history: async () => ({
+            ok: true,
+            data: {
+              enabled: true,
+              maxEntries: 100,
+              maxBytes: 16384,
+              items: [
+                { id: 'text-1', kind: 'text', text: 'copied text', createdAt: new Date().toISOString(), truncated: false },
+                { id: 'image-1', kind: 'image', imageBytes: 44, imageFormat: 'dibv5', createdAt: new Date().toISOString() },
+                { id: 'files-1', kind: 'files', files: ['Project'], createdAt: new Date().toISOString(), truncated: false },
+              ],
+            },
+          }),
+          get_clipboard_history_image: async () => ({ ok: true, data: { dataUrl: imageUrl } }),
+        },
+      },
+    })
+  }, imageDataUrl)
+
+  await page.getByRole('button', { name: '剪切板历史', exact: true }).click()
+  const filters = page.locator('.clipboard-history-filters')
+  await expect(filters.getByRole('button', { name: /图片/ })).toContainText('1')
+  await filters.getByRole('button', { name: /图片/ }).click()
+  await expect(page.locator('.clipboard-history-list article')).toHaveCount(1)
+  await expect(page.locator('.clipboard-history-list article')).toContainText('DIBV5 图片')
+  await page.getByRole('button', { name: '预览', exact: true }).click()
+  const preview = page.getByAltText('剪切板图片预览')
+  await expect(preview).toBeVisible()
+  await expect.poll(() => preview.evaluate((image) => (image as HTMLImageElement).naturalWidth)).toBe(1)
+
+  await filters.getByRole('button', { name: /文件\/文件夹/ }).click()
+  await expect(page.locator('.clipboard-history-list article')).toHaveCount(1)
+  await expect(page.locator('.clipboard-history-list article')).toContainText('文件/文件夹 · Project')
+  await page.setViewportSize({ width: 390, height: 844 })
+  await assertViewportIntegrity(page)
+})
+
 test('ring geometry stays compact across card counts and viewports', async ({ page }) => {
   const toolIds = ['json', 'java', 'timestamp', 'base64-text', 'cron', 'notes', 'json-diff', 'json-java', 'base64-image', 'base64-file', 'qrcode', 'image-studio', 'image-format', 'video-audio', 'sql', 'yaml', 'xml', 'text-diff', 'text-stats', 'regex', 'hosts', 'md5', 'naming', 'identifiers']
   const scenarios = [

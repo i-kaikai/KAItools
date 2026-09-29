@@ -178,6 +178,25 @@ class DesktopApi:
             return _failure("CLIPBOARD_ITEM_INVALID", "剪切板历史项无效")
         return _success({"removed": self._clipboard.remove(item_id)})
 
+    def get_clipboard_history_image(self, item_id: Any) -> dict[str, Any]:
+        if self._clipboard is None:
+            return _failure("CLIPBOARD_UNAVAILABLE", "剪切板历史服务尚未就绪")
+        if not isinstance(item_id, str) or not 1 <= len(item_id) <= 80:
+            return _failure("CLIPBOARD_ITEM_INVALID", "剪切板历史项无效")
+        data_url = self._clipboard.image_data_url(item_id)
+        if data_url is None:
+            return _failure("CLIPBOARD_ITEM_UNAVAILABLE", "图片记录已不存在或无法预览")
+        return _success({"dataUrl": data_url})
+
+    def copy_clipboard_history_item(self, item_id: Any) -> dict[str, Any]:
+        if self._clipboard is None:
+            return _failure("CLIPBOARD_UNAVAILABLE", "剪切板历史服务尚未就绪")
+        if not isinstance(item_id, str) or not 1 <= len(item_id) <= 80:
+            return _failure("CLIPBOARD_ITEM_INVALID", "剪切板历史项无效")
+        if not self._clipboard.copy_item(item_id):
+            return _failure("CLIPBOARD_WRITE_FAILED", "无法将这条记录写回系统剪切板")
+        return _success()
+
     def set_clipboard_monitoring(self, enabled: Any) -> dict[str, Any]:
         if self._clipboard is None:
             return _failure("CLIPBOARD_UNAVAILABLE", "剪切板历史服务尚未就绪")
