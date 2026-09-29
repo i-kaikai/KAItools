@@ -1,4 +1,5 @@
 import type { FileManagerAttachment, FileManagerFile, FileManagerFolder, FileManagerState, ToolId } from '@/types'
+import { toolsById } from '@/tools/registry'
 
 const DATABASE_NAME = 'kaitools-file-manager'
 const STORE_NAME = 'state'
@@ -7,12 +8,23 @@ const MAX_FOLDERS = 500
 const MAX_FILES = 2_000
 const MAX_ATTACHMENTS = 20
 
+export const DEFAULT_CLOSE_PROMPT_TOOL_IDS: ToolId[] = ['checklist', 'kanban', 'mermaid', 'flowchart']
+
 function now(): string {
   return new Date().toISOString()
 }
 
 export function defaultFileManagerState(): FileManagerState {
   return { schemaVersion: 1, folders: [], files: [] }
+}
+
+export function normalizeClosePromptToolIds(value: unknown): ToolId[] {
+  if (!Array.isArray(value)) return [...DEFAULT_CLOSE_PROMPT_TOOL_IDS]
+  const unique = new Set<ToolId>()
+  for (const toolId of value) {
+    if (typeof toolId === 'string' && Object.prototype.hasOwnProperty.call(toolsById, toolId) && isArchivableTool(toolId as ToolId)) unique.add(toolId as ToolId)
+  }
+  return [...unique]
 }
 
 function copyState(state: Record<string, unknown>): Record<string, unknown> {
@@ -137,5 +149,9 @@ export async function saveBrowserFileManager(state: FileManagerState): Promise<v
 }
 
 export function isArchivableTool(toolId: ToolId): toolId is FileManagerFile['toolId'] {
-  return toolId !== 'home' && toolId !== 'file-manager' && toolId !== 'clipboard-history' && toolId !== 'hosts'
+  return Object.prototype.hasOwnProperty.call(toolsById, toolId)
+    && toolId !== 'home'
+    && toolId !== 'file-manager'
+    && toolId !== 'clipboard-history'
+    && toolId !== 'hosts'
 }

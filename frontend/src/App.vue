@@ -40,6 +40,7 @@ import githubLogo from '@/assets/github-invertocat-white.svg'
 import { localeOptions, t } from '@/i18n'
 import kaitoolsMarkWhite from '@/assets/kaitools-mark-white.svg'
 import { useAppStore } from '@/stores/app'
+import { useConfirmStore } from '@/stores/confirm'
 import { useToastStore } from '@/stores/toast'
 import type { AppLocale, ThemeMode, ToolTab } from '@/types'
 import { homeTool, toolsById, workspaceTools } from '@/tools/registry'
@@ -48,6 +49,7 @@ import { checkLatestVersion, latestUpdate, startUpdateProgressPolling, stopUpdat
 import { destroyErudaConsole, erudaConsoleActive, erudaConsoleVisible, toggleErudaConsole } from '@/utils/erudaConsole'
 
 const app = useAppStore()
+const confirm = useConfirmStore()
 const toast = useToastStore()
 const sidebarSearch = ref('')
 const searchOpen = ref(false)
@@ -57,6 +59,8 @@ const languageMenuOpen = ref(false)
 const developerPanelOpen = ref(false)
 const applicationSettingsOpen = ref(false)
 const releaseNotesOpen = ref(false)
+const closeOperationActive = ref(false)
+const desktopCloseHandling = ref(false)
 const updateAvailable = computed(() => !isWebRuntime && latestUpdate.value?.available === true)
 let developerUnlockClicks = 0
 let developerUnlockTimer: number | undefined
@@ -166,18 +170,23 @@ function archiveTitle(toolId: keyof typeof toolsById, state: Record<string, unkn
   return toolsById[toolId].name
 }
 
-function archiveActiveTab(title?: string, state?: Record<string, unknown>): void {
-  const tab = app.activeTab
-  const tool = tab ? toolsById[tab.toolId] : undefined
-  if (!tab || !tool || !isArchivableTool(tool.id)) return
+async function archiveTab(tab: ToolTab, title?: string, state?: Record<string, unknown>): Promise<boolean> {
+  const tool = toolsById[tab.toolId]
+  if (!tool || !isArchivableTool(tool.id)) return false
   const existingId = typeof tab.state.__fileManagerFileId === 'string' ? tab.state.__fileManagerFileId : ''
   const snapshot = state
     ? { ...state, ...(existingId && typeof state.__fileManagerFileId !== 'string' ? { __fileManagerFileId: existingId } : {}) }
     : tab.state
-  const file = app.archiveToolState(tool.id, title ?? archiveTitle(tool.id, snapshot), snapshot)
-  if (!file) return
+  const file = await app.archiveToolState(tool.id, title ?? archiveTitle(tool.id, snapshot), snapshot)
+  if (!file) return false
   app.updateTabState(tab.id, { ...snapshot, __fileManagerFileId: file.id })
   toast.show(`已保存到文件管理器：${file.title}`, 'success')
+  return true
+}
+
+async function archiveActiveTab(title?: string, state?: Record<string, unknown>): Promise<void> {
+  const tab = app.activeTab
+  if (tab) await archiveTab(tab, title, state)
 }
 
 function prefetchTool(toolId: keyof typeof toolsById): void {
@@ -201,8 +210,45 @@ function selectSearchTool(toolId: keyof typeof toolsById): void {
   closeSearch()
 }
 
+function closePromptApplies(tab: ToolTab): boolean {
+  if (!isArchivableTool(tab.toolId) || !app.hasUnarchivedChanges(tab.id)) return false
+  if (app.settings.closePromptMode === 'all') return true
+  return app.settings.closePromptMode === 'selected' && app.settings.closePromptToolIds.includes(tab.toolId)
+}
+
+async function resolveClosePrompt(tab: ToolTab): Promise<'save' | 'discard' | 'cancel'> {
+  return confirm.askSave({
+    title: t('closePrompt.title'),
+    message: t('closePrompt.message', { tool: tab.title }),
+    confirmLabel: t('closePrompt.save'),
+    discardLabel: t('closePrompt.discard'),
+    cancelLabel: t('closePrompt.cancel'),
+    tone: 'warning',
+  })
+}
+
+async function closeTabsSequentially(tabIds: string[], removeTabs = true): Promise<boolean> {
+  if (closeOperationActive.value) return false
+  closeOperationActive.value = true
+  try {
+    for (const tabId of tabIds) {
+      const tab = app.tabs.find((item) => item.id === tabId)
+      if (!tab || tab.toolId === 'home') continue
+      if (closePromptApplies(tab)) {
+        const decision = await resolveClosePrompt(tab)
+        if (decision === 'cancel') return false
+        if (decision === 'save' && !(await archiveTab(tab))) return false
+      }
+      if (removeTabs) app.closeTab(tab.id)
+    }
+    return true
+  } finally {
+    closeOperationActive.value = false
+  }
+}
+
 function closeTab(tab: ToolTab): void {
-  app.closeTab(tab.id)
+  void closeTabsSequentially([tab.id])
 }
 
 function activateTab(tab: ToolTab): void {
@@ -245,8 +291,9 @@ function tabsForMenu(mode: 'current' | 'others' | 'right' | 'all'): string[] {
 }
 
 function closeTabsFromMenu(mode: 'current' | 'others' | 'right' | 'all'): void {
-  app.closeTabs(tabsForMenu(mode))
+  const tabIds = tabsForMenu(mode)
   closeTabMenu()
+  void closeTabsSequentially(tabIds)
 }
 
 function cycleTheme(): void {
@@ -309,6 +356,7 @@ function onKeydown(event: KeyboardEvent): void {
   }
   if (event.ctrlKey && event.key.toLowerCase() === 'w' && app.activeTab) {
     event.preventDefault()
+    if (closeOperationActive.value) return
     closeTab(app.activeTab)
   }
   if (event.ctrlKey && event.key.toLowerCase() === 'n' && activeTool.value) {
@@ -321,8 +369,72 @@ function preserveWorkspaceForRefresh(): void {
   app.flushSessionWorkspace()
 }
 
+function initializeCloseBaselines(): void {
+  for (const tab of app.tabs) {
+    if (typeof tab.state.__closeBaselineHash === 'string' && typeof tab.state.__closeBaselineHasContent === 'boolean') continue
+    const archivedId = typeof tab.state.__fileManagerFileId === 'string' ? tab.state.__fileManagerFileId : ''
+    const archived = archivedId ? app.fileManager.files.find((file) => file.id === archivedId && file.toolId === tab.toolId) : undefined
+    const tool = toolsById[tab.toolId]
+    if (tool) app.setTabCloseBaseline(tab.id, archived?.state ?? tool.initialState())
+  }
+}
+
+async function processDesktopExit(): Promise<boolean> {
+  if (closeOperationActive.value) return false
+  closeOperationActive.value = true
+  let pinnedWorkspaceChanged = false
+  try {
+    for (const tab of [...app.tabs].filter((item) => item.toolId !== 'home')) {
+      if (!closePromptApplies(tab)) continue
+      const decision = await resolveClosePrompt(tab)
+      if (decision === 'cancel') {
+        if (pinnedWorkspaceChanged) await app.persistWorkspace()
+        return false
+      }
+      if (decision === 'save') {
+        if (!(await archiveTab(tab))) {
+          if (pinnedWorkspaceChanged) await app.persistWorkspace()
+          return false
+        }
+        pinnedWorkspaceChanged ||= tab.pinned
+      } else {
+        const tool = toolsById[tab.toolId]
+        if (tool) app.revertTabToCloseBaseline(tab.id, tool.initialState())
+        pinnedWorkspaceChanged ||= tab.pinned
+      }
+    }
+    if (pinnedWorkspaceChanged && !(await app.persistWorkspace())) return false
+    app.flushSessionWorkspace()
+    return true
+  } finally {
+    closeOperationActive.value = false
+  }
+}
+
+async function handleDesktopCloseRequest(): Promise<void> {
+  if (isWebRuntime || desktopCloseHandling.value) return
+  desktopCloseHandling.value = true
+  try {
+    const approved = await processDesktopExit()
+    const result = await desktopApi.resolveApplicationClose(approved)
+    if (!result.ok) toast.show(result.error.message, 'error')
+  } finally {
+    desktopCloseHandling.value = false
+  }
+}
+
+async function bootstrapApplication(): Promise<void> {
+  await app.bootstrap(homeTool.initialState())
+  if (!app.ready) return
+  initializeCloseBaselines()
+  if (isWebRuntime) return
+  const result = await desktopApi.registerCloseCoordinator()
+  if (!result.ok) toast.show(result.error.message, 'error')
+}
+
 onMounted(() => {
-  void app.bootstrap(homeTool.initialState())
+  window.addEventListener('kaitools:request-application-close', handleDesktopCloseRequest)
+  void bootstrapApplication()
   void checkStartupUpdate()
   startUpdateProgressPolling()
   window.addEventListener('keydown', onKeydown)
@@ -338,6 +450,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('pointerdown', closeTabMenu)
   window.removeEventListener('blur', closeTabMenu)
   window.removeEventListener('pagehide', preserveWorkspaceForRefresh)
+  window.removeEventListener('kaitools:request-application-close', handleDesktopCloseRequest)
   stopUpdateProgressPolling()
 })
 </script>

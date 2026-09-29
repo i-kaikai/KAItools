@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
 
-import { isArchivableTool, sanitizeFileManager } from '@/api/fileManagerStorage'
+import { DEFAULT_CLOSE_PROMPT_TOOL_IDS, isArchivableTool, normalizeClosePromptToolIds, sanitizeFileManager } from '@/api/fileManagerStorage'
 
 describe('file manager storage', () => {
   it('keeps valid local files and drops corrupt folder references', () => {
@@ -33,8 +33,16 @@ describe('file manager storage', () => {
   it('only permits persistent tools in the archive library', () => {
     expect(isArchivableTool('api-client')).toBe(true)
     expect(isArchivableTool('flowchart')).toBe(true)
+    expect(isArchivableTool('checklist')).toBe(true)
+    expect(isArchivableTool('date-calculator')).toBe(true)
     expect(isArchivableTool('file-manager')).toBe(false)
     expect(isArchivableTool('clipboard-history')).toBe(false)
     expect(isArchivableTool('notes')).toBe(true)
+  })
+
+  it('normalizes close prompt tool selections against the archive allowlist', () => {
+    expect(normalizeClosePromptToolIds(undefined)).toEqual(DEFAULT_CLOSE_PROMPT_TOOL_IDS)
+    expect(normalizeClosePromptToolIds(['checklist', 'hosts', 'checklist'])).toEqual(['checklist'])
+    expect(normalizeClosePromptToolIds([])).toEqual([])
   })
 })

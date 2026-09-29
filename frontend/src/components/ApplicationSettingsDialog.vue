@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { Clipboard, Globe2, Keyboard, MonitorDown, Palette, PanelLeft, RotateCcw, Sparkles, Type, X } from '@lucide/vue'
+import { Clipboard, Globe2, Keyboard, MonitorDown, Palette, PanelLeft, RotateCcw, Save, Sparkles, Type, X } from '@lucide/vue'
 import { computed, ref, watch } from 'vue'
 
 import SegmentedControl from '@/components/SegmentedControl.vue'
 import { localeOptions as availableLocales, useI18n } from '@/i18n'
 import { isWebRuntime } from '@/runtime'
+import { isArchivableTool } from '@/api/fileManagerStorage'
 import { useAppStore } from '@/stores/app'
 import { useToastStore } from '@/stores/toast'
-import type { AppLocale, ParticleQuality, SidebarStartup, ThemeMode } from '@/types'
+import { workspaceTools } from '@/tools/registry'
+import type { AppLocale, ClosePromptMode, ParticleQuality, SidebarStartup, ThemeMode } from '@/types'
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: [] }>()
@@ -20,6 +22,7 @@ const saving = ref(false)
 const message = ref(t('settings.hotkey.initial'))
 
 const localeOptions = computed(() => availableLocales.map((option) => ({ value: option.value, label: option.nativeLabel })))
+const closePromptTools = computed(() => workspaceTools.filter((tool) => isArchivableTool(tool.id)))
 const themeOptions = computed<Array<{ value: ThemeMode; label: string }>>(() => [
   { value: 'system', label: t('settings.theme.system') }, { value: 'light', label: t('settings.theme.light') }, { value: 'dark', label: t('settings.theme.dark') },
 ])
@@ -28,6 +31,11 @@ const particleOptions = computed<Array<{ value: ParticleQuality; label: string }
 ])
 const sidebarStartupOptions = computed<Array<{ value: SidebarStartup; label: string }>>(() => [
   { value: 'remember', label: t('settings.sidebar.remember') }, { value: 'collapsed', label: t('settings.sidebar.collapsed') }, { value: 'expanded', label: t('settings.sidebar.expanded') },
+])
+const closePromptOptions = computed<Array<{ value: ClosePromptMode; label: string }>>(() => [
+  { value: 'selected', label: t('settings.closePrompt.selected') },
+  { value: 'all', label: t('settings.closePrompt.all') },
+  { value: 'never', label: t('settings.closePrompt.never') },
 ])
 const formattedHotkey = computed(() => hotkey.value.replaceAll('+', ' + '))
 
@@ -131,6 +139,17 @@ function restoreHotkeyDefault(): void {
           <div class="application-settings-heading"><PanelLeft :size="17" /><span><strong>{{ t('settings.workspace.title') }}</strong><small>{{ t('settings.workspace.description') }}</small></span></div>
           <div class="application-settings-option"><span><strong>{{ t('settings.sidebar.title') }}</strong><small>{{ t('settings.sidebar.description') }}</small></span><SegmentedControl :model-value="app.settings.sidebarStartup" :label="t('settings.sidebar.title')" :options="sidebarStartupOptions" @update:model-value="app.setSidebarStartup($event as SidebarStartup)" /></div>
           <label class="application-settings-switch"><span><strong>{{ t('settings.restore.title') }}</strong><small>{{ t('settings.restore.description') }}</small></span><input :checked="app.settings.restorePinnedTabsOnLaunch" type="checkbox" :aria-label="t('settings.restore.title')" @change="app.setRestorePinnedTabsOnLaunch(($event.target as HTMLInputElement).checked)" /></label>
+        </section>
+
+        <section class="application-settings-section">
+          <div class="application-settings-heading"><Save :size="17" /><span><strong>{{ t('settings.closePrompt.title') }}</strong><small>{{ t('settings.closePrompt.description') }}</small></span></div>
+          <div class="application-settings-option"><span><strong>{{ t('settings.closePrompt.mode') }}</strong><small>{{ t('settings.closePrompt.modeDescription') }}</small></span><SegmentedControl :model-value="app.settings.closePromptMode" :label="t('settings.closePrompt.mode')" :options="closePromptOptions" @update:model-value="app.setClosePromptMode($event as ClosePromptMode)" /></div>
+          <div v-if="app.settings.closePromptMode === 'selected'" class="close-prompt-tool-list" :aria-label="t('settings.closePrompt.toolList')">
+            <label v-for="tool in closePromptTools" :key="tool.id" class="close-prompt-tool-option">
+              <input :checked="app.settings.closePromptToolIds.includes(tool.id)" type="checkbox" @change="app.setClosePromptToolEnabled(tool.id, ($event.target as HTMLInputElement).checked)" />
+              <span>{{ tool.name }}</span>
+            </label>
+          </div>
         </section>
 
         <section class="application-settings-section">

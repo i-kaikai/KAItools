@@ -29,3 +29,16 @@ def test_hotkey_restores_hidden_or_background_application(monkeypatch) -> None:
     tray.toggle_for_hotkey()
 
     assert calls == ["show"]
+
+
+def test_exit_request_keeps_tray_until_window_close_is_approved() -> None:
+    closed: list[bool] = []
+    disposed: list[bool] = []
+    controller = object.__new__(TrayController)
+    controller._window = SimpleNamespace(native=SimpleNamespace(Close=lambda: closed.append(True)))
+    controller._dispose = lambda: disposed.append(True)
+
+    controller._exit_application()
+
+    assert closed == [True]
+    assert disposed == []

@@ -226,6 +226,7 @@ def main() -> int:
         api.bind_window(window)
         api.bind_tray(tray)
         api.bind_clipboard(clipboard)
+        window.events.closing += api.handle_window_closing
         instance.listen(tray.show)
         LOGGER.info("application_start version=%s webview2=%s", APP_VERSION, detected_webview2)
         webview.start(

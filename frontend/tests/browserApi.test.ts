@@ -43,6 +43,8 @@ describe('browser API storage', () => {
     expect(initial.data.dashboardCards.stepIntervalMs).toBe(1600)
     expect(initial.data.settings.developerModeEnabled).toBe(false)
     expect(initial.data.settings.activationHotkey).toBe('Ctrl+Alt+K')
+    expect(initial.data.settings.closePromptMode).toBe('selected')
+    expect(initial.data.settings.closePromptToolIds).toEqual(['checklist', 'kanban', 'mermaid', 'flowchart'])
     expect(initial.data.settings).toMatchObject({
       locale: 'zh-CN',
       particleQuality: 'high',
@@ -51,6 +53,8 @@ describe('browser API storage', () => {
       restorePinnedTabsOnLaunch: true,
       editorFontSize: 13,
       editorLineWrapping: true,
+      closePromptMode: 'selected',
+      closePromptToolIds: ['checklist', 'kanban', 'mermaid', 'flowchart'],
       clipboardMonitoringEnabled: true,
       systemStatusRefreshSeconds: 1,
       systemStatusRefreshMigrationVersion: 1,
@@ -71,7 +75,7 @@ describe('browser API storage', () => {
       classicRotationSpeed: 22,
       stepIntervalMs: 2400,
     }
-    await desktopApi.saveSettings({ settings: { ...initial.data.settings, theme: 'dark', locale: 'en-US' }, dashboardCards })
+    await desktopApi.saveSettings({ settings: { ...initial.data.settings, theme: 'dark', locale: 'en-US', closePromptMode: 'all', closePromptToolIds: ['qrcode'] }, dashboardCards })
     await desktopApi.saveWorkspace([tab])
 
     const restored = await desktopApi.loadState()
@@ -79,6 +83,8 @@ describe('browser API storage', () => {
     if (!restored.ok) return
     expect(restored.data.settings.theme).toBe('dark')
     expect(restored.data.settings.locale).toBe('en-US')
+    expect(restored.data.settings.closePromptMode).toBe('all')
+    expect(restored.data.settings.closePromptToolIds).toEqual(['qrcode'])
     expect(restored.data.dashboardCards).toEqual(dashboardCards)
     expect(restored.data.workspace.tabs).toEqual([tab])
   })
@@ -125,7 +131,22 @@ describe('browser API storage', () => {
       motionMode: 'system',
       editorFontSize: 13,
       editorLineWrapping: true,
+      closePromptMode: 'selected',
+      closePromptToolIds: ['checklist', 'kanban', 'mermaid', 'flowchart'],
     })
+  })
+
+  it('normalizes invalid close prompt modes and excludes tools that cannot be archived', async () => {
+    localStorage.setItem('devtoolkit.browser.state.v1', JSON.stringify({
+      settings: { schemaVersion: 1, closePromptMode: 'sometimes', closePromptToolIds: ['checklist', 'hosts', 'checklist'] },
+    }))
+
+    const result = await desktopApi.loadState()
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.data.settings.closePromptMode).toBe('selected')
+    expect(result.data.settings.closePromptToolIds).toEqual(['checklist'])
   })
 
   it('migrates the legacy manual refresh default once and preserves later manual choices', async () => {

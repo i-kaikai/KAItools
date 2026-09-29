@@ -137,6 +137,7 @@
 .confirm-dialog-footer {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 16px 20px 20px;
 }
@@ -159,6 +160,8 @@
 .confirm-dialog-footer button:active { transform: scale(.97); }
 .confirm-dialog-secondary { border: 1px solid var(--border); color: var(--text-secondary); background: var(--surface); }
 .confirm-dialog-secondary:hover { border-color: var(--text-faint); color: var(--text-primary); background: var(--surface-hover); }
+.confirm-dialog-discard { border: 1px solid color-mix(in srgb, var(--danger) 32%, var(--border)); color: var(--danger); background: var(--surface); }
+.confirm-dialog-discard:hover { border-color: var(--danger); background: var(--danger-soft); }
 .confirm-dialog-primary { border: 1px solid var(--danger); color: #fff; background: var(--danger); box-shadow: 0 4px 10px color-mix(in srgb, var(--danger) 22%, transparent); }
 .confirm-dialog-primary:hover { border-color: color-mix(in srgb, var(--danger) 80%, #000); background: color-mix(in srgb, var(--danger) 88%, #000); box-shadow: 0 6px 16px color-mix(in srgb, var(--danger) 28%, transparent); }
 .tone-warning .confirm-dialog-primary { border-color: var(--warning); background: var(--warning); box-shadow: 0 4px 10px color-mix(in srgb, var(--warning) 22%, transparent); }
@@ -190,7 +193,8 @@
   .confirm-dialog-header { padding: 17px 16px 15px; }
   .confirm-dialog-body { padding: 16px 16px 6px; }
   .confirm-dialog-footer { padding: 14px 16px 16px; }
-  .confirm-dialog-footer button { flex: 1; }
+  .confirm-dialog-footer { gap: 5px; }
+  .confirm-dialog-footer button { flex: 1; min-width: 0; gap: 3px; padding: 0 4px; font-size: 9px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

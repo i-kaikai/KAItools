@@ -38,6 +38,7 @@ import {
 import { defineAsyncComponent, type Component } from 'vue'
 
 import ToolLoadingState from '@/components/ToolLoadingState.vue'
+import { flowchartExample } from '@/tools/mermaid/examples'
 import { t } from '@/i18n'
 import type { ToolId } from '@/types'
 
@@ -201,7 +202,7 @@ const workspaceToolDefinitions: ToolDefinition[] = [
     category: 'workflow',
     icon: Workflow,
     ...lazyTool(() => import('./mermaid/MermaidTool.vue')),
-    initialState: () => ({ split: 46, theme: 'auto' }),
+    initialState: () => ({ source: flowchartExample, split: 46, theme: 'auto' }),
     chainInput: (value) => ({ source: value }),
   },
   {

@@ -1,18 +1,23 @@
 import { defineStore } from 'pinia'
 
 export type ConfirmTone = 'danger' | 'warning' | 'neutral'
+export type SaveDecision = 'save' | 'discard' | 'cancel'
+export type ConfirmDecision = boolean | SaveDecision
 
 export interface ConfirmOptions {
   title: string
   message: string
   confirmLabel?: string
   cancelLabel?: string
+  discardLabel?: string
   tone?: ConfirmTone
 }
 
 export interface ConfirmRequest extends Required<Pick<ConfirmOptions, 'title' | 'message' | 'confirmLabel' | 'cancelLabel' | 'tone'>> {
+  kind: 'confirm' | 'save'
+  discardLabel: string
   id: number
-  resolve: (confirmed: boolean) => void
+  resolve: (decision: ConfirmDecision) => void
 }
 
 export const useConfirmStore = defineStore('confirm', {
@@ -27,19 +32,38 @@ export const useConfirmStore = defineStore('confirm', {
     ask(options: ConfirmOptions): Promise<boolean> {
       return new Promise((resolve) => {
         this.queue.push({
+          kind: 'confirm',
           id: this.nextId++,
           title: options.title,
           message: options.message,
           confirmLabel: options.confirmLabel ?? '继续',
           cancelLabel: options.cancelLabel ?? '取消',
+          discardLabel: options.discardLabel ?? '',
           tone: options.tone ?? 'warning',
-          resolve,
+          resolve: (decision) => resolve(decision === true),
         })
       })
     },
-    settle(confirmed: boolean): void {
+    askSave(options: ConfirmOptions): Promise<SaveDecision> {
+      return new Promise((resolve) => {
+        this.queue.push({
+          kind: 'save',
+          id: this.nextId++,
+          title: options.title,
+          message: options.message,
+          confirmLabel: options.confirmLabel ?? '保存并关闭',
+          cancelLabel: options.cancelLabel ?? '继续编辑',
+          discardLabel: options.discardLabel ?? '不保存',
+          tone: options.tone ?? 'warning',
+          resolve: (decision) => resolve(typeof decision === 'string' ? decision : 'cancel'),
+        })
+      })
+    },
+    settle(decision: ConfirmDecision): void {
       const request = this.queue.shift()
-      request?.resolve(confirmed)
+      if (!request) return
+      if (request.kind === 'save') request.resolve(typeof decision === 'string' ? decision : 'cancel')
+      else request.resolve(decision === true)
     },
   },
 })

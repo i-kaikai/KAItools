@@ -2564,6 +2564,82 @@ test('tab context menu closes current, right-side and all tool tabs', async ({ p
   await assertViewportIntegrity(page)
 })
 
+test('close prompt policy and custom tool selection persist in application settings', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: '应用设置' }).click()
+  const settings = page.getByRole('dialog', { name: '应用设置' })
+  const checklistOption = settings.getByRole('checkbox', { name: '清单工作台' })
+  await expect(checklistOption).toBeChecked()
+  await checklistOption.uncheck()
+  await settings.getByRole('radio', { name: '全部可归档' }).click()
+
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('devtoolkit.browser.state.v1') ?? '{}').settings?.closePromptMode ?? null)).toBe('all')
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('devtoolkit.browser.state.v1') ?? '{}').settings)
+  expect(saved.closePromptMode).toBe('all')
+  expect(saved.closePromptToolIds).not.toContain('checklist')
+
+  await settings.getByRole('radio', { name: '自选工具' }).click()
+  await expect(checklistOption).not.toBeChecked()
+})
+
+test('unsaved flowcharts can be saved, discarded, or kept open when closing a tab', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await openWorkspaceTool(page, '流程图画板')
+  const initialTab = page.getByRole('tab', { name: /流程图画板/ })
+  await expect(page.getByLabel('流程图名称')).toHaveValue('审批流程')
+  await initialTab.getByRole('button', { name: '关闭标签' }).click()
+  await expect(initialTab).toHaveCount(0)
+  await expect(page.getByRole('alertdialog')).toHaveCount(0)
+
+  await openWorkspaceTool(page, '流程图画板')
+  await page.getByLabel('流程图名称').fill('关闭前保存验收')
+
+  const tab = page.getByRole('tab', { name: /流程图画板/ })
+  await tab.getByRole('button', { name: '关闭标签' }).click()
+  const prompt = page.getByRole('alertdialog')
+  await expect(prompt.getByRole('heading', { name: '保存更改？' })).toBeVisible()
+  await prompt.getByRole('button', { name: '继续编辑' }).click()
+  await expect(tab).toBeVisible()
+
+  await tab.getByRole('button', { name: '关闭标签' }).click()
+  await page.getByRole('alertdialog').getByRole('button', { name: '保存并关闭' }).click()
+  await expect(tab).toHaveCount(0)
+
+  const archivedTitles = await page.evaluate(async () => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('kaitools-file-manager')
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    try {
+      return await new Promise<string[]>((resolve, reject) => {
+        const request = database.transaction('state', 'readonly').objectStore('state').get('files')
+        request.onsuccess = () => resolve((request.result?.files ?? []).map((file: { title: string }) => file.title))
+        request.onerror = () => reject(request.error)
+      })
+    } finally {
+      database.close()
+    }
+  })
+  expect(archivedTitles).toContain('关闭前保存验收')
+})
+
+test('canceling a bulk close stops without removing the edited tab', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 })
+  await page.goto('/')
+  await openWorkspaceTool(page, '流程图画板')
+  await page.getByLabel('流程图名称').fill('批量关闭后继续编辑')
+  const tab = page.getByRole('tab', { name: /流程图画板/ })
+  await tab.click({ button: 'right' })
+  await page.getByRole('menu', { name: '标签页操作' }).getByRole('menuitem', { name: '关闭所有' }).click()
+  const prompt = page.getByRole('alertdialog')
+  await expect(prompt).toBeVisible()
+  await prompt.getByRole('button', { name: '继续编辑' }).click()
+  await expect(tab).toBeVisible()
+  await expect(page.getByLabel('流程图名称')).toHaveValue('批量关闭后继续编辑')
+})
+
 test('Crontab supports raw expressions, field templates, time zones and run previews', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto('/')

@@ -31,6 +31,8 @@ def test_default_settings_start_with_collapsed_sidebar(tmp_path: Path) -> None:
         "clipboardMonitoringEnabled": True,
         "systemStatusRefreshSeconds": 1,
         "systemStatusRefreshMigrationVersion": 1,
+        "closePromptMode": "selected",
+        "closePromptToolIds": ["checklist", "kanban", "mermaid", "flowchart"],
         "developerModeEnabled": False,
         "activationHotkey": "Ctrl+Alt+K",
         "recentToolIds": [],
@@ -59,6 +61,8 @@ def test_storage_round_trip_and_schema(tmp_path: Path) -> None:
             "clipboardMonitoringEnabled": False,
             "systemStatusRefreshSeconds": 60,
             "systemStatusRefreshMigrationVersion": 1,
+            "closePromptMode": "all",
+            "closePromptToolIds": ["checklist", "image-studio"],
             "activationHotkey": "ctrl+alt+f8",
             "recentToolIds": ["json", "cron"],
         },
@@ -102,6 +106,8 @@ def test_storage_round_trip_and_schema(tmp_path: Path) -> None:
         "clipboardMonitoringEnabled": False,
         "systemStatusRefreshSeconds": 60,
         "systemStatusRefreshMigrationVersion": 1,
+        "closePromptMode": "all",
+        "closePromptToolIds": ["checklist", "image-studio"],
         "developerModeEnabled": False,
         "activationHotkey": "Ctrl+Alt+F8",
         "recentToolIds": ["json", "cron"],
@@ -129,6 +135,12 @@ def test_storage_rejects_unknown_and_oversized_content(tmp_path: Path) -> None:
         storage.save_settings({"settings": {"editorFontSize": 17}})
     with pytest.raises(StorageError):
         storage.save_settings({"settings": {"recentToolIds": ["json", "unknown"]}})
+    with pytest.raises(StorageError):
+        storage.save_settings({"settings": {"closePromptMode": "sometimes"}})
+    with pytest.raises(StorageError):
+        storage.save_settings({"settings": {"closePromptToolIds": ["hosts"]}})
+    with pytest.raises(StorageError):
+        storage.save_settings({"settings": {"closePromptToolIds": ["checklist", "checklist"]}})
     with pytest.raises(StorageError):
         storage.save_settings({"hostsProfiles": {"groups": [], "unexpected": True}})
     with pytest.raises(StorageError):
@@ -217,6 +229,24 @@ def test_file_manager_rejects_unknown_tools_and_recovers_from_corrupt_index(tmp_
 
     storage.paths.file_manager_file.write_text("{broken", encoding="utf-8")
     assert storage.load_file_manager() == {"schemaVersion": 1, "folders": [], "files": []}
+
+
+def test_file_manager_round_trips_checklist_snapshots(tmp_path: Path) -> None:
+    storage = AppStorage(paths(tmp_path))
+    storage.ensure_directories()
+    archive = {
+        "schemaVersion": 1,
+        "folders": [],
+        "files": [{
+            "id": "checklist-1", "folderId": None, "title": "工作清单", "toolId": "checklist", "payloadVersion": 1,
+            "state": {"lists": [{"id": "list-1", "title": "工作清单", "items": []}]}, "attachments": [],
+            "createdAt": "2026-09-29T00:00:00Z", "updatedAt": "2026-09-29T00:00:00Z",
+        }],
+    }
+
+    storage.save_file_manager(archive)
+
+    assert storage.load_file_manager() == archive
 
 
 def test_dashboard_cards_round_trip_as_local_structured_settings(tmp_path: Path) -> None:
@@ -339,12 +369,28 @@ def test_legacy_configuration_is_migrated_atomically(tmp_path: Path) -> None:
         "clipboardMonitoringEnabled": True,
         "systemStatusRefreshSeconds": 1,
         "systemStatusRefreshMigrationVersion": 1,
+        "closePromptMode": "selected",
+        "closePromptToolIds": ["checklist", "kanban", "mermaid", "flowchart"],
         "developerModeEnabled": False,
         "activationHotkey": "Ctrl+Alt+K",
         "recentToolIds": [],
     }
     assert persisted == settings
     assert not list(storage.paths.data_root.glob("*.tmp"))
+
+
+def test_invalid_close_prompt_settings_are_normalized(tmp_path: Path) -> None:
+    storage = AppStorage(paths(tmp_path))
+    storage.ensure_directories()
+    storage.paths.settings_file.write_text(
+        json.dumps({"closePromptMode": [], "closePromptToolIds": ["hosts", "checklist", "checklist"]}),
+        encoding="utf-8",
+    )
+
+    settings = storage.load_all()["settings"]
+
+    assert settings["closePromptMode"] == "selected"
+    assert settings["closePromptToolIds"] == ["checklist"]
 
 
 def test_legacy_manual_status_refresh_migrates_once_then_remains_user_configurable(tmp_path: Path) -> None:

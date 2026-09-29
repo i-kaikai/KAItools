@@ -32,6 +32,7 @@ TOOL_IDS = {
     "mermaid",
     "flowchart",
     "kanban",
+    "checklist",
     "java",
     "timestamp",
     "base64-text",
@@ -58,7 +59,10 @@ TOOL_IDS = {
     "notes",
     "clipboard-history",
     "calculator",
+    "date-calculator",
 }
+ARCHIVABLE_TOOL_IDS = TOOL_IDS - {"file-manager", "clipboard-history", "hosts"}
+DEFAULT_CLOSE_PROMPT_TOOL_IDS = ["checklist", "kanban", "mermaid", "flowchart"]
 
 DEFAULT_SETTINGS: dict[str, Any] = {
     "schemaVersion": SCHEMA_VERSION,
@@ -74,6 +78,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "clipboardMonitoringEnabled": True,
     "systemStatusRefreshSeconds": 1,
     "systemStatusRefreshMigrationVersion": SYSTEM_STATUS_REFRESH_MIGRATION_VERSION,
+    "closePromptMode": "selected",
+    "closePromptToolIds": DEFAULT_CLOSE_PROMPT_TOOL_IDS,
     "developerModeEnabled": False,
     "activationHotkey": DEFAULT_ACTIVATION_HOTKEY,
     "recentToolIds": [],
@@ -267,6 +273,22 @@ def _read_settings(path: Path) -> dict[str, Any]:
     if not isinstance(settings.get("developerModeEnabled"), bool):
         settings["developerModeEnabled"] = DEFAULT_SETTINGS["developerModeEnabled"]
         changed = True
+    if not isinstance(settings.get("closePromptMode"), str) or settings["closePromptMode"] not in {"selected", "all", "never"}:
+        settings["closePromptMode"] = DEFAULT_SETTINGS["closePromptMode"]
+        changed = True
+    close_prompt_tool_ids = settings.get("closePromptToolIds")
+    if not isinstance(close_prompt_tool_ids, list):
+        settings["closePromptToolIds"] = copy.deepcopy(DEFAULT_CLOSE_PROMPT_TOOL_IDS)
+        changed = True
+    else:
+        normalized_close_prompt_ids: list[str] = []
+        for tool_id in close_prompt_tool_ids:
+            if not isinstance(tool_id, str) or tool_id not in ARCHIVABLE_TOOL_IDS or tool_id in normalized_close_prompt_ids:
+                continue
+            normalized_close_prompt_ids.append(tool_id)
+        if close_prompt_tool_ids != normalized_close_prompt_ids:
+            settings["closePromptToolIds"] = normalized_close_prompt_ids
+            changed = True
     if not isinstance(settings.get("activationHotkey"), str):
         settings["activationHotkey"] = DEFAULT_ACTIVATION_HOTKEY
         changed = True
@@ -416,12 +438,12 @@ class AppStorage:
             settings = payload["settings"]
             if not isinstance(settings, dict):
                 raise StorageError("设置格式无效")
-            if set(settings) - {"schemaVersion", "locale", "theme", "sidebarCollapsed", "particleQuality", "motionMode", "sidebarStartup", "restorePinnedTabsOnLaunch", "editorFontSize", "editorLineWrapping", "clipboardMonitoringEnabled", "systemStatusRefreshSeconds", "systemStatusRefreshMigrationVersion", "developerModeEnabled", "activationHotkey", "recentToolIds"}:
+            if set(settings) - {"schemaVersion", "locale", "theme", "sidebarCollapsed", "particleQuality", "motionMode", "sidebarStartup", "restorePinnedTabsOnLaunch", "editorFontSize", "editorLineWrapping", "clipboardMonitoringEnabled", "systemStatusRefreshSeconds", "systemStatusRefreshMigrationVersion", "closePromptMode", "closePromptToolIds", "developerModeEnabled", "activationHotkey", "recentToolIds"}:
                 raise StorageError("设置中包含不支持的字段")
             if settings.get("schemaVersion", SCHEMA_VERSION) != SCHEMA_VERSION:
                 raise StorageError("设置版本无效")
             current = _read_settings(self.paths.settings_file)
-            update = {key: settings[key] for key in ("locale", "theme", "sidebarCollapsed", "particleQuality", "motionMode", "sidebarStartup", "restorePinnedTabsOnLaunch", "editorFontSize", "editorLineWrapping", "clipboardMonitoringEnabled", "systemStatusRefreshSeconds", "systemStatusRefreshMigrationVersion", "developerModeEnabled", "activationHotkey", "recentToolIds") if key in settings}
+            update = {key: settings[key] for key in ("locale", "theme", "sidebarCollapsed", "particleQuality", "motionMode", "sidebarStartup", "restorePinnedTabsOnLaunch", "editorFontSize", "editorLineWrapping", "clipboardMonitoringEnabled", "systemStatusRefreshSeconds", "systemStatusRefreshMigrationVersion", "closePromptMode", "closePromptToolIds", "developerModeEnabled", "activationHotkey", "recentToolIds") if key in settings}
             if "locale" in update and update["locale"] not in APP_LOCALES:
                 raise StorageError("语言设置无效")
             if "theme" in update and update["theme"] not in THEMES:
@@ -456,6 +478,18 @@ class AppStorage:
                 raise StorageError("系统状态刷新设置无效")
             if "systemStatusRefreshMigrationVersion" in update and update["systemStatusRefreshMigrationVersion"] != SYSTEM_STATUS_REFRESH_MIGRATION_VERSION:
                 raise StorageError("系统状态刷新设置版本无效")
+            if "closePromptMode" in update and (
+                not isinstance(update["closePromptMode"], str)
+                or update["closePromptMode"] not in {"selected", "all", "never"}
+            ):
+                raise StorageError("关闭提示策略无效")
+            if "closePromptToolIds" in update and (
+                not isinstance(update["closePromptToolIds"], list)
+                or len(update["closePromptToolIds"]) > len(ARCHIVABLE_TOOL_IDS)
+                or any(not isinstance(tool_id, str) or tool_id not in ARCHIVABLE_TOOL_IDS for tool_id in update["closePromptToolIds"])
+                or len(set(update["closePromptToolIds"])) != len(update["closePromptToolIds"])
+            ):
+                raise StorageError("关闭提示工具列表无效")
             if "developerModeEnabled" in update and not isinstance(
                 update["developerModeEnabled"], bool
             ):

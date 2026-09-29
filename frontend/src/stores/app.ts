@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { toRaw } from 'vue'
 
 import { desktopApi } from '@/api/desktopApi'
-import { defaultFileManagerState, isArchivableTool } from '@/api/fileManagerStorage'
+import { defaultFileManagerState, isArchivableTool, normalizeClosePromptToolIds } from '@/api/fileManagerStorage'
 import { defaultNotesState } from '@/api/notesStorage'
 import {
   getRemoteShortcuts,
@@ -106,6 +106,9 @@ function copyLocalFileManager(value: FileManagerState): FileManagerState {
 function archiveEditableState(toolId: ToolId, state: Record<string, unknown>): Record<string, unknown> {
   const snapshot = cloneState(state)
   delete snapshot.__fileManagerAttachments
+  delete snapshot.__closeBaselineHash
+  delete snapshot.__closeBaselineHasContent
+  delete snapshot.__closeBaselinePending
   if (toolId === 'qrcode') delete snapshot.output
   if (toolId === 'calculator') delete snapshot.expressionResult
   if (toolId === 'md5') delete snapshot.output
@@ -115,6 +118,68 @@ function archiveEditableState(toolId: ToolId, state: Record<string, unknown>): R
     delete snapshot.characterCount
   }
   return snapshot
+}
+
+function closeComparableState(toolId: ToolId, state: Record<string, unknown>): Record<string, unknown> {
+  const snapshot = archiveEditableState(toolId, state)
+  delete snapshot.__fileManagerFileId
+  delete snapshot.__closeBaselineHash
+  delete snapshot.__closeBaselineHasContent
+  delete snapshot.__closeBaselinePending
+  delete snapshot.split
+  if (toolId === 'checklist') {
+    delete snapshot.activeListId
+    delete snapshot.collapsedSections
+    delete snapshot.query
+    delete snapshot.view
+  } else if (toolId === 'kanban') {
+    delete snapshot.filter
+    delete snapshot.query
+  } else if (toolId === 'calculator') {
+    delete snapshot.section
+  }
+  return snapshot
+}
+
+function stableStateValue(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableStateValue).join(',')}]`
+  if (value && typeof value === 'object') {
+    const object = value as Record<string, unknown>
+    const entries = Object.keys(object).filter((key) => object[key] !== undefined).sort()
+    return `{${entries.map((key) => `${JSON.stringify(key)}:${stableStateValue(object[key])}`).join(',')}}`
+  }
+  return JSON.stringify(value) ?? 'undefined'
+}
+
+function statesEqual(left: Record<string, unknown>, right: Record<string, unknown>): boolean {
+  return stableStateValue(left) === stableStateValue(right)
+}
+
+function stateHash(state: Record<string, unknown>): string {
+  // Keep session tabs compact instead of duplicating potentially large editor inputs.
+  const serialized = stableStateValue(state)
+  let first = 0x811c9dc5
+  let second = 0x9e3779b9
+  for (let index = 0; index < serialized.length; index += 1) {
+    const code = serialized.charCodeAt(index)
+    first = Math.imul(first ^ code, 0x01000193)
+    second = Math.imul(second ^ code, 0x85ebca6b)
+  }
+  return `${(first >>> 0).toString(16).padStart(8, '0')}${(second >>> 0).toString(16).padStart(8, '0')}`
+}
+
+function hasToolContent(state: Record<string, unknown>): boolean {
+  for (const [key, value] of Object.entries(state)) {
+    if (typeof value === 'string' && value.trim() && !['query', 'theme', 'split', 'filter', 'view', 'activeListId'].includes(key)) return true
+    if (Array.isArray(value) && value.length && !['collapsedSections'].includes(key)) {
+      if (key !== 'lists' || value.some((entry) => {
+        if (!entry || typeof entry !== 'object') return true
+        const list = entry as { title?: unknown; items?: unknown }
+        return (Array.isArray(list.items) && list.items.length > 0) || (typeof list.title === 'string' && list.title !== '工作清单')
+      })) return true
+    }
+  }
+  return false
 }
 
 function defaultShortcutSync(): ShortcutSyncState {
@@ -136,6 +201,8 @@ function defaultAppSettings(): AppSettings {
     clipboardMonitoringEnabled: true,
     systemStatusRefreshSeconds: 1,
     systemStatusRefreshMigrationVersion: 1,
+    closePromptMode: 'selected',
+    closePromptToolIds: normalizeClosePromptToolIds(undefined),
     developerModeEnabled: false,
     activationHotkey: 'Ctrl+Alt+K',
     recentToolIds: [],
@@ -170,6 +237,8 @@ function normalizeAppSettings(value: Partial<AppSettings> | undefined): AppSetti
         ? value.systemStatusRefreshSeconds
         : defaults.systemStatusRefreshSeconds,
     systemStatusRefreshMigrationVersion: 1,
+    closePromptMode: value?.closePromptMode === 'all' || value?.closePromptMode === 'never' ? value.closePromptMode : 'selected',
+    closePromptToolIds: normalizeClosePromptToolIds(value?.closePromptToolIds),
     developerModeEnabled: value?.developerModeEnabled === true,
     activationHotkey: typeof value?.activationHotkey === 'string' ? value.activationHotkey : defaults.activationHotkey,
     recentToolIds: normalizeRecentToolIds(value?.recentToolIds),
@@ -307,14 +376,25 @@ export const useAppStore = defineStore('app', {
     openTool(toolId: ToolId, title: string, initialState: Record<string, unknown>, singleton = false, forceNew = false) {
       const existing = this.tabs.find((tab) => tab.toolId === toolId)
       if (existing && (singleton || !forceNew)) {
-        if (singleton && forceNew && typeof initialState.__fileManagerFileId === 'string') existing.state = structuredClone(initialState)
+        if (singleton && forceNew && typeof initialState.__fileManagerFileId === 'string') {
+          const state = cloneState(initialState)
+          const baseline = closeComparableState(toolId, state)
+          state.__closeBaselineHash = stateHash(baseline)
+          state.__closeBaselineHasContent = hasToolContent(baseline)
+          existing.state = state
+        }
         this.activeTabId = existing.id
         this.scheduleSessionWorkspaceSave()
         this.recordRecentTool(toolId)
         return
       }
       const sameToolCount = this.tabs.filter((tab) => tab.toolId === toolId).length
-      this.tabs.push({ id: id(toolId), toolId, title: sameToolCount ? `${title} ${sameToolCount + 1}` : title, pinned: false, state: structuredClone(initialState) })
+      const state = cloneState(initialState)
+      const baseline = closeComparableState(toolId, state)
+      state.__closeBaselineHash = stateHash(baseline)
+      state.__closeBaselineHasContent = hasToolContent(baseline)
+      if (toolId === 'flowchart' || toolId === 'checklist') state.__closeBaselinePending = true
+      this.tabs.push({ id: id(toolId), toolId, title: sameToolCount ? `${title} ${sameToolCount + 1}` : title, pinned: false, state })
       this.activeTabId = this.tabs.at(-1)?.id ?? ''
       this.scheduleSessionWorkspaceSave()
       this.recordRecentTool(toolId)
@@ -355,13 +435,78 @@ export const useAppStore = defineStore('app', {
     updateTabState(tabId: string, state: Record<string, unknown>) {
       const tab = this.tabs.find((item) => item.id === tabId)
       if (!tab) return
-      tab.state = state
+      const baselinePending = tab.state.__closeBaselinePending === true
+      const baselineHash = baselinePending
+        ? stateHash(closeComparableState(tab.toolId, state))
+        : tab.state.__closeBaselineHash
+      const baselineContent = baselinePending
+        ? hasToolContent(closeComparableState(tab.toolId, state))
+        : tab.state.__closeBaselineHasContent
+      const nextState: Record<string, unknown> = {
+        ...state,
+        ...(typeof baselineHash === 'string' ? { __closeBaselineHash: baselineHash } : {}),
+        ...(typeof baselineContent === 'boolean' ? { __closeBaselineHasContent: baselineContent } : {}),
+      }
+      if (baselinePending) delete nextState.__closeBaselinePending
+      tab.state = nextState
       if (tab.pinned) this.scheduleWorkspaceSave()
       this.scheduleSessionWorkspaceSave()
+    },
+    setTabCloseBaseline(tabId: string, baseline: Record<string, unknown>) {
+      const tab = this.tabs.find((item) => item.id === tabId)
+      if (!tab || typeof tab.state.__closeBaselineHash === 'string') return
+      const comparable = closeComparableState(tab.toolId, baseline)
+      tab.state = {
+        ...tab.state,
+        __closeBaselineHash: stateHash(comparable),
+        __closeBaselineHasContent: hasToolContent(comparable),
+      }
+      if (tab.pinned) this.scheduleWorkspaceSave()
+      this.scheduleSessionWorkspaceSave()
+    },
+    revertTabToCloseBaseline(tabId: string, initialState: Record<string, unknown>) {
+      const tab = this.tabs.find((item) => item.id === tabId)
+      if (!tab || !isArchivableTool(tab.toolId)) return
+      const fileId = typeof tab.state.__fileManagerFileId === 'string' ? tab.state.__fileManagerFileId : ''
+      const archived = fileId ? this.fileManager.files.find((file) => file.id === fileId && file.toolId === tab.toolId) : undefined
+      const baseline = archived?.state ?? initialState
+      const restored = cloneState(baseline)
+      const attachments = tab.state.__fileManagerAttachments
+      const comparable = closeComparableState(tab.toolId, baseline)
+      tab.state = {
+        ...restored,
+        __closeBaselineHash: stateHash(comparable),
+        __closeBaselineHasContent: hasToolContent(comparable),
+        ...(archived ? { __fileManagerFileId: archived.id } : {}),
+        ...(Array.isArray(attachments) ? { __fileManagerAttachments: cloneState(attachments) } : {}),
+      }
+      if (tab.pinned) this.scheduleWorkspaceSave()
+      this.scheduleSessionWorkspaceSave()
+    },
+    hasUnarchivedChanges(tabId: string): boolean {
+      const tab = this.tabs.find((item) => item.id === tabId)
+      if (!tab || !isArchivableTool(tab.toolId)) return false
+      const current = closeComparableState(tab.toolId, tab.state)
+      const fileId = typeof tab.state.__fileManagerFileId === 'string' ? tab.state.__fileManagerFileId : ''
+      if (fileId) {
+        const archived = this.fileManager.files.find((file) => file.id === fileId && file.toolId === tab.toolId)
+        return archived ? !statesEqual(current, archived.state) : hasToolContent(current) || tab.state.__closeBaselineHasContent === true
+      }
+      const baselineHash = tab.state.__closeBaselineHash
+      if (typeof baselineHash !== 'string') return hasToolContent(current)
+      if (stateHash(current) === baselineHash) return false
+      return hasToolContent(current) || tab.state.__closeBaselineHasContent === true
     },
     scheduleWorkspaceSave() {
       window.clearTimeout(workspaceTimer)
       workspaceTimer = window.setTimeout(() => { void desktopApi.saveWorkspace(this.tabs.filter((tab) => tab.pinned).map((tab) => structuredClone(toRaw(tab)))) }, 350)
+    },
+    async persistWorkspace(): Promise<boolean> {
+      window.clearTimeout(workspaceTimer)
+      workspaceTimer = undefined
+      const result = await desktopApi.saveWorkspace(this.tabs.filter((tab) => tab.pinned).map((tab) => cloneState(tab)))
+      if (!result.ok) useToastStore().show(`固定标签未保存：${result.error.message}`, 'error')
+      return result.ok
     },
     scheduleSessionWorkspaceSave() {
       window.clearTimeout(sessionWorkspaceTimer)
@@ -438,6 +583,18 @@ export const useAppStore = defineStore('app', {
     },
     setSystemStatusRefreshSeconds(seconds: AppSettings['systemStatusRefreshSeconds']) {
       this.settings.systemStatusRefreshSeconds = seconds
+      this.scheduleSettingsSave()
+    },
+    setClosePromptMode(mode: AppSettings['closePromptMode']) {
+      this.settings.closePromptMode = mode
+      this.scheduleSettingsSave()
+    },
+    setClosePromptToolEnabled(toolId: ToolId, enabled: boolean) {
+      if (!isArchivableTool(toolId)) return
+      const selected = new Set(this.settings.closePromptToolIds)
+      if (enabled) selected.add(toolId)
+      else selected.delete(toolId)
+      this.settings.closePromptToolIds = [...selected]
       this.scheduleSettingsSave()
     },
     async setDeveloperModeEnabled(enabled: boolean): Promise<boolean> {
@@ -537,8 +694,9 @@ export const useAppStore = defineStore('app', {
       this.fileManager = copyLocalFileManager(fileManager)
       this.scheduleFileManagerSave()
     },
-    archiveToolState(toolId: ToolId, title: string, state: Record<string, unknown>): FileManagerFile | null {
+    async archiveToolState(toolId: ToolId, title: string, state: Record<string, unknown>): Promise<FileManagerFile | null> {
       if (!isArchivableTool(toolId)) return null
+      const previous = copyLocalFileManager(this.fileManager)
       const snapshot = archiveEditableState(toolId, state)
       const existingId = typeof snapshot.__fileManagerFileId === 'string' ? snapshot.__fileManagerFileId : ''
       delete snapshot.__fileManagerFileId
@@ -561,15 +719,22 @@ export const useAppStore = defineStore('app', {
         ...this.fileManager,
         files: existing ? this.fileManager.files.map((item) => item.id === file.id ? file : item) : [file, ...this.fileManager.files],
       }
-      this.scheduleFileManagerSave()
+      if (!(await this.persistFileManager())) {
+        this.fileManager = previous
+        return null
+      }
       return file
     },
     scheduleFileManagerSave() {
       window.clearTimeout(fileManagerTimer)
-      fileManagerTimer = window.setTimeout(async () => {
-        const result = await desktopApi.saveFileManager(copyLocalFileManager(this.fileManager))
-        if (!result.ok) useToastStore().show(`文件管理器未保存：${result.error.message}`, 'error')
-      }, 350)
+      fileManagerTimer = window.setTimeout(() => { void this.persistFileManager() }, 350)
+    },
+    async persistFileManager(): Promise<boolean> {
+      window.clearTimeout(fileManagerTimer)
+      fileManagerTimer = undefined
+      const result = await desktopApi.saveFileManager(copyLocalFileManager(this.fileManager))
+      if (!result.ok) useToastStore().show(`文件管理器未保存：${result.error.message}`, 'error')
+      return result.ok
     },
     async persistSettings(): Promise<boolean> {
       const result = await desktopApi.saveSettings({

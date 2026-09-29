@@ -3,22 +3,24 @@ import { AlertTriangle, Check, ShieldAlert, Trash2, X } from '@lucide/vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { useConfirmStore } from '@/stores/confirm'
+import { useI18n } from '@/i18n'
 
 const confirm = useConfirmStore()
+const { t } = useI18n()
 const current = computed(() => confirm.current)
 const dialogRef = ref<HTMLElement | null>(null)
 const primaryButton = ref<HTMLButtonElement | null>(null)
 const returnFocus = ref<HTMLElement | null>(null)
 
-function settle(confirmed: boolean): void {
-  confirm.settle(confirmed)
+function settle(decision: boolean | 'save' | 'discard' | 'cancel'): void {
+  confirm.settle(decision)
 }
 
 function handleKeydown(event: KeyboardEvent): void {
   if (!current.value) return
   if (event.key === 'Escape') {
     event.preventDefault()
-    settle(false)
+    settle(current.value.kind === 'save' ? 'cancel' : false)
     return
   }
   if (event.key !== 'Tab') return
@@ -58,7 +60,7 @@ onBeforeUnmount(() => document.removeEventListener('keydown', handleKeydown))
 <template>
   <Teleport to="body">
     <Transition name="confirm-dialog">
-      <div v-if="current" class="confirm-dialog-backdrop" @click.self="settle(false)">
+      <div v-if="current" class="confirm-dialog-backdrop" @click.self="settle(current.kind === 'save' ? 'cancel' : false)">
         <section
           ref="dialogRef"
           class="confirm-dialog-surface"
@@ -74,26 +76,28 @@ onBeforeUnmount(() => document.removeEventListener('keydown', handleKeydown))
               <AlertTriangle :size="21" stroke-width="2.2" />
             </div>
             <div class="confirm-dialog-heading">
-              <span>操作确认</span>
+              <span>{{ current.kind === 'save' ? t('closePrompt.eyebrow') : '操作确认' }}</span>
               <h2 id="confirm-dialog-title">{{ current.title }}</h2>
             </div>
-            <button class="confirm-dialog-close" type="button" aria-label="关闭" @click="settle(false)">
+            <button class="confirm-dialog-close" type="button" aria-label="关闭" @click="settle(current.kind === 'save' ? 'cancel' : false)">
               <X :size="18" />
             </button>
           </header>
 
           <div class="confirm-dialog-body">
             <p id="confirm-dialog-message">{{ current.message }}</p>
-            <div class="confirm-dialog-note">
+            <div v-if="current.kind !== 'save'" class="confirm-dialog-note">
               <ShieldAlert :size="15" aria-hidden="true" />
               <span>请确认当前选择，操作结果会立即生效。</span>
             </div>
+            <div v-else class="confirm-dialog-note"><ShieldAlert :size="15" aria-hidden="true" /><span>{{ t('closePrompt.note') }}</span></div>
           </div>
 
           <footer class="confirm-dialog-footer">
-            <button class="confirm-dialog-secondary" type="button" @click="settle(false)">{{ current.cancelLabel }}</button>
-            <button ref="primaryButton" class="confirm-dialog-primary" type="button" @click="settle(true)">
-              <Trash2 v-if="current.tone === 'danger'" :size="15" aria-hidden="true" />
+            <button class="confirm-dialog-secondary" type="button" @click="settle(current.kind === 'save' ? 'cancel' : false)">{{ current.cancelLabel }}</button>
+            <button v-if="current.kind === 'save'" class="confirm-dialog-discard" type="button" @click="settle('discard')">{{ current.discardLabel }}</button>
+            <button ref="primaryButton" class="confirm-dialog-primary" type="button" @click="settle(current.kind === 'save' ? 'save' : true)">
+              <Trash2 v-if="current.kind !== 'save' && current.tone === 'danger'" :size="15" aria-hidden="true" />
               <Check v-else :size="15" aria-hidden="true" />
               <span>{{ current.confirmLabel }}</span>
             </button>

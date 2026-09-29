@@ -1341,3 +1341,12 @@ html[data-motion='reduced'] .home-motion-entry, html[data-motion='reduced'] .hom
   .checklist-title-copy h2 { max-width: 260px; }
   .checklist-table-header, .checklist-item-area .checklist-item { min-width: 760px; }
 }
+
+.close-prompt-tool-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 14px; margin-top: 10px; }
+.close-prompt-tool-option { display: flex; min-width: 0; min-height: 30px; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 11px; cursor: pointer; }
+.close-prompt-tool-option input { flex: 0 0 auto; width: 15px; height: 15px; margin: 0; accent-color: var(--accent); }
+.close-prompt-tool-option span { min-width: 0; overflow-wrap: anywhere; }
+
+@media (max-width: 560px) {
+  .close-prompt-tool-list { grid-template-columns: minmax(0, 1fr); }
+}

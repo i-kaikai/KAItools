@@ -76,6 +76,11 @@ class DesktopApi:
         self._update_manager = update_manager or UpdateManager(paths)
         self._window: object | None = None
         self._system_status = SystemStatusCollector()
+        self._close_lock = threading.Lock()
+        self._close_coordinator_ready = False
+        self._close_request_pending = False
+        self._allow_next_close = False
+        self._bypass_next_close = False
 
     def bind_window(self, window: object) -> None:
         self._window = window
@@ -92,6 +97,60 @@ class DesktopApi:
 
     def bind_clipboard(self, clipboard: ClipboardHistoryService) -> None:
         self._clipboard = clipboard
+
+    def register_close_coordinator(self) -> dict[str, Any]:
+        if self._window is None:
+            return _failure("WINDOW_UNAVAILABLE", "应用窗口尚未就绪")
+        with self._close_lock:
+            self._close_coordinator_ready = True
+        return _success()
+
+    def handle_window_closing(self, *_args: Any) -> bool:
+        with self._close_lock:
+            if self._bypass_next_close:
+                self._bypass_next_close = False
+                return True
+            if self._allow_next_close:
+                self._allow_next_close = False
+                self._close_request_pending = False
+                return True
+            if not self._close_coordinator_ready or self._window is None:
+                return True
+            if self._close_request_pending:
+                return False
+            self._close_request_pending = True
+            window = self._window
+        try:
+            window.evaluate_js("window.dispatchEvent(new Event('kaitools:request-application-close'))")
+        except Exception:
+            with self._close_lock:
+                self._close_request_pending = False
+            LOGGER.exception("application_close_request_dispatch_failed")
+        return False
+
+    def resolve_application_close(self, approved: Any) -> dict[str, Any]:
+        if not isinstance(approved, bool):
+            return _failure("CLOSE_DECISION_INVALID", "应用关闭选择无效")
+        with self._close_lock:
+            if not self._close_request_pending:
+                return _failure("CLOSE_REQUEST_MISSING", "没有等待处理的应用关闭请求")
+            if not approved:
+                self._close_request_pending = False
+                return _success()
+            tray = self._tray
+            if tray is None:
+                self._close_request_pending = False
+                return _failure("TRAY_UNAVAILABLE", "系统托盘尚未就绪")
+            self._allow_next_close = True
+        try:
+            tray.exit_application()
+            return _success()
+        except TrayError as exc:
+            with self._close_lock:
+                self._allow_next_close = False
+                self._close_request_pending = False
+            LOGGER.exception("application_close_approval_failed")
+            return _failure("CLOSE_FAILED", str(exc))
 
     def load_state(self) -> dict[str, Any]:
         try:
@@ -505,9 +564,14 @@ class DesktopApi:
                 return _failure("UPDATER_UNAVAILABLE", "应用窗口不支持重启更新")
 
             def close_for_update() -> None:
+                with self._close_lock:
+                    self._bypass_next_close = True
+                    self._close_request_pending = False
                 try:
                     destroy()
                 except Exception:
+                    with self._close_lock:
+                        self._bypass_next_close = False
                     LOGGER.exception("update_window_close_failed")
 
             threading.Timer(0.5, close_for_update).start()

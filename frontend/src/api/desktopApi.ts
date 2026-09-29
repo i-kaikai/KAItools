@@ -26,7 +26,7 @@ import type {
 } from '@/types'
 import { isWebRuntime } from '@/runtime'
 import { loadBrowserNotes, saveBrowserNotes } from '@/api/notesStorage'
-import { loadBrowserFileManager, saveBrowserFileManager } from '@/api/fileManagerStorage'
+import { loadBrowserFileManager, normalizeClosePromptToolIds, saveBrowserFileManager } from '@/api/fileManagerStorage'
 import { defaultDashboardCards } from '@/tools/home/dashboardCards'
 import { DEFAULT_LOCAL_API_ORIGIN, resolveLocalServiceOrigin } from '@/api/remoteApi'
 import { APP_VERSION } from '@/version'
@@ -50,6 +50,8 @@ const DESKTOP_ONLY_METHODS = new Set([
   'set_clipboard_monitoring',
   'copy_text',
   'copy_png',
+  'register_close_coordinator',
+  'resolve_application_close',
   'get_document_conversion_capabilities',
   'convert_docx_to_pdf',
   'convert_pdf_to_docx',
@@ -126,6 +128,8 @@ function defaultBrowserState(): BootstrapState {
       clipboardMonitoringEnabled: true,
       systemStatusRefreshSeconds: 1,
       systemStatusRefreshMigrationVersion: SYSTEM_STATUS_REFRESH_MIGRATION_VERSION,
+      closePromptMode: 'selected',
+      closePromptToolIds: normalizeClosePromptToolIds(undefined),
       developerModeEnabled: false,
       activationHotkey: 'Ctrl+Alt+K',
       recentToolIds: [],
@@ -471,6 +475,8 @@ export const desktopApi = {
   saveNotes: (notes: NotesState) => invoke<void>('save_notes', notes),
   loadFileManager: () => invoke<FileManagerState>('load_file_manager'),
   saveFileManager: (state: FileManagerState) => invoke<void>('save_file_manager', state),
+  registerCloseCoordinator: () => invoke<void>('register_close_coordinator'),
+  resolveApplicationClose: (approved: boolean) => invoke<void>('resolve_application_close', approved),
   readHosts: () => invoke<HostsSnapshot>('read_hosts'),
   applyHosts: (content: string, sourceSha256: string, previewOnly: boolean) =>
     invoke<HostsPreview>('apply_hosts', { content, sourceSha256, previewOnly }),
@@ -544,6 +550,8 @@ function normalizeBrowserSettings(value: Partial<AppSettings> | undefined): AppS
         ? value.systemStatusRefreshSeconds
         : defaults.systemStatusRefreshSeconds,
     systemStatusRefreshMigrationVersion: SYSTEM_STATUS_REFRESH_MIGRATION_VERSION,
+    closePromptMode: value?.closePromptMode === 'all' || value?.closePromptMode === 'never' ? value.closePromptMode : 'selected',
+    closePromptToolIds: normalizeClosePromptToolIds(value?.closePromptToolIds),
     developerModeEnabled: value?.developerModeEnabled === true,
     activationHotkey: typeof value?.activationHotkey === 'string' ? value.activationHotkey : defaults.activationHotkey,
     recentToolIds: Array.isArray(value?.recentToolIds)

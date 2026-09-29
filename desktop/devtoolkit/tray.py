@@ -154,7 +154,6 @@ class TrayController:
         LOGGER.info("window_restored_from_tray")
 
     def _exit_application(self) -> None:
-        self._dispose()
         native = getattr(self._window, "native", None)
         if native is not None:
             native.Close()

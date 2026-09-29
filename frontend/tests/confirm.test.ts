@@ -33,4 +33,18 @@ describe('confirm store', () => {
     await expect(second).resolves.toBe(true)
     expect(store.current).toBeUndefined()
   })
+
+  it('returns save, discard, and cancel decisions without changing confirm callers', async () => {
+    const store = useConfirmStore()
+    const save = store.askSave({ title: '保存更改？', message: '有未归档内容' })
+    const confirm = store.ask({ title: '确认删除？', message: '无法恢复' })
+
+    expect(store.current?.kind).toBe('save')
+    store.settle('discard')
+    expect(store.current?.kind).toBe('confirm')
+    store.settle(false)
+
+    await expect(save).resolves.toBe('discard')
+    await expect(confirm).resolves.toBe(false)
+  })
 })

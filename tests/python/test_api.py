@@ -288,6 +288,83 @@ def test_api_hides_only_through_the_bound_tray_controller(tmp_path: Path) -> Non
     assert tray.hidden == 1
 
 
+def test_desktop_close_request_waits_for_frontend_decision(tmp_path: Path) -> None:
+    class FakeWindow:
+        def __init__(self) -> None:
+            self.scripts: list[str] = []
+
+        def evaluate_js(self, script: str) -> None:
+            self.scripts.append(script)
+
+    class FakeTray:
+        def __init__(self) -> None:
+            self.exit_calls = 0
+            self.close_result: bool | None = None
+            self.api: DesktopApi | None = None
+
+        def exit_application(self) -> None:
+            self.exit_calls += 1
+            assert self.api is not None
+            self.close_result = self.api.handle_window_closing()
+
+    paths = app_paths(tmp_path)
+    storage = AppStorage(paths)
+    storage.ensure_directories()
+    window = FakeWindow()
+    tray = FakeTray()
+    desktop_api = DesktopApi(paths, storage, tray=tray)  # type: ignore[arg-type]
+    tray.api = desktop_api
+    desktop_api.bind_window(window)
+
+    assert desktop_api.handle_window_closing() is True
+    assert desktop_api.register_close_coordinator() == {"ok": True, "data": None}
+    assert desktop_api.handle_window_closing() is False
+    assert window.scripts == ["window.dispatchEvent(new Event('kaitools:request-application-close'))"]
+    assert desktop_api.resolve_application_close(False) == {"ok": True, "data": None}
+    assert tray.exit_calls == 0
+
+    assert desktop_api.handle_window_closing() is False
+    assert desktop_api.resolve_application_close(True) == {"ok": True, "data": None}
+    assert tray.exit_calls == 1
+    assert tray.close_result is True
+
+
+def test_update_restart_bypasses_user_close_confirmation(tmp_path: Path, monkeypatch) -> None:
+    class FakeWindow:
+        def __init__(self) -> None:
+            self.api: DesktopApi | None = None
+            self.close_result: bool | None = None
+
+        def evaluate_js(self, _script: str) -> None:
+            raise AssertionError("update restart must not dispatch a user close prompt")
+
+        def destroy(self) -> None:
+            assert self.api is not None
+            self.close_result = self.api.handle_window_closing()
+
+    class ImmediateTimer:
+        def __init__(self, _interval: float, callback) -> None:
+            self.callback = callback
+
+        def start(self) -> None:
+            self.callback()
+
+    paths = app_paths(tmp_path)
+    storage = AppStorage(paths)
+    storage.ensure_directories()
+    window = FakeWindow()
+    api = DesktopApi(paths, storage, update_manager=FakeUpdateManager())  # type: ignore[arg-type]
+    api.bind_window(window)
+    window.api = api
+    assert api.register_close_coordinator()["ok"] is True
+    monkeypatch.setattr(api_module.threading, "Timer", ImmediateTimer)
+
+    result = api.restart_update()
+
+    assert result["ok"] is True
+    assert window.close_result is True
+
+
 def test_api_uses_only_bound_clipboard_service(tmp_path: Path) -> None:
     class FakeClipboard:
         def __init__(self) -> None:

@@ -3,6 +3,7 @@ export type AppLocale = 'zh-CN' | 'en-US'
 export type ParticleQuality = 'high' | 'balanced' | 'off'
 export type MotionMode = 'system' | 'reduced'
 export type SidebarStartup = 'remember' | 'collapsed' | 'expanded'
+export type ClosePromptMode = 'selected' | 'all' | 'never'
 export type EditorHighlightKind = 'added' | 'removed' | 'match'
 
 export interface EditorHighlight {
@@ -79,6 +80,8 @@ export interface AppSettings {
   systemStatusRefreshSeconds: 0 | 1 | 30 | 60 | 300
   /** One-time local migration marker; it prevents later manual refresh choices from being overwritten. */
   systemStatusRefreshMigrationVersion: number
+  closePromptMode: ClosePromptMode
+  closePromptToolIds: ToolId[]
   developerModeEnabled: boolean
   /** Windows desktop global shortcut that restores KAITools to the foreground. */
   activationHotkey: string
